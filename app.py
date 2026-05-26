@@ -101,6 +101,8 @@ st.markdown(f"""
   .gruppe-tal {{ font-size:1.6rem; font-weight:700; color:{GRØN}; line-height:1.1; }}
   .gruppe-tal-rest {{ font-size:1.15rem; font-weight:600; color:#444; line-height:1.1; }}
   .gruppe-red {{ font-size:0.9rem; color:#555; margin-left:0.5rem; }}
+  .gruppe-red-linje {{ font-size:0.95rem; font-weight:600; color:{GRØN};
+                       margin-top:0.05rem; margin-bottom:0.1rem; }}
   .gruppe-eks {{ font-size:0.75rem; color:#777; margin-top:0.1rem; }}
   .gruppe-serie {{ font-size:0.88rem; margin-top:0.35rem; }}
   .gruppe-serie b {{ color:#333; }}
@@ -249,6 +251,22 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
     red_pct = gruppe["reduktion_pct"]
     red_pct_eks = gruppe.get("reduktion_pct_eksakt")
 
+    # Hent t_uarmeret fra første produkt (alle i gruppen har samme uarmerede tykkelse)
+    t_uarm_prod = (
+        gruppe["produkter"][0].get("t_uarmeret_mm")
+        if gruppe.get("produkter") else None
+    )
+
+    # ↓ mm-reduktionslinje baseret på afrundet headline-tal
+    if t_uarm_prod is not None and red_pct is not None:
+        red_mm_afr = round(t_uarm_prod - t_vis)
+        red_pct_str = f"{red_pct:.0%}"
+        red_linje = (
+            f'<div class="gruppe-red-linje">↓ {red_mm_afr} mm ({red_pct_str})</div>'
+        )
+    else:
+        red_linje = ""
+
     if t_eks is not None:
         # Dansk decimal-komma i den præcise procent (fx "40,5%")
         if red_pct_eks is not None:
@@ -274,14 +292,13 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
             f'<div class="gruppe-serie"><b>{serie}:</b> {", ".join(navne)}</div>'
         )
 
-    red_txt = f"({red_pct:.0%} reduktion)" if red_pct is not None else ""
     kort_css = "gruppe-kort" if primaer else "gruppe-kort-rest"
     tal_css  = "gruppe-tal"  if primaer else "gruppe-tal-rest"
 
     st.markdown(
         f'<div class="{kort_css}">'
         f'<span class="{tal_css}">{t_vis:.0f} mm</span>'
-        f'<span class="gruppe-red">{red_txt}</span>'
+        f'{red_linje}'
         f'{eks_txt}'
         f'{"".join(serie_linjer)}'
         f'</div>',
@@ -706,17 +723,22 @@ def _render_oversigt_expanders(
    - 1 lag ({ref_lag_label}): {_fmt(ref_1, 't_basis_arm_mm')}
    - 2 lag ({ref_lag_label}): {_fmt(ref_2, 't_basis_arm_mm')}
 6. **φ-korrektion** = {phi_kor_str} _(beregnet i trin 3)_
+   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({phi_kor_str}) = **{_dk_num(ref_1['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
+   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({phi_kor_str}) = **{_dk_num(ref_2['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
 7. **Net-korrektion**: {net_kor_linje}
+   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_1['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
+   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_2['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
 
 {samlet_linje}
+{f"- 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_1, 't_armeret_mm')}**" if not ref_1.get("fejl") and ref_1.get("t_basis_arm_mm") else ""}
+{f"- 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_2, 't_armeret_mm')}**" if not ref_2.get("fejl") and ref_2.get("t_basis_arm_mm") else ""}
 
 {footer}
 
 _Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
             """)
-        else:
             # Standard-tilstand / specifikt produkt uden materialelag —
-            # uændret 7-trins visning med kompakt trin 3.
+            # uændret 7-trins visning med kompakt trin 3 + mm-effekter trin 6+7.
             st.markdown(f"""
 **7-trins algoritme** (GS-GRID Designmanual, afsnit 4):
 
@@ -729,14 +751,221 @@ _Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
    - 1 lag ({ref_lag_label}): {_fmt(ref_1, 't_basis_arm_mm')}
    - 2 lag ({ref_lag_label}): {_fmt(ref_2, 't_basis_arm_mm')}
 6. **φ-korrektion** = −0,02 × (φ − 35°) = {phi_kor:+.4f}
+   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({phi_kor:+.4f}) = **{_dk_num(ref_1['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
+   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({phi_kor:+.4f}) = **{_dk_num(ref_2['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
 7. **Net-korrektion**: {net_kor_linje}
+   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_1['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
+   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_2['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
 
 {samlet_linje}
+{f"- 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_1, 't_armeret_mm')}**" if not ref_1.get("fejl") and ref_1.get("t_basis_arm_mm") else ""}
+{f"- 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_2, 't_armeret_mm')}**" if not ref_2.get("fejl") and ref_2.get("t_basis_arm_mm") else ""}
 
 {footer}
 
 _Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
             """)
+
+
+def _render_breakdown_tabel(
+    rows: list[tuple[str, str, str]],
+    t_final: float | None,
+    t_uarm: float | None = None,
+    red_mm: float | None = None,
+    red_pct: float | None = None,
+) -> None:
+    """
+    Render en tabel-lignende breakdown med linjer og et slutresultat.
+    rows: liste af (label, værditekst, notetekst). Hvis værditekst er tom
+    vises kun label-teksten som en note-linje.
+    """
+    lines: list[str] = []
+    for label, val, note in rows:
+        if val:
+            note_html = (
+                f' <span style="color:#888;font-size:0.82em">{note}</span>'
+                if note else ""
+            )
+            lines.append(
+                f'<div style="display:flex;justify-content:space-between;'
+                f'padding:2px 0;font-size:0.9rem">'
+                f'<span style="color:#444">{label}{note_html}</span>'
+                f'<span style="font-weight:600;font-variant-numeric:tabular-nums">'
+                f'{val}</span>'
+                f'</div>'
+            )
+        else:
+            lines.append(
+                f'<div style="font-size:0.83rem;color:#888;padding:2px 0">'
+                f'{label}'
+                f'</div>'
+            )
+
+    result_lines = "".join(lines)
+
+    if t_final is not None:
+        red_html = ""
+        if red_mm is not None and red_pct is not None:
+            pct_str = f"{red_pct:.0%}"
+            red_html = (
+                f'<span style="color:{GRØN};font-size:0.85em;margin-left:10px">'
+                f'↓ {red_mm:.0f} mm fra uarmeret ({pct_str})'
+                f'</span>'
+            )
+        result_html = (
+            f'<div style="border-top:1px solid #C8E6C9;margin-top:6px;'
+            f'padding-top:6px;display:flex;align-items:baseline;gap:6px">'
+            f'<span style="font-size:1.25rem;font-weight:700;color:{GRØN}">'
+            f'= {t_final:.0f} mm</span>'
+            f'{red_html}'
+            f'</div>'
+        )
+    else:
+        result_html = ""
+
+    st.markdown(
+        f'<div style="background:#F8FFF8;border-radius:6px;'
+        f'padding:0.75rem 1rem;border:1px solid #C8E6C9;margin-bottom:0.5rem">'
+        f'{result_lines}'
+        f'{result_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _vis_beregnings_breakdown(
+    eu: float,
+    eo: float,
+    phi: float,
+    valgt_klasse: int,
+    bedste_1: dict | None,
+    bedste_2: dict | None,
+    *,
+    geonet: dict | None = None,
+    geonet_navn: str | None = None,
+) -> None:
+    """
+    Beregnings-breakdown boks under resultat (kun i Brugerdefineret).
+    Viser trin-for-trin: uarmeret, 1 lag og 2 lag med korrektioner i mm.
+    """
+    phi_kor = -0.02 * (phi - 35.0)
+
+    # Net-korrektioner og produktnavne per lag-mode
+    if geonet is not None:
+        # Specifikt-mode: samme korrektion begge lag-modes
+        net_kor_1 = geonet["korrektion"]
+        net_kor_2 = geonet["korrektion"]
+        net_navn_1 = geonet_navn or geonet["navn"]
+        net_navn_2 = net_navn_1
+        note = None
+    else:
+        # Oversigt-mode: brug bedste produkt per lag-mode
+        if bedste_1 is not None and bedste_1.get("produkter"):
+            net_kor_1 = bedste_1["produkter"][0]["korrektion"]
+            net_navn_1 = bedste_1["produkter"][0]["navn"]
+        else:
+            net_kor_1 = 0.0
+            net_navn_1 = "reference"
+        if bedste_2 is not None and bedste_2.get("produkter"):
+            net_kor_2 = bedste_2["produkter"][0]["korrektion"]
+            net_navn_2 = bedste_2["produkter"][0]["navn"]
+        else:
+            net_kor_2 = 0.0
+            net_navn_2 = "reference"
+        note = (
+            "Net-korrektionen vist her gælder det bedst reducerende produkt. "
+            "Andre produkter har andre korrektioner — se kolonnerne ovenfor."
+        )
+
+    # Kald beregn() med de relevante net-korrektioner
+    ref_uarm = beregn(eu=eu, eo=eo, phi=phi, net_korrektion=0.0,    lag_mode="1_lag")
+    ref_1    = beregn(eu=eu, eo=eo, phi=phi, net_korrektion=net_kor_1, lag_mode="1_lag")
+    ref_2    = beregn(eu=eu, eo=eo, phi=phi, net_korrektion=net_kor_2, lag_mode="2_lag")
+
+    t_uarm_final = ref_uarm.get("t_uarmeret_mm") if not ref_uarm.get("fejl") else None
+
+    with st.container(border=True):
+        st.markdown("**📊 Beregnings-breakdown**")
+
+        # ── Uarmeret ──────────────────────────────────────────────────
+        st.markdown("**Uarmeret bærelagstykkelse**")
+        if not ref_uarm.get("fejl") and ref_uarm.get("t_basis_uarm_mm") is not None:
+            t_b_u = ref_uarm["t_basis_uarm_mm"]
+            phi_kor_mm_u = t_b_u * phi_kor
+            rows_u: list[tuple[str, str, str]] = [
+                ("T_basis (opslag/interpoleret)", f"{t_b_u:.0f} mm", ""),
+            ]
+            if abs(phi_kor_mm_u) > 0.5:
+                rows_u.append((
+                    "φ-korrektion",
+                    f"{_dk_num(phi_kor_mm_u, '+.0f')} mm",
+                    f"φ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
+                ))
+            else:
+                rows_u.append(("(ingen φ- eller net-korrektion)", "", ""))
+            _render_breakdown_tabel(rows_u, t_uarm_final)
+        else:
+            st.caption("Kan ikke beregnes for denne Eu/Eo-kombination.")
+
+        st.markdown("---")
+
+        # ── 1 lag ─────────────────────────────────────────────────────
+        if bedste_1 is not None:
+            st.markdown(f"**Med 1 lag geonet** ({net_navn_1})")
+            if not ref_1.get("fejl") and ref_1.get("t_basis_arm_mm") is not None:
+                t_b_1     = ref_1["t_basis_arm_mm"]
+                t_1_final = ref_1.get("t_armeret_mm")
+                phi_kor_mm_1 = t_b_1 * phi_kor
+                net_kor_mm_1 = t_b_1 * net_kor_1
+                rows_1: list[tuple[str, str, str]] = [
+                    ("T_basis_armeret (opslag)", f"{t_b_1:.0f} mm", ""),
+                    (
+                        "φ-korrektion",
+                        f"{_dk_num(phi_kor_mm_1, '+.0f')} mm",
+                        f"φ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
+                    ),
+                    (
+                        "Net-korrektion",
+                        f"{_dk_num(net_kor_mm_1, '+.0f')} mm",
+                        f"({_dk_num(net_kor_1, '+.2f')})",
+                    ),
+                ]
+                red_mm_1  = (t_uarm_final - t_1_final) if (t_uarm_final and t_1_final) else None
+                red_pct_1 = (red_mm_1 / t_uarm_final)  if (red_mm_1 and t_uarm_final)  else None
+                _render_breakdown_tabel(rows_1, t_1_final, t_uarm_final, red_mm_1, red_pct_1)
+            else:
+                st.caption("Ingen gyldigt 1-lag resultat for denne kombination.")
+
+        # ── 2 lag ─────────────────────────────────────────────────────
+        if bedste_2 is not None:
+            st.markdown("---")
+            st.markdown(f"**Med 2 lag geonet** ({net_navn_2})")
+            if not ref_2.get("fejl") and ref_2.get("t_basis_arm_mm") is not None:
+                t_b_2     = ref_2["t_basis_arm_mm"]
+                t_2_final = ref_2.get("t_armeret_mm")
+                phi_kor_mm_2 = t_b_2 * phi_kor
+                net_kor_mm_2 = t_b_2 * net_kor_2
+                rows_2: list[tuple[str, str, str]] = [
+                    ("T_basis_armeret (opslag)", f"{t_b_2:.0f} mm", ""),
+                    (
+                        "φ-korrektion",
+                        f"{_dk_num(phi_kor_mm_2, '+.0f')} mm",
+                        f"φ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
+                    ),
+                    (
+                        "Net-korrektion",
+                        f"{_dk_num(net_kor_mm_2, '+.0f')} mm",
+                        f"({_dk_num(net_kor_2, '+.2f')})",
+                    ),
+                ]
+                red_mm_2  = (t_uarm_final - t_2_final) if (t_uarm_final and t_2_final) else None
+                red_pct_2 = (red_mm_2 / t_uarm_final)  if (red_mm_2 and t_uarm_final)  else None
+                _render_breakdown_tabel(rows_2, t_2_final, t_uarm_final, red_mm_2, red_pct_2)
+            else:
+                st.caption("Ingen gyldigt 2-lag resultat for denne kombination.")
+
+        if note:
+            st.caption(f"ℹ️ {note}")
 
 
 def render_standard() -> None:
@@ -1231,6 +1460,13 @@ def render_brugerdefineret() -> None:
                     "2 LAG GEONET", grupper_2, valgt_klasse, "2_lag",
                     tom_besked=tom_2,
                 )
+
+    # --- Beregnings-breakdown (kun Brugerdefineret) ----------------------
+    _vis_beregnings_breakdown(
+        eu, eo, phi, valgt_klasse, bedste_1, bedste_2,
+        geonet=geonet,
+        geonet_navn=geonet_navn,
+    )
 
     # --- Informations-expandere ------------------------------------------
     st.divider()
