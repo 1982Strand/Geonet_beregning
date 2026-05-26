@@ -646,7 +646,78 @@ def _render_oversigt_expanders(
                 "tykkelser pr. produkt i kolonnerne ovenfor."
             )
 
-        st.markdown(f"""
+        # Samlet korrektionsfaktor — kun konkret tal hvis vi har ét net,
+        # ellers vis formel-form fordi net-korrektion varierer pr. produkt
+        if geonet is not None:
+            samlet_faktor = 1.0 + phi_kor + net_kor
+            samlet_linje = (
+                f"**Samlet korrektionsfaktor** = 1 + ({_dk_num(phi_kor, '+.4f')}) "
+                f"+ ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(samlet_faktor, '.4f')}**"
+            )
+        else:
+            samlet_linje = (
+                "**Samlet korrektionsfaktor** = 1 + φ-kor + net-kor "
+                "(varierer pr. produkt — se kolonnerne ovenfor)"
+            )
+
+        if materialer:
+            # Brugerdefineret-tilstand: udvidet trin 3 med tabel, vægtet
+            # regnestykke, Excel-formulering og samlet korrektionsfaktor.
+            st.markdown(f"""
+**7-trins algoritme** (GS-GRID Designmanual, afsnit 4):
+
+1. **Eu** = {eu:.0f} MPa (underbundens E-modul)
+2. **Eo** = {eo:.0f} MPa (krævet på top af bærelag — klasse {valgt_klasse})
+
+**3. φ-beregning fra materialelagene**
+            """)
+
+            data = _phi_tabel_data(materialer)
+            st.markdown(data["tabel_md"])
+
+            bidrag_str = _dk_num(data["total_bidrag"], ".0f")
+            v_str = _dk_num(data["total_v"], ".0f")
+            phi_str = _dk_num(phi, ".2f")
+            phi_kor_str = _dk_num(phi_kor, "+.4f")
+            phi_kor_pct_str = _dk_num(phi_kor * 100, "+.2f")
+
+            overskrevet_note = ""
+            if abs(phi - data["phi_weighted"]) > 0.005:
+                overskrevet_note = (
+                    f"  \n_φ er overskrevet manuelt til {phi_str}° "
+                    f"(vægtet værdi var {_dk_num(data['phi_weighted'], '.2f')}°)._"
+                )
+
+            st.markdown(
+                f"Vægtet middel: φ = Σ({data['symbol']}ᵢ × φᵢ) / "
+                f"Σ({data['symbol']}ᵢ) = {bidrag_str} / {v_str} = "
+                f"**{phi_str}°**{overskrevet_note}\n\n"
+                f"_Excel-fane 3 formulering: \"For hver grad over 35° "
+                f"reduceres tykkelsen med 2 %.\"_\n\n"
+                f"φ-korrektion = −0,02 × (φ − 35°) = −0,02 × "
+                f"({phi_str} − 35) = **{phi_kor_str}**  "
+                f"({phi_kor_pct_str} % af T_basis)"
+            )
+
+            st.markdown(f"""
+4. **Opslag i designdiagram** — {interp}
+5. **T_basis** fra tabel 7.1:
+   - uarmeret: {_fmt(ref_1, 't_basis_uarm_mm')}
+   - 1 lag ({ref_lag_label}): {_fmt(ref_1, 't_basis_arm_mm')}
+   - 2 lag ({ref_lag_label}): {_fmt(ref_2, 't_basis_arm_mm')}
+6. **φ-korrektion** = {phi_kor_str} _(beregnet i trin 3)_
+7. **Net-korrektion**: {net_kor_linje}
+
+{samlet_linje}
+
+{footer}
+
+_Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
+            """)
+        else:
+            # Standard-tilstand / specifikt produkt uden materialelag —
+            # uændret 7-trins visning med kompakt trin 3.
+            st.markdown(f"""
 **7-trins algoritme** (GS-GRID Designmanual, afsnit 4):
 
 1. **Eu** = {eu:.0f} MPa (underbundens E-modul)
@@ -660,10 +731,12 @@ def _render_oversigt_expanders(
 6. **φ-korrektion** = −0,02 × (φ − 35°) = {phi_kor:+.4f}
 7. **Net-korrektion**: {net_kor_linje}
 
+{samlet_linje}
+
 {footer}
 
 _Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
-        """)
+            """)
 
 
 def render_standard() -> None:
@@ -747,7 +820,138 @@ def render_standard() -> None:
 # BRUGERDEFINERET-TILSTAND — målrettet beregning (uændret logik)
 # ===========================================================================
 
-def _input_materialelag() -> tuple[list[dict], float]:
+def _dk_num(v: float, fmt: str) -> str:
+    """Formattér tal med dansk decimal-komma og rigtigt minus-tegn."""
+    s = format(v, fmt).replace(".", ",")
+    if s.startswith("-"):
+        s = "−" + s[1:]
+    return s
+
+
+def _phi_tabel_data(materialer: list[dict]) -> dict:
+    """Byg data til φ-beregningstabel — genbruges af opsummeringsboks og trin 3.
+
+    Returnerer dict med:
+        tabel_md       — markdown-tabel (header + adskiller + rækker)
+        total_v        — sum af tykkelser (mm) eller andele (%)
+        total_bidrag   — Σ(vᵢ × φᵢ)
+        phi_weighted   — total_bidrag / total_v (eller 35.0 ved tom input)
+        lag_mode_pct   — True hvis andele i %, ellers tykkelser i mm
+        symbol         — 'p' eller 't' (til formelvisning)
+        enhed          — '%' eller 'mm'
+    """
+    if not materialer:
+        return {
+            "tabel_md": "", "total_v": 0.0, "total_bidrag": 0.0,
+            "phi_weighted": 35.0, "lag_mode_pct": False,
+            "symbol": "t", "enhed": "mm",
+        }
+
+    lag_mode_pct = any(m.get("pct") is not None for m in materialer)
+    enhed = "%" if lag_mode_pct else "mm"
+    symbol = "p" if lag_mode_pct else "t"
+    feltnavn = "Andel" if lag_mode_pct else "Tykkelse"
+
+    header = f"| Lag | Materiale | {feltnavn} | φ (°) | Vægtet bidrag |"
+    sep = "|---|---|---:|---:|---:|"
+
+    rows: list[str] = []
+    total_v = 0.0
+    total_bidrag = 0.0
+    for i, m in enumerate(materialer):
+        v = (m.get("pct") if lag_mode_pct else m.get("tykkelse_mm")) or 0.0
+        bidrag = v * m["phi"]
+        total_v += v
+        total_bidrag += bidrag
+        v_str = f"{v:.0f} {enhed}"
+        phi_i_str = _dk_num(m["phi"], ".1f")
+        bidrag_str = _dk_num(bidrag, ".0f")
+        rows.append(
+            f"| {i + 1} | {m['navn']} | {v_str} | {phi_i_str} | {bidrag_str} |"
+        )
+
+    tabel_md = "\n".join([header, sep] + rows)
+    phi_weighted = total_bidrag / total_v if total_v > 0 else 35.0
+
+    return {
+        "tabel_md": tabel_md,
+        "total_v": total_v,
+        "total_bidrag": total_bidrag,
+        "phi_weighted": phi_weighted,
+        "lag_mode_pct": lag_mode_pct,
+        "symbol": symbol,
+        "enhed": enhed,
+    }
+
+
+def _vis_phi_opsummeringsboks(
+    materialer: list[dict],
+    phi_final: float,
+    eu: float,
+    eo: float,
+) -> None:
+    """Opsummeringsboks under lag-inputs: tabel, formel, φ-korrektion, mm-ækvivalent."""
+    data = _phi_tabel_data(materialer)
+    phi_weighted = data["phi_weighted"]
+    overskrevet = abs(phi_final - phi_weighted) > 0.005
+
+    phi_w_str = _dk_num(phi_weighted, ".2f")
+    phi_f_str = _dk_num(phi_final, ".2f")
+    bidrag_str = _dk_num(data["total_bidrag"], ".0f")
+    v_str = _dk_num(data["total_v"], ".0f")
+
+    phi_kor = -0.02 * (phi_final - 35.0)
+    phi_kor_str = _dk_num(phi_kor, "+.4f")
+    phi_kor_pct_str = _dk_num(phi_kor * 100, "+.2f")
+
+    with st.container(border=True):
+        st.markdown("**📐 φ-beregning fra materialelagene**")
+        st.markdown(data["tabel_md"])
+        st.markdown(
+            f"φ = Σ({data['symbol']}ᵢ × φᵢ) / Σ({data['symbol']}ᵢ) = "
+            f"{bidrag_str} / {v_str} = **{phi_w_str}°**"
+        )
+
+        if overskrevet:
+            st.markdown(
+                f"⚠️ φ overskrevet manuelt → bruger **{phi_f_str}°** "
+                f"i resten af beregningen (vægtet værdi {phi_w_str}° ignoreres)."
+            )
+
+        st.markdown(
+            f"**φ-korrektion** = −0,02 × (φ − 35°) = "
+            f"−0,02 × ({phi_f_str} − 35) = **{phi_kor_str}** "
+            f"({phi_kor_pct_str} % af T_basis)"
+        )
+
+        ref_1 = beregn(eu=eu, eo=eo, phi=phi_final,
+                       net_korrektion=0.0, lag_mode="1_lag")
+        ref_2 = beregn(eu=eu, eo=eo, phi=phi_final,
+                       net_korrektion=0.0, lag_mode="2_lag")
+
+        mm_dele: list[str] = []
+        for label, ref in [("1 lag", ref_1), ("2 lag", ref_2)]:
+            if not ref.get("fejl") and ref.get("t_basis_arm_mm") is not None:
+                t_b = ref["t_basis_arm_mm"]
+                kor_mm = t_b * phi_kor
+                mm_dele.append(
+                    f"**{label}**: T_basis = {t_b:.0f} mm → "
+                    f"{_dk_num(kor_mm, '+.0f')} mm"
+                )
+
+        if mm_dele:
+            st.markdown(
+                "Anvendt på basis-tykkelsen (uden net-korrektion):  \n"
+                + "  ·  ".join(mm_dele)
+            )
+        else:
+            st.caption(
+                "T_basis kan ikke slås op for den valgte Eu/Eo-kombination — "
+                "mm-ækvivalent vises ikke."
+            )
+
+
+def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     """
     C. Materialelag — render input-sektionen og returnér
     (materialer-liste, beregnet/overskrevet φ).
@@ -820,13 +1024,29 @@ def _input_materialelag() -> tuple[list[dict], float]:
     if lag_mode_mat.startswith("%"):
         st.metric("Sum af andele", f"{total_pct:.1f} %")
 
-    phi = sum(phi_vaerdier) / len(phi_vaerdier) if phi_vaerdier else 35.0
-    st.caption(f"Gennemsnitlig φ fra lagene: **{phi:.2f}°**")
+    if lag_mode_mat == "mm (absolut)":
+        total_t = sum(m["tykkelse_mm"] for m in materialer)
+        phi_weighted = (
+            sum(m["phi"] * m["tykkelse_mm"] for m in materialer) / total_t
+            if total_t > 0
+            else (sum(phi_vaerdier) / len(phi_vaerdier) if phi_vaerdier else 35.0)
+        )
+    else:
+        total_p = sum(m["pct"] for m in materialer if m["pct"] is not None)
+        phi_weighted = (
+            sum(m["phi"] * m["pct"] for m in materialer) / total_p
+            if total_p > 0
+            else (sum(phi_vaerdier) / len(phi_vaerdier) if phi_vaerdier else 35.0)
+        )
 
     if st.checkbox("Overskriv φ manuelt", key="bd_phi_override"):
         phi = st.number_input(
-            "φ (°)", 20.0, 60.0, round(phi, 1), 0.5, key="bd_phi_man",
+            "φ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5, key="bd_phi_man",
         )
+    else:
+        phi = phi_weighted
+
+    _vis_phi_opsummeringsboks(materialer, phi, eu, eo)
 
     return materialer, phi
 
@@ -843,7 +1063,7 @@ def render_brugerdefineret() -> None:
     # --- A + B + C --------------------------------------------------------
     eu = input_underbund(key_prefix="bd")
     valgt_klasse, _kl_info, eo = input_belastning(key_prefix="bd")
-    materialer, phi = _input_materialelag()
+    materialer, phi = _input_materialelag(eu, eo)
 
     # --- D. Geonet --------------------------------------------------------
     st.subheader("D. Geonet")
