@@ -686,7 +686,7 @@ def _render_oversigt_expanders(
 1. **Eu** = {eu:.0f} MPa (underbundens E-modul)
 2. **Eo** = {eo:.0f} MPa (krævet på top af bærelag — klasse {valgt_klasse})
 
-**3. φ-beregning fra materialelagene**
+**3. Vægtet φ-beregning og korrektion**
             """)
 
             data = _phi_tabel_data(materialer)
