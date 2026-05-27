@@ -4,8 +4,6 @@ Geonet Dimensioneringsværktøj — Streamlit entrypoint.
 Start med: streamlit run app.py
 """
 
-import math
-
 # ---------------------------------------------------------------------------
 # set_page_config SKAL stå som allerførste Streamlit-kald
 # ---------------------------------------------------------------------------
@@ -103,7 +101,6 @@ st.markdown(f"""
   .gruppe-red {{ font-size:0.9rem; color:#555; margin-left:0.5rem; }}
   .gruppe-red-linje {{ font-size:0.95rem; font-weight:600; color:{GRØN};
                        margin-top:0.05rem; margin-bottom:0.1rem; }}
-  .gruppe-eks {{ font-size:0.75rem; color:#777; margin-top:0.1rem; }}
   .gruppe-serie {{ font-size:0.88rem; margin-top:0.35rem; }}
   .gruppe-serie b {{ color:#333; }}
   .bedste-label {{
@@ -247,9 +244,7 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
     primaer=True ⇒ fremhævet grønt kort (bedste). False ⇒ dæmpet grå variant.
     """
     t_vis   = gruppe["t_armeret_mm"]
-    t_eks   = gruppe["t_armeret_eksakt_mm"]
     red_pct = gruppe["reduktion_pct"]
-    red_pct_eks = gruppe.get("reduktion_pct_eksakt")
 
     # Hent t_uarmeret fra første produkt (alle i gruppen har samme uarmerede tykkelse)
     t_uarm_prod = (
@@ -257,29 +252,15 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
         if gruppe.get("produkter") else None
     )
 
-    # ↓ mm-reduktionslinje baseret på afrundet headline-tal
+    # ↓ mm-reduktionslinje
     if t_uarm_prod is not None and red_pct is not None:
-        red_mm_afr = round(t_uarm_prod - t_vis)
+        red_mm = round(t_uarm_prod - t_vis)
         red_pct_str = f"{red_pct:.0%}"
         red_linje = (
-            f'<div class="gruppe-red-linje">↓ {red_mm_afr} mm ({red_pct_str})</div>'
+            f'<div class="gruppe-red-linje">↓ {red_mm} mm ({red_pct_str})</div>'
         )
     else:
         red_linje = ""
-
-    if t_eks is not None:
-        # Dansk decimal-komma i den præcise procent (fx "40,5%")
-        if red_pct_eks is not None:
-            eks_pct_str = f"{red_pct_eks * 100:.1f}".replace(".", ",") + "%"
-            eks_txt = (
-                f'<div class="gruppe-eks">'
-                f'eksakt: {t_eks:.0f} mm ({eks_pct_str} reduktion)'
-                f'</div>'
-            )
-        else:
-            eks_txt = f'<div class="gruppe-eks">eksakt: {t_eks:.0f} mm</div>'
-    else:
-        eks_txt = ""
 
     pr_serie: dict[str, list[dict]] = {}
     for p in _sort_produkter(gruppe["produkter"]):
@@ -299,7 +280,6 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
         f'<div class="{kort_css}">'
         f'<span class="{tal_css}">{t_vis:.0f} mm</span>'
         f'{red_linje}'
-        f'{eks_txt}'
         f'{"".join(serie_linjer)}'
         f'</div>',
         unsafe_allow_html=True,
@@ -320,9 +300,7 @@ def _resultat_til_gruppe(
 
     t_eks = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
-    t_afr = math.ceil(t_eks / 50) * 50
     red_eks = (t_uarm - t_eks) / t_uarm if t_uarm else 0
-    red_afr = (t_uarm - t_afr) / t_uarm if t_uarm else 0
 
     produkt = {
         "navn":          geonet["navn"],
@@ -339,9 +317,9 @@ def _resultat_til_gruppe(
         "fejl":          None,
     }
     return {
-        "t_armeret_mm":         t_afr,
+        "t_armeret_mm":         round(t_eks, 0),
         "t_armeret_eksakt_mm":  round(t_eks, 0),
-        "reduktion_pct":        round(red_afr, 3),
+        "reduktion_pct":        round(red_eks, 4),
         "reduktion_pct_eksakt": round(red_eks, 4),
         "produkter":            [produkt],
         "har_fejl":             False,

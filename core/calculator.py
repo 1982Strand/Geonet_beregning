@@ -9,8 +9,6 @@ Offentlig API:
     beregn_alle_produkter(eu, eo, lag_mode) -> list[dict]  (standard-tilstand)
 """
 
-import math
-
 from .data import (
     T_BASIS_TABLE,
     EU_RAEKKER,
@@ -304,27 +302,17 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
             and abs(p["t_armeret_mm"] - t) <= tolerance_mm
         ]
 
-        # Gennemsnitlig tykkelse for gruppen, derefter afrundet OPAD til
-        # nærmeste 50 mm (5 cm) som konservativ praktisk indbygningsværdi
-        # — vi må aldrig vise et resultat mindre end det beregnede.
-        # Den eksakte gennemsnitsværdi bevares så afrundingen er gennemsigtig.
+        # Gennemsnitlig tykkelse for gruppen — eksakt beregnede værdi uden afrunding.
         t_repræsentativ = sum(p["t_armeret_mm"] for p in gruppe_produkter) / len(gruppe_produkter)
-        t_afrundet = math.ceil(t_repræsentativ / 50) * 50
 
-        # To reduktions-procenter:
-        #   reduktion_pct        — fra den afrundede (indbyggelige) værdi
-        #                          → matcher det tal der vises i kortets headline
-        #   reduktion_pct_eksakt — fra den eksakte beregnede værdi
-        #                          → vises ved siden af eksakt-mm for transparens
         t_uarm = produkt["t_uarmeret_mm"] or 0
-        red_pct_afr = (t_uarm - t_afrundet) / t_uarm if t_uarm > 0 else 0
-        red_pct_eks = (t_uarm - t_repræsentativ) / t_uarm if t_uarm > 0 else 0
+        red_pct = (t_uarm - t_repræsentativ) / t_uarm if t_uarm > 0 else 0
 
         grupper.append({
-            "t_armeret_mm": t_afrundet,
+            "t_armeret_mm": round(t_repræsentativ, 0),
             "t_armeret_eksakt_mm": round(t_repræsentativ, 0),
-            "reduktion_pct": round(red_pct_afr, 3),
-            "reduktion_pct_eksakt": round(red_pct_eks, 4),
+            "reduktion_pct": round(red_pct, 4),
+            "reduktion_pct_eksakt": round(red_pct, 4),
             "produkter": gruppe_produkter,
             "har_fejl": False,
             "fejl_besked": None,
