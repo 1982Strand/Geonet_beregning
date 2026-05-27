@@ -252,7 +252,7 @@ def _filter_klasse_anbefalede(grupper: list[dict]) -> list[dict]:
     return resultat
 
 
-def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
+def _render_gruppe_kort(gruppe: dict, primaer: bool, phi: float = 35.0) -> None:
     """
     Render én tykkelses-gruppe som kort.
     primaer=True ⇒ fremhævet grønt kort (bedste). False ⇒ dæmpet grå variant.
@@ -275,6 +275,28 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
         )
     else:
         red_linje = ""
+
+    # φ-korrektionslinje — vises kun hvis phi ≠ 35°
+    phi_kor_html = ""
+    t_basis = gruppe.get("t_basis_arm_mm")
+    if t_basis and t_basis > 0 and abs(phi - 35.0) > 0.05:
+        phi_kor = -0.02 * (phi - 35.0)
+        phi_kor_mm = round(t_basis * phi_kor)
+        abs_mm = abs(phi_kor_mm)
+        pct = abs(round(phi_kor * 100))
+        phi_str = f"{phi:.1f}".replace(".", ",")
+        if phi_kor < 0:
+            phi_kor_html = (
+                f'<div class="net-kor-spar">'
+                f'φ-kor: \u2212{abs_mm} mm (\u2212{pct}\u00a0%) · φ = {phi_str}°'
+                f'</div>'
+            )
+        else:
+            phi_kor_html = (
+                f'<div class="net-kor-pen">'
+                f'φ-kor: +{abs_mm} mm (+{pct}\u00a0%) · φ = {phi_str}°'
+                f'</div>'
+            )
 
     # ↕ net-korrektionslinje — viser delta ift. referenceprodukt (kor=0)
     # t_basis er fælles for alle produkter i gruppen (samme eu/eo/lag_mode)
@@ -350,6 +372,7 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
         f'<div class="{kort_css}">'
         f'<span class="{tal_css}">{t_vis:.0f} mm</span>'
         f'{red_linje}'
+        f'{phi_kor_html}'
         f'{net_kor_html}'
         f'{"".join(serie_linjer)}'
         f'</div>',
@@ -406,6 +429,7 @@ def _render_lag_kolonne(
     valgt_klasse: int,
     lag_mode: str,
     tom_besked: str | None = None,
+    phi: float = 35.0,
 ) -> None:
     """
     Render én kolonne (1-lag eller 2-lag): bedste gruppe øverst,
@@ -444,7 +468,7 @@ def _render_lag_kolonne(
 
     st.markdown('<div class="bedste-label">Armeret bærelagstykkelse</div>',
                 unsafe_allow_html=True)
-    _render_gruppe_kort(bedste, primaer=True)
+    _render_gruppe_kort(bedste, primaer=True, phi=phi)
 
     if rest:
         label = (
@@ -453,7 +477,7 @@ def _render_lag_kolonne(
         )
         with st.expander(label, expanded=False):
             for g in rest:
-                _render_gruppe_kort(g, primaer=False)
+                _render_gruppe_kort(g, primaer=False, phi=phi)
 
 
 def _navne_kort(gruppe: dict) -> str:
@@ -1104,26 +1128,7 @@ def _vis_phi_opsummeringsboks(
         ref_2 = beregn(eu=eu, eo=eo, phi=phi_final,
                        net_korrektion=0.0, lag_mode="2_lag")
 
-        mm_dele: list[str] = []
-        for label, ref in [("1 lag", ref_1), ("2 lag", ref_2)]:
-            if not ref.get("fejl") and ref.get("t_basis_arm_mm") is not None:
-                t_b = ref["t_basis_arm_mm"]
-                kor_mm = t_b * phi_kor
-                mm_dele.append(
-                    f"**{label}**: T_basis = {t_b:.0f} mm → "
-                    f"{_dk_num(kor_mm, '+.0f')} mm"
-                )
 
-        if mm_dele:
-            st.markdown(
-                "Anvendt på basis-tykkelsen (uden net-korrektion):  \n"
-                + "  ·  ".join(mm_dele)
-            )
-        else:
-            st.caption(
-                "T_basis kan ikke slås op for den valgte Eu/Eo-kombination — "
-                "mm-ækvivalent vises ikke."
-            )
 
 
 def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
@@ -1342,9 +1347,9 @@ def render_brugerdefineret() -> None:
                 )
             kol_1, kol_2 = st.columns(2, gap="large")
             with kol_1:
-                _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag")
+                _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag", phi=phi)
             with kol_2:
-                _render_lag_kolonne("2 LAG GEONET", grupper_2, valgt_klasse, "2_lag")
+                _render_lag_kolonne("2 LAG GEONET", grupper_2, valgt_klasse, "2_lag", phi=phi)
 
     else:
         # SPECIFIKT PRODUKT-MODE
@@ -1399,20 +1404,13 @@ def render_brugerdefineret() -> None:
             with kol_1:
                 _render_lag_kolonne(
                     "1 LAG GEONET", grupper_1, valgt_klasse, "1_lag",
-                    tom_besked=tom_1,
+                    tom_besked=tom_1, phi=phi,
                 )
             with kol_2:
                 _render_lag_kolonne(
                     "2 LAG GEONET", grupper_2, valgt_klasse, "2_lag",
-                    tom_besked=tom_2,
+                    tom_besked=tom_2, phi=phi,
                 )
-
-    # --- Beregnings-breakdown (kun Brugerdefineret) ----------------------
-    _vis_beregnings_breakdown(
-        eu, eo, phi, valgt_klasse, bedste_1, bedste_2,
-        geonet=geonet,
-        geonet_navn=geonet_navn,
-    )
 
     # --- Informations-expandere ------------------------------------------
     st.divider()
