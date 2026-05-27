@@ -666,157 +666,51 @@ def _render_oversigt_expanders(
 
     # --- Sådan beregnes det -----------------------------------------------
     with st.expander("🔢 Sådan beregnes det"):
-        net_kor = geonet["korrektion"] if geonet else 0.0
-        ref_1 = beregn(eu=eu, eo=eo, phi=phi, net_korrektion=net_kor, lag_mode="1_lag")
-        ref_2 = beregn(eu=eu, eo=eo, phi=phi, net_korrektion=net_kor, lag_mode="2_lag")
+        st.markdown("""
+Trinvis beregning, baseret på designmanualer og intern forsøgsdata fra Byggros:
 
-        def _fmt(d: dict, key: str) -> str:
-            if d.get("fejl"):
-                return "–"
-            v = d.get(key)
-            return f"{v:.0f} mm" if isinstance(v, (int, float)) else "–"
+Der beregnes en bærelagstykkelse ud fra 1 eller 2 lag armering med udgangspunkt i et referencenet.
+Den beregnede bærelagstykkelse korrigeres for friktionsvinkler forskellig fra φ = 35° samt effektindeks af forskellige geonet.
 
-        if not ref_1.get("fejl"):
-            eu_l, eu_u = ref_1["eu_lower"], ref_1["eu_upper"]
-            interp = (
-                f"Eu = {eu:.0f} MPa er en præcis tabelværdi — ingen interpolation"
-                if eu_l == eu_u
-                else f"Eu = {eu:.0f} MPa interpoleres lineært mellem Eu = {eu_l} MPa og Eu = {eu_u} MPa"
-            )
-        else:
-            interp = "Eu er uden for tabelområdet."
+1. **Bundmodulet Eu** vælges eller beregnes via sammenhæng med Cv
+2. **Krav til overflademodulet Eo** vælges alt efter belastningsklasse
+3. **Opslag i designdiagrammerne** i forhold til valg af bund- og overflademodul, til fastlæggelse af bærelagstykkelse — uarmeret og armeret med 1–2 lag geonet.
+   Der laves lineær interpolation hvis det valgte/beregnede Eu ikke er en direkte tabelværdi.
+4. **På baggrund af opslaget/interpolationen bestemmes basistykkelsen T_basis:**
+   - Uarmeret: *xx mm*
+   - 1 lag armering (referencenet): *xx mm*
+   - 2 lag armering (referencenet): *xx mm*
+5. **Korrektionsfaktorer for friktionsvinkel og effektivitet af geonet**
 
-        phi_kilde = (
-            "standardværdi for granulært bærelag"
-            if abs(phi - 35.0) < 0.001
-            else "beregnet ud fra materialelagene"
-        )
-        phi_kor = -0.02 * (phi - 35.0)
+   **Friktionsvinkel:**
+   Friktionsvinkel-korrektionen justerer basistykkelsen fra opslagstabellen, som er baseret på et standardmateriale med φ ≈ 35°. For hver grad over 35° reduceres tykkelsen med 2 %, og for φ under 35° øges tykkelsen tilsvarende.
 
-        if geonet is not None:
-            navn_vis = geonet_navn or geonet["navn"]
-            ref_lag_label = navn_vis
-            net_kor_linje = f"{net_kor:+.2f} ({navn_vis})"
-            footer = (
-                f"**T_armeret = T_basis × (1 + φ-kor + net-kor)** — beregnet "
-                f"for {navn_vis} i begge lag-modes ovenfor."
-            )
-        else:
-            ref_lag_label = "reference geonet"
-            net_kor_linje = (
-                "afhænger af produkt — TX160 / SX160 / E'GRID T6 = 0,00 "
-                "(reference), bedre produkter har negativ korrektion, "
-                "mindre effektive har positiv"
-            )
-            footer = (
-                "**T_armeret = T_basis × (1 + φ-kor + net-kor)** — "
-                "det er forskellen i net-korrektion der giver de varierende "
-                "tykkelser pr. produkt i kolonnerne ovenfor."
-            )
+   I standardberegningen sættes bærelagets friktionsvinkel φ = 35°.
 
-        # Samlet korrektionsfaktor — kun konkret tal hvis vi har ét net,
-        # ellers vis formel-form fordi net-korrektion varierer pr. produkt
-        if geonet is not None:
-            samlet_faktor = 1.0 + phi_kor + net_kor
-            samlet_linje = (
-                f"**Samlet korrektionsfaktor** = 1 + ({_dk_num(phi_kor, '+.4f')}) "
-                f"+ ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(samlet_faktor, '.4f')}**"
-            )
-        else:
-            samlet_linje = (
-                "**Samlet korrektionsfaktor** = 1 + φ-kor + net-kor "
-                "(varierer pr. produkt — se kolonnerne ovenfor)"
-            )
+   I den brugerdefinerede beregning beregnes en vægtet friktionsvinkel ud fra den angivne procentvægtning eller lagtykkelser af lagene, som er prædefinerede materialer med forskellige friktionsvinkler.
 
-        if materialer:
-            # Brugerdefineret-tilstand: udvidet trin 3 med tabel, vægtet
-            # regnestykke, Excel-formulering og samlet korrektionsfaktor.
-            st.markdown(f"""
-**7-trins algoritme** (GS-GRID Designmanual, afsnit 4):
+   *Eksempel på beregning i brugerdefineret tilstand, ud fra lagtykkelser:*
 
-1. **Eu** = {eu:.0f} MPa (underbundens E-modul)
-2. **Eo** = {eo:.0f} MPa (krævet på top af bærelag — klasse {valgt_klasse})
+   | Lag | Materiale | Tykkelse | φ (°) | Vægtet bidrag |
+   |-----|-----------|----------|------:|-------------:|
+   | 1   | SG I 0-32 | 300 mm   | 40,0  | 12 000        |
+   | 2   | Bundsand  | 450 mm   | 35,0  | 15 750        |
 
-**3. Vægtet φ-beregning og korrektion**
-            """)
+   Vægtet φ = Σ(tᵢ × φᵢ) / Σ(tᵢ) = 27 750 / 750 = **37,00°**
 
-            data = _phi_tabel_data(materialer)
-            st.markdown(data["tabel_md"])
+   φ-korrektion = −0,02 × (φ − 35°) = −0,02 × (37,00 − 35) = **−0,0400**
+   *(dvs. tykkelsen reduceres med −4,00 % af T_basis)*
 
-            bidrag_str = _dk_num(data["total_bidrag"], ".0f")
-            v_str = _dk_num(data["total_v"], ".0f")
-            phi_str = _dk_num(phi, ".2f")
-            phi_kor_str = _dk_num(phi_kor, "+.4f")
-            phi_kor_pct_str = _dk_num(phi_kor * 100, "+.2f")
+   **Net-korrektion:**
+   Designdiagrammerne bruger GS-GRID SX160, E'GRID T6 eller Tensar TriAx TX160 som referencenet (effektindeks 100). Hvis der er valgt en anden armering, skaleres tykkelsen op eller ned med op til 20 % alt efter produkt.
+   En positiv korrektionsfaktor = tykkere bærelag (mindre effektiv armering), negativ = tyndere bærelag (mere effektiv armering).
 
-            overskrevet_note = ""
-            if abs(phi - data["phi_weighted"]) > 0.005:
-                overskrevet_note = (
-                    f"  \n_φ er overskrevet manuelt til {phi_str}° "
-                    f"(vægtet værdi var {_dk_num(data['phi_weighted'], '.2f')}°)._"
-                )
+6. **Den endelige bærelagstykkelse beregnes som:**
 
-            st.markdown(
-                f"Vægtet middel: φ = Σ({data['symbol']}ᵢ × φᵢ) / "
-                f"Σ({data['symbol']}ᵢ) = {bidrag_str} / {v_str} = "
-                f"**{phi_str}°**{overskrevet_note}\n\n"
-                f"_Excel-fane 3 formulering: \"For hver grad over 35° "
-                f"reduceres tykkelsen med 2 %.\"_\n\n"
-                f"φ-korrektion = −0,02 × (φ − 35°) = −0,02 × "
-                f"({phi_str} − 35) = **{phi_kor_str}**  "
-                f"({phi_kor_pct_str} % af T_basis)"
-            )
+   **T_armeret = T_basis × (1 + φ-kor + net-kor)**
 
-            st.markdown(f"""
-4. **Opslag i designdiagram** — {interp}
-5. **T_basis** fra tabel 7.1:
-   - uarmeret: {_fmt(ref_1, 't_basis_uarm_mm')}
-   - 1 lag ({ref_lag_label}): {_fmt(ref_1, 't_basis_arm_mm')}
-   - 2 lag ({ref_lag_label}): {_fmt(ref_2, 't_basis_arm_mm')}
-6. **φ-korrektion** = {phi_kor_str} _(beregnet i trin 3)_
-   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({phi_kor_str}) = **{_dk_num(ref_1['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
-   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({phi_kor_str}) = **{_dk_num(ref_2['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
-7. **Net-korrektion**: {net_kor_linje}
-   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_1['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
-   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_2['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
-
-{samlet_linje}
-{f"- 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_1, 't_armeret_mm')}**" if not ref_1.get("fejl") and ref_1.get("t_basis_arm_mm") else ""}
-{f"- 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_2, 't_armeret_mm')}**" if not ref_2.get("fejl") and ref_2.get("t_basis_arm_mm") else ""}
-
-{footer}
-
-_Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
-            """)
-        else:
-            # Standard-tilstand / specifikt produkt uden materialelag —
-            # uændret 7-trins visning med kompakt trin 3 + mm-effekter trin 6+7.
-            st.markdown(f"""
-**7-trins algoritme** (GS-GRID Designmanual, afsnit 4):
-
-1. **Eu** = {eu:.0f} MPa (underbundens E-modul)
-2. **Eo** = {eo:.0f} MPa (krævet på top af bærelag — klasse {valgt_klasse})
-3. **φ** = {phi:.2f}° ({phi_kilde})
-4. **Opslag i designdiagram** — {interp}
-5. **T_basis** fra tabel 7.1:
-   - uarmeret: {_fmt(ref_1, 't_basis_uarm_mm')}
-   - 1 lag ({ref_lag_label}): {_fmt(ref_1, 't_basis_arm_mm')}
-   - 2 lag ({ref_lag_label}): {_fmt(ref_2, 't_basis_arm_mm')}
-6. **φ-korrektion** = −0,02 × (φ − 35°) = {phi_kor:+.4f}
-   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({phi_kor:+.4f}) = **{_dk_num(ref_1['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
-   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({phi_kor:+.4f}) = **{_dk_num(ref_2['t_basis_arm_mm'] * phi_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
-7. **Net-korrektion**: {net_kor_linje}
-   - 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_1['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_1.get('fejl') and ref_1.get('t_basis_arm_mm') else '–'} mm**
-   - 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × ({_dk_num(net_kor, '+.2f')}) = **{_dk_num(ref_2['t_basis_arm_mm'] * net_kor, '+.0f') if not ref_2.get('fejl') and ref_2.get('t_basis_arm_mm') else '–'} mm**
-
-{samlet_linje}
-{f"- 1 lag: {_fmt(ref_1, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_1, 't_armeret_mm')}**" if not ref_1.get("fejl") and ref_1.get("t_basis_arm_mm") else ""}
-{f"- 2 lag: {_fmt(ref_2, 't_basis_arm_mm')} × {_dk_num(1.0 + phi_kor + net_kor, '.4f')} = **{_fmt(ref_2, 't_armeret_mm')}**" if not ref_2.get("fejl") and ref_2.get("t_basis_arm_mm") else ""}
-
-{footer}
-
-_Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
-            """)
+_Kilde: GS-GRID Designmanual og Tensar Designmanual, samt interne forsøgsdata fra Byggros_
+        """)
 
 
 def _render_breakdown_tabel(
