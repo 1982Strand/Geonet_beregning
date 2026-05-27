@@ -24,6 +24,7 @@ from core.data import (
     GEONET_NAVNE,
     MATERIAL_NAVNE,
     EU_MIN, EU_MAX,
+    K_PHI,
     find_geonet,
     find_materiale,
     cv_til_eu,
@@ -1224,6 +1225,52 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     return materialer, phi
 
 
+def _render_uarm_banner_bd(t_uarm: float, phi: float) -> None:
+    """
+    Render uarmeret-banner i brugerdefineret tilstand.
+
+    Hvis phi == 35° (standard): én kolonne som i Standard-tilstanden.
+    Hvis phi ≠ 35°: to kolonner — basis (ingen korrektioner) til venstre
+    og φ-korrigeret tykkelse til højre med Δ-linje.
+    """
+    if abs(phi - 35.0) <= 0.05:
+        st.markdown(
+            f'<div class="uarm-banner">'
+            f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse</div>'
+            f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    phi_kor = K_PHI * (phi - 35.0)
+    t_uarm_phi = round(t_uarm * (1 + phi_kor))
+    delta_mm = abs(round(t_uarm - t_uarm_phi))
+    phi_str = _dk_num(phi, ".1f")
+    pil = "↓" if t_uarm_phi < t_uarm else "↑"
+
+    col_l, col_r = st.columns(2, gap="large")
+    with col_l:
+        st.markdown(
+            f'<div class="uarm-banner">'
+            f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse (basis)</div>'
+            f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with col_r:
+        st.markdown(
+            f'<div class="uarm-banner">'
+            f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse (φ-korrigeret)</div>'
+            f'<div class="uarm-banner-tal">{t_uarm_phi:.0f} mm</div>'
+            f'<div style="font-size:0.9rem;color:#555;margin-top:0.1rem">'
+            f'{pil} {delta_mm} mm &nbsp;(φ = {phi_str}°)'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
 def render_brugerdefineret() -> None:
     """Brugerdefineret-tilstand: A–D input + resultater + expandere.
 
@@ -1331,13 +1378,7 @@ def render_brugerdefineret() -> None:
             vis_fejl(haard_fejl)
         else:
             if t_uarm is not None:
-                st.markdown(
-                    f'<div class="uarm-banner">'
-                    f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse</div>'
-                    f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                _render_uarm_banner_bd(t_uarm, phi)
             kol_1, kol_2 = st.columns(2, gap="large")
             with kol_1:
                 _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag", phi=phi)
@@ -1371,13 +1412,7 @@ def render_brugerdefineret() -> None:
             vis_fejl(haard_fejl_specifikt)
         else:
             if t_uarm is not None:
-                st.markdown(
-                    f'<div class="uarm-banner">'
-                    f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse</div>'
-                    f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                _render_uarm_banner_bd(t_uarm, phi)
 
             grupper_1 = [bedste_1] if bedste_1 else []
             grupper_2 = [bedste_2] if bedste_2 else []
