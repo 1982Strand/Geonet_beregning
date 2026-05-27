@@ -252,6 +252,7 @@ def beregn_alle_produkter(
             "korrektion": geonet["korrektion"],
             "t_armeret_mm": resultat.get("t_armeret_mm"),
             "t_uarmeret_mm": resultat.get("t_uarmeret_mm"),
+            "t_basis_arm_mm": resultat.get("t_basis_arm_mm"),
             "reduktion_mm": resultat.get("reduktion_mm"),
             "reduktion_pct": resultat.get("reduktion_pct"),
             "klasse_ok": klasse_ok,
@@ -308,11 +309,16 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         t_uarm = produkt["t_uarmeret_mm"] or 0
         red_pct = (t_uarm - t_repræsentativ) / t_uarm if t_uarm > 0 else 0
 
+        # t_basis_arm_mm er identisk for alle produkter i gruppen
+        # (afhænger kun af eu/eo/lag_mode, ikke af produktets korrektion)
+        t_basis_arm = gruppe_produkter[0].get("t_basis_arm_mm")
+
         grupper.append({
             "t_armeret_mm": round(t_repræsentativ, 0),
             "t_armeret_eksakt_mm": round(t_repræsentativ, 0),
             "reduktion_pct": round(red_pct, 4),
             "reduktion_pct_eksakt": round(red_pct, 4),
+            "t_basis_arm_mm": t_basis_arm,
             "produkter": gruppe_produkter,
             "har_fejl": False,
             "fejl_besked": None,

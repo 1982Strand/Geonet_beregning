@@ -103,6 +103,20 @@ st.markdown(f"""
                        margin-top:0.05rem; margin-bottom:0.1rem; }}
   .gruppe-serie {{ font-size:0.88rem; margin-top:0.35rem; }}
   .gruppe-serie b {{ color:#333; }}
+
+  /* Net-korrektionslinjer i gruppe-kort */
+  .net-kor-spar {{
+    font-size:0.82rem; font-weight:500; color:#1565C0;
+    margin:0.1rem 0 0.05rem;
+  }}
+  .net-kor-pen {{
+    font-size:0.82rem; font-weight:500; color:#BF360C;
+    margin:0.1rem 0 0.05rem;
+  }}
+  .net-kor-ref {{
+    font-size:0.80rem; color:{GRÅ}; font-style:italic;
+    margin:0.1rem 0 0.05rem;
+  }}
   .bedste-label {{
     font-size:0.7rem; color:{GRØN}; text-transform:uppercase;
     letter-spacing:0.08em; font-weight:600; margin:0.1rem 0 0.1rem 0;
@@ -262,6 +276,62 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
     else:
         red_linje = ""
 
+    # ↕ net-korrektionslinje — viser delta ift. referenceprodukt (kor=0)
+    # t_basis er fælles for alle produkter i gruppen (samme eu/eo/lag_mode)
+    net_kor_html = ""
+    t_basis = gruppe.get("t_basis_arm_mm")
+    if t_basis and t_basis > 0 and gruppe.get("produkter"):
+        korrektioner = sorted({p["korrektion"] for p in gruppe["produkter"]})
+        kor_min = korrektioner[0]
+        kor_max = korrektioner[-1]
+        delta_min = round(t_basis * kor_min)  # mm; negativ = sparer, positiv = koster mere
+        delta_max = round(t_basis * kor_max)
+
+        if abs(kor_min) < 0.005 and abs(kor_max) < 0.005:
+            # Referenceprodukt(er)
+            net_kor_html = '<div class="net-kor-ref">referenceprodukt (0 % korrektion)</div>'
+        elif abs(kor_min - kor_max) < 0.005:
+            # Alle produkter i gruppen har samme korrektion
+            delta = delta_min
+            pct = int(round(abs(kor_min) * 100))
+            abs_delta = abs(delta)
+            if kor_min < 0:
+                net_kor_html = (
+                    f'<div class="net-kor-spar">'
+                    f'net-kor: −{abs_delta} mm (−{pct} %) ift. reference'
+                    f'</div>'
+                )
+            else:
+                net_kor_html = (
+                    f'<div class="net-kor-pen">'
+                    f'net-kor: +{abs_delta} mm (+{pct} %) ift. reference'
+                    f'</div>'
+                )
+        else:
+            # Blandet gruppe — vis interval
+            d_lo, d_hi = delta_min, delta_max
+            if d_hi <= 0:
+                # Alt er besparelser (kor < 0)
+                net_kor_html = (
+                    f'<div class="net-kor-spar">'
+                    f'net-kor: {d_lo:+d} til {d_hi:+d} mm ift. reference'
+                    f'</div>'
+                )
+            elif d_lo >= 0:
+                # Alt er tillæg (kor > 0)
+                net_kor_html = (
+                    f'<div class="net-kor-pen">'
+                    f'net-kor: +{d_lo} til +{d_hi} mm ift. reference'
+                    f'</div>'
+                )
+            else:
+                # Blandet fortegn — neutral
+                net_kor_html = (
+                    f'<div class="net-kor-ref">'
+                    f'net-kor: {d_lo:+d} til {d_hi:+d} mm ift. reference'
+                    f'</div>'
+                )
+
     pr_serie: dict[str, list[dict]] = {}
     for p in _sort_produkter(gruppe["produkter"]):
         pr_serie.setdefault(p["serie"], []).append(p)
@@ -280,6 +350,7 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool) -> None:
         f'<div class="{kort_css}">'
         f'<span class="{tal_css}">{t_vis:.0f} mm</span>'
         f'{red_linje}'
+        f'{net_kor_html}'
         f'{"".join(serie_linjer)}'
         f'</div>',
         unsafe_allow_html=True,
@@ -303,24 +374,26 @@ def _resultat_til_gruppe(
     red_eks = (t_uarm - t_eks) / t_uarm if t_uarm else 0
 
     produkt = {
-        "navn":          geonet["navn"],
-        "serie":         geonet["serie"],
-        "korrektion":    geonet["korrektion"],
-        "t_armeret_mm":  t_eks,
-        "t_uarmeret_mm": t_uarm,
-        "reduktion_mm":  t_uarm - t_eks,
-        "reduktion_pct": red_eks,
-        "klasse_ok":     valgt_klasse in geonet["klasser"],
-        "klasser":       geonet["klasser"],
-        "min_daklag":    geonet["min_daklag"],
-        "max_korn":      geonet["max_korn"],
-        "fejl":          None,
+        "navn":           geonet["navn"],
+        "serie":          geonet["serie"],
+        "korrektion":     geonet["korrektion"],
+        "t_armeret_mm":   t_eks,
+        "t_uarmeret_mm":  t_uarm,
+        "t_basis_arm_mm": res.get("t_basis_arm_mm"),
+        "reduktion_mm":   t_uarm - t_eks,
+        "reduktion_pct":  red_eks,
+        "klasse_ok":      valgt_klasse in geonet["klasser"],
+        "klasser":        geonet["klasser"],
+        "min_daklag":     geonet["min_daklag"],
+        "max_korn":       geonet["max_korn"],
+        "fejl":           None,
     }
     return {
         "t_armeret_mm":         round(t_eks, 0),
         "t_armeret_eksakt_mm":  round(t_eks, 0),
         "reduktion_pct":        round(red_eks, 4),
         "reduktion_pct_eksakt": round(red_eks, 4),
+        "t_basis_arm_mm":       res.get("t_basis_arm_mm"),
         "produkter":            [produkt],
         "har_fejl":             False,
         "fejl_besked":          None,
@@ -715,6 +788,7 @@ def _render_oversigt_expanders(
 
 _Kilde: GS-GRID Designmanual, tabel 7.1 og afsnit 4_
             """)
+        else:
             # Standard-tilstand / specifikt produkt uden materialelag —
             # uændret 7-trins visning med kompakt trin 3 + mm-effekter trin 6+7.
             st.markdown(f"""
