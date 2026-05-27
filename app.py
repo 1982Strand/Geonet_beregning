@@ -446,13 +446,6 @@ def _render_lag_kolonne(
             st.info(
                 f"Designdiagrammet definerer ikke 2-lag-værdier for "
                 f"kombinationen af det valgte Eu og klasse {valgt_klasse}. "
-                f"\n\n"
-                f"2 lag geonet anvendes primært ved **svag underbund** "
-                f"(lave Eu-værdier) eller **høj belastning**, hvor 1 lag "
-                f"ikke giver tilstrækkelig reduktion. Når underbunden er "
-                f"tilstrækkelig stiv — eller belastningen relativt lav — "
-                f"er 1 lag geonet typisk tilstrækkeligt, og designmanualen "
-                f"angiver derfor ingen 2-lag-værdier."
             )
         else:
             st.info(
