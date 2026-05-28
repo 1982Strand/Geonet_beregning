@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="Geonet Dimensionering",
     page_icon="🏗️",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ---------------------------------------------------------------------------
@@ -22,13 +22,18 @@ st.set_page_config(
 from core.data import (
     BELASTNINGSKLASSER,
     GEONET_NAVNE,
+    GEONET_DB,
     MATERIAL_NAVNE,
+    MATERIAL_DB,
     EU_MIN, EU_MAX,
     K_PHI,
     find_geonet,
     find_materiale,
     cv_til_eu,
     eo_til_klasse,
+    T_BASIS_TABLE,
+    EU_RAEKKER,
+    EO_KOLONNER,
 )
 from core.calculator import (
     beregn,
@@ -129,6 +134,82 @@ st.markdown(f"""
   }}
 
   hr {{ margin: 0.75rem 0; }}
+
+  /* ─── Sidebar ─────────────────────────────────────────── */
+  [data-testid="stSidebar"] {{
+    background: #FFFFFF;
+    border-right: 1px solid #E0E0E0;
+  }}
+  [data-testid="stSidebarContent"] > div:first-child {{
+    padding-top: 0 !important;
+  }}
+
+  .sb-header {{
+    padding: 1.4rem 1.1rem 1.1rem;
+    border-bottom: 1px solid #EEEEEE;
+    margin-bottom: 0.6rem;
+  }}
+  .sb-logo {{
+    font-size: 1.6rem;
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }}
+  .sb-title {{
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #222;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+  }}
+  .sb-sub {{
+    font-size: 0.7rem;
+    color: #AAA;
+    margin-top: 0.15rem;
+  }}
+
+  [data-testid="stSidebar"] .stButton > button {{
+    width: 100% !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    border: none !important;
+    border-left: 3px solid transparent !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    color: #555 !important;
+    padding: 0.6rem 1.1rem !important;
+    font-size: 0.88rem !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+    letter-spacing: 0.01em;
+  }}
+  [data-testid="stSidebar"] .stButton > button:hover {{
+    background: #F5F5F5 !important;
+    color: {GRØN} !important;
+    border-left-color: #C8E6C9 !important;
+  }}
+  [data-testid="stSidebar"] .stButton > button[kind="primaryFormSubmit"],
+  [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
+    background: {LYS_GR} !important;
+    color: {GRØN} !important;
+    border-left: 3px solid {GRØN} !important;
+    font-weight: 700 !important;
+  }}
+
+  .sb-divider {{
+    border: none;
+    border-top: 1px solid #EEEEEE;
+    margin: 0.5rem 0;
+  }}
+
+  .sb-footer {{
+    padding: 0 1.1rem;
+    font-size: 0.7rem;
+    color: #BBB;
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1452,36 +1533,171 @@ def render_brugerdefineret() -> None:
 
 
 # ===========================================================================
-# Top-level layout — titel + tilstandsvælger + dispatch
+# Sidebar navigation
 # ===========================================================================
 
-st.title("🏗️ Geonet Dimensioneringsværktøj")
-st.caption(
-    "Beregning af bærelagstykkelse med og uden geonetarmering "
-    "· Baseret på BG Byggros designmanualer for Tensar og GS-GRID, samt interne forsøgsdata"
-)
+_NAV_ITEMS = [
+    ("📐", "Dimensionering",   "dimensionering"),
+    ("🪨", "Materialer",        "materialer"),
+    ("🕸️", "Geonet database",  "geonet_database"),
+    ("📊", "Designdiagrammer",  "designdiagrammer"),
+]
 
-tilstand = st.radio(
-    "Tilstand",
-    ["Standard", "Brugerdefineret"],
-    horizontal=True,
-    key="tilstand",
-    help=(
-        "**Standard:** Vælg Eu/Cv og belastningsklasse — få en oversigt over "
-        "alle geonet-produkter med deres opnåelige bærelagstykkelse (φ = 35°).  \n"
-        "**Brugerdefineret:** Vælg ét produkt med op til 3 materialelag, "
-        "vægtet φ og manuel overstyring."
-    ),
-)
 
-st.caption(
-    "I standardberegningen forudsættes 1 homogent bærelag med en forudsat "
-    "friktionsvinkel på φ = 35°."
-)
+def render_sidebar() -> str:
+    """Render venstre navigationsmenu. Returnerer nøglen for den aktive side."""
+    if "aktiv_side" not in st.session_state:
+        st.session_state.aktiv_side = "dimensionering"
 
-st.divider()
+    with st.sidebar:
+        st.markdown(
+            '<div class="sb-header">'
+            '<div class="sb-logo">🏗️</div>'
+            '<div class="sb-title">Beregningsværktøj</div>'
+            '<div class="sb-sub">BG Byggros · v1.3</div>'
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
-if tilstand == "Standard":
-    render_standard()
-else:
-    render_brugerdefineret()
+        for ikon, navn, nøgle in _NAV_ITEMS:
+            aktiv = st.session_state.aktiv_side == nøgle
+            if st.button(
+                f"{ikon}  {navn}",
+                key=f"_nav_{nøgle}",
+                use_container_width=True,
+                type="primary" if aktiv else "secondary",
+            ):
+                st.session_state.aktiv_side = nøgle
+                st.rerun()
+
+        # Fyld-spacer + footer nederst
+        st.markdown(
+            '<hr class="sb-divider" style="margin-top:1.5rem">'
+            '<div class="sb-footer">'
+            "<span>© BG Byggros</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    return st.session_state.aktiv_side
+
+
+# ===========================================================================
+# Placeholder-sider (Materialer, Geonet database, Designdiagrammer)
+# ===========================================================================
+
+def render_materialer() -> None:
+    st.title("🪨 Materialer")
+    st.caption("Database over bærelagsmaterialer og deres friktionsvinkler.")
+    st.divider()
+
+
+    df = pd.DataFrame([
+        {
+            "Materiale":    m["navn"],
+            "Lagtype":      m["lagtype"],
+            "φ (°)":        m["phi"],
+            "Max korn (mm)": m["max_korn"] if m["max_korn"] else "—",
+            "Anvendelse":   m["anvendelse"],
+        }
+        for m in MATERIAL_DB
+    ])
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def render_geonet_database() -> None:
+    st.title("🕸️ Geonet database")
+    st.caption("Oversigt over alle geonet-produkter med effektindeks og belastningsklasser.")
+    st.divider()
+
+    import pandas as pd
+
+    df = pd.DataFrame([
+        {
+            "Produkt":        g["navn"],
+            "Serie":          g["serie"],
+            "Korrektion":     f"{g['korrektion']:+.0%}",
+            "Min dæklag (cm)": g["min_daklag"],
+            "Max korn (mm)":  g["max_korn"] if g["max_korn"] else "—",
+            "Klasser":        ", ".join(str(k) for k in g["klasser"]),
+            "Bemærkning":     g.get("bemærkning", ""),
+        }
+        for g in GEONET_DB
+        if g["navn"] != "Anden armering (manuel)"
+    ])
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def render_designdiagrammer() -> None:
+    st.title("📊 Designdiagrammer")
+    st.caption(
+        "Opslagstabeller for bærelagstykkelse (cm) fordelt på Eu, Eo og lag-type."
+    )
+    st.divider()
+
+    import pandas as pd
+
+    for lag_type, overskrift in [
+        ("uarmeret", "Uarmeret bærelagstykkelse (cm)"),
+        ("1_lag",    "Armeret med 1 lag geonet (cm)"),
+        ("2_lag",    "Armeret med 2 lag geonet (cm)"),
+    ]:
+        st.subheader(overskrift)
+        rækker = []
+        for eu in EU_RAEKKER:
+            række = {"Eu (MPa)": eu}
+            for eo in EO_KOLONNER:
+                val = T_BASIS_TABLE[eu][eo].get(lag_type)
+                række[f"Eo={eo}"] = f"{val:.1f}" if val is not None else "—"
+            rækker.append(række)
+        df = pd.DataFrame(rækker)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.markdown("")
+
+
+# ===========================================================================
+# Top-level layout — sidebar + routing
+# ===========================================================================
+
+aktiv_side = render_sidebar()
+
+if aktiv_side == "dimensionering":
+    st.title("🏗️ Dimensionering")
+    st.caption(
+        "Beregning af bærelagstykkelse med og uden geonetarmering "
+        "· Baseret på BG Byggros designmanualer for Tensar og GS-GRID, samt interne forsøgsdata"
+    )
+
+    tilstand = st.radio(
+        "Tilstand",
+        ["Standard", "Brugerdefineret"],
+        horizontal=True,
+        key="tilstand",
+        help=(
+            "**Standard:** Vælg Eu/Cv og belastningsklasse — få en oversigt over "
+            "alle geonet-produkter med deres opnåelige bærelagstykkelse (φ = 35°).  \n"
+            "**Brugerdefineret:** Vælg ét produkt med op til 3 materialelag, "
+            "vægtet φ og manuel overstyring."
+        ),
+    )
+
+    st.caption(
+        "I standardberegningen forudsættes 1 homogent bærelag med en forudsat "
+        "friktionsvinkel på φ = 35°."
+    )
+
+    st.divider()
+
+    if tilstand == "Standard":
+        render_standard()
+    else:
+        render_brugerdefineret()
+
+elif aktiv_side == "materialer":
+    render_materialer()
+
+elif aktiv_side == "geonet_database":
+    render_geonet_database()
+
+elif aktiv_side == "designdiagrammer":
+    render_designdiagrammer()
