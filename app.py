@@ -19,17 +19,18 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 # Imports — efter set_page_config
 # ---------------------------------------------------------------------------
+import json
+import os
+
 from core.data import (
     BELASTNINGSKLASSER,
     GEONET_NAVNE,
     GEONET_DB,
     GEONET_NOTER,
-    MATERIAL_NAVNE,
     MATERIAL_DB,
     EU_MIN, EU_MAX,
     K_PHI,
     find_geonet,
-    find_materiale,
     cv_til_eu,
     eo_til_klasse,
     T_BASIS_TABLE,
@@ -42,6 +43,134 @@ from core.calculator import (
     grupper_produkter,
 )
 from core.validators import valider_input
+
+# ---------------------------------------------------------------------------
+# Redigerbare materialer
+# ---------------------------------------------------------------------------
+MATERIALER_JSON = os.path.join(
+    os.path.dirname(__file__),
+    "materialer_brugerdefineret.json",
+)
+
+
+def _standard_materialer() -> list[dict]:
+    """Returner standardmaterialer i samme format som editoren gemmer."""
+    return [
+        {
+            "navn": str(m.get("navn", "")).strip(),
+            "lagtype": m.get("lagtype") or "Bærelag",
+            "phi": int(m.get("phi") or 35),
+            "max_korn": int(m["max_korn"]) if m.get("max_korn") else None,
+            "anvendelse": str(m.get("anvendelse") or ""),
+        }
+        for m in MATERIAL_DB
+    ]
+
+
+def _er_tom_vaerdi(value) -> bool:
+    if value is None:
+        return True
+    try:
+        if value == "":
+            return True
+    except TypeError:
+        pass
+    try:
+        return bool(value != value)
+    except (TypeError, ValueError):
+        return False
+
+
+def _normaliser_materiale(raw: dict) -> dict | None:
+    """Saniter en editor-række. Tomme navne droppes."""
+    navn = str(raw.get("navn") or "").strip()
+    if not navn:
+        return None
+
+    lagtype = raw.get("lagtype")
+    if lagtype not in ("Bærelag", "Bundsikring"):
+        lagtype = "Bærelag"
+
+    try:
+        phi = int(round(float(raw.get("phi"))))
+    except (TypeError, ValueError):
+        phi = 35
+    phi = min(max(phi, 20), 60)
+
+    max_korn_raw = raw.get("max_korn")
+    if _er_tom_vaerdi(max_korn_raw):
+        max_korn = None
+    else:
+        try:
+            max_korn = int(round(float(max_korn_raw)))
+        except (TypeError, ValueError):
+            max_korn = None
+        if max_korn is not None:
+            max_korn = min(max(max_korn, 0), 500) or None
+
+    return {
+        "navn": navn,
+        "lagtype": lagtype,
+        "phi": phi,
+        "max_korn": max_korn,
+        "anvendelse": str(raw.get("anvendelse") or "").strip(),
+    }
+
+
+def _normaliser_materialer(materialer: list[dict]) -> list[dict]:
+    resultat = []
+    for materiale in materialer:
+        normaliseret = _normaliser_materiale(materiale)
+        if normaliseret is not None:
+            resultat.append(normaliseret)
+    return resultat
+
+
+def _duplikerede_materialenavne(materialer: list[dict]) -> list[str]:
+    set_navne: set[str] = set()
+    duplikater: list[str] = []
+    for materiale in materialer:
+        navn = materiale["navn"]
+        key = navn.casefold()
+        if key in set_navne and navn not in duplikater:
+            duplikater.append(navn)
+        set_navne.add(key)
+    return duplikater
+
+
+def indlaes_materialer() -> list[dict]:
+    """Indlæs brugerdefinerede materialer. Fallback til MATERIAL_DB."""
+    if os.path.exists(MATERIALER_JSON):
+        try:
+            with open(MATERIALER_JSON, "r", encoding="utf-8") as f:
+                materialer = _normaliser_materialer(json.load(f))
+            if materialer and not _duplikerede_materialenavne(materialer):
+                return materialer
+        except (OSError, json.JSONDecodeError, TypeError):
+            pass
+    return _standard_materialer()
+
+
+def gem_materialer(materialer: list[dict]) -> None:
+    with open(MATERIALER_JSON, "w", encoding="utf-8") as f:
+        json.dump(materialer, f, ensure_ascii=False, indent=2)
+
+
+def slet_json_og_nulstil() -> None:
+    if os.path.exists(MATERIALER_JSON):
+        os.remove(MATERIALER_JSON)
+
+
+def _find_materiale_session(navn: str) -> dict | None:
+    """Slå materiale op i den redigerbare session-liste."""
+    for materiale in st.session_state.get("materialer", []):
+        if materiale["navn"] == navn:
+            return materiale
+    return None
+
+
+if "materialer" not in st.session_state:
+    st.session_state["materialer"] = indlaes_materialer()
 
 # ---------------------------------------------------------------------------
 # Farvepalette
@@ -288,7 +417,7 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
                 f"{KLASSE_IKON[kl_nr]}\n**{kl_nr}**",
                 key=f"{key_prefix}_kl_{kl_nr}",
                 type="primary" if aktiv else "secondary",
-                use_container_width=True,
+                width="stretch",
                 help=f"Klasse {kl_nr}: {kl_data['anvendelse']}",
             ):
                 st.session_state[state_key] = kl_nr
@@ -564,6 +693,18 @@ def _navne_kort(gruppe: dict) -> str:
     return f"{navne[0]} m.fl."
 
 
+def _advarsel_med_lagtekst(advarsel: str, lag_mode: str) -> str:
+    """Tilføj lag-kontekst til advarsler der kun gælder én lag-mode."""
+    lagtekst = "ved 1 lag geonet" if lag_mode == "1_lag" else "ved 2 lag geonet"
+    if lagtekst in advarsel or "1 lag geonet" in advarsel or "2 lag geonet" in advarsel:
+        return advarsel
+    if "minimumtykkelse" in advarsel and " mm). " in advarsel:
+        return advarsel.replace(" mm). ", f" mm) {lagtekst}. ", 1)
+    if advarsel.endswith("."):
+        return f"{advarsel[:-1]} {lagtekst}."
+    return f"{advarsel} {lagtekst}"
+
+
 def _samme_produkter(g1: dict | None, g2: dict | None) -> bool:
     """True hvis to grupper indeholder præcis det samme sæt produktnavne."""
     if g1 is None or g2 is None:
@@ -643,6 +784,8 @@ def _render_oversigt_expanders(
     # erstattes længere nede af tilpassede anbefalinger baseret på det
     # bedst reducerende net (gælder også specifikt produkt, da begge
     # lag-modes vises samtidig i den nye UI).
+    advarsler_pr_lag: list[tuple[str, str]] = []
+    lag_by_advarsel: dict[str, set[str]] = {}
     advarsler_unik: list[str] = []
     seen_a: set[str] = set()
     for lm in ("1_lag", "2_lag"):
@@ -651,9 +794,15 @@ def _render_oversigt_expanders(
             geonet=geonet, materialer=materialer,
         )
         for a in val.get("advarsler", []):
-            if a not in seen_a:
-                seen_a.add(a)
-                advarsler_unik.append(a)
+            advarsler_pr_lag.append((a, lm))
+            lag_by_advarsel.setdefault(a, set()).add(lm)
+
+    for a, lm in advarsler_pr_lag:
+        if len(lag_by_advarsel[a]) == 1:
+            a = _advarsel_med_lagtekst(a, lm)
+        if a not in seen_a:
+            seen_a.add(a)
+            advarsler_unik.append(a)
 
     # --- Tilpassede anbefalinger baseret på bedste produkt --------------
     anbefalinger: list[str] = []
@@ -1231,10 +1380,42 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
 
     for i in range(int(antal_lag)):
         with st.expander(f"Lag {i + 1}", expanded=True):
+            dynamiske_navne = [
+                m["navn"] for m in st.session_state.get("materialer", [])
+            ]
+            materiale_options = dynamiske_navne + ["Manuel indtastning"]
+            mat_key = f"bd_mat_{i}"
+            slettet_materiale = None
+            if (
+                mat_key in st.session_state
+                and st.session_state[mat_key] not in materiale_options
+            ):
+                slettet_materiale = st.session_state[mat_key]
+                st.session_state[mat_key] = "Manuel indtastning"
+
             mat_navn = st.selectbox(
-                "Materiale", MATERIAL_NAVNE, key=f"bd_mat_{i}",
+                "Materiale", materiale_options, key=mat_key,
             )
-            if mat_navn == "Manuel indtastning":
+
+            md = (
+                None
+                if mat_navn == "Manuel indtastning"
+                else _find_materiale_session(mat_navn)
+            )
+            if slettet_materiale is not None:
+                st.warning(
+                    f"Materialet '{slettet_materiale}' findes ikke længere i databasen. "
+                    "Laget er skiftet til manuel indtastning."
+                )
+            elif mat_navn != "Manuel indtastning" and md is None:
+                st.warning(
+                    f"Materialet '{mat_navn}' findes ikke længere i databasen. "
+                    "Laget behandles som manuel indtastning."
+                )
+
+            lag_navn = mat_navn if md is not None else "Manuel indtastning"
+
+            if md is None:
                 phi_i = st.number_input(
                     "φ (°)", 20.0, 60.0, 35.0, 0.5, key=f"bd_phi_m_{i}"
                 )
@@ -1245,7 +1426,6 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                     "Lagtype", ["Bærelag", "Bundsikring"], key=f"bd_lt_m_{i}"
                 )
             else:
-                md = find_materiale(mat_navn)
                 phi_i = float(md["phi"])
                 korn_i = md["max_korn"]
                 ltype_i = md["lagtype"]
@@ -1260,7 +1440,7 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                     "Tykkelse (mm)", 0, 2000, 300, 50, key=f"bd_t_{i}",
                 )
                 materialer.append({
-                    "navn": mat_navn, "phi": phi_i, "max_korn": korn_i,
+                    "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
                     "lagtype": ltype_i, "tykkelse_mm": float(t_i),
                     "pct": None,
                 })
@@ -1272,7 +1452,7 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                 )
                 total_pct += p_i
                 materialer.append({
-                    "navn": mat_navn, "phi": phi_i, "max_korn": korn_i,
+                    "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
                     "lagtype": ltype_i, "tykkelse_mm": None,
                     "pct": float(p_i),
                 })
@@ -1565,7 +1745,7 @@ def render_sidebar() -> str:
             if st.button(
                 f"{ikon}  {navn}",
                 key=f"_nav_{nøgle}",
-                use_container_width=True,
+                width="stretch",
                 type="primary" if aktiv else "secondary",
             ):
                 st.session_state.aktiv_side = nøgle
@@ -1586,26 +1766,6 @@ def render_sidebar() -> str:
 # ===========================================================================
 # Placeholder-sider (Materialer, Geonet database, Designdiagrammer)
 # ===========================================================================
-
-def render_materialer() -> None:
-    st.title("🪨 Materialer")
-    st.caption("Database over bærelagsmaterialer og deres friktionsvinkler.")
-    st.divider()
-
-    import pandas as pd
-
-    df = pd.DataFrame([
-        {
-            "Materiale":    m["navn"],
-            "Lagtype":      m["lagtype"],
-            "φ (°)":        m["phi"],
-            "Max korn (mm)": m["max_korn"] if m["max_korn"] else "—",
-            "Anvendelse":   m["anvendelse"],
-        }
-        for m in MATERIAL_DB
-    ])
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
 
 def render_geonet_database() -> None:
     st.title("🕸️ Geonet database")
@@ -1630,10 +1790,10 @@ def render_geonet_database() -> None:
             "Korrektions-\nfaktor":  f"{g['korrektion']:+.0%}",
             "BK":                    ", ".join(str(k) for k in g["klasser"]),
             "Min. dæklag\n(cm)":     g["min_daklag"],
-            "Maks. korn\n(datablad mm)": g["max_korn"] if g["max_korn"] else "—",
+            "Maks. korn\n(datablad mm)": f"{g['max_korn']}" if g["max_korn"] else "—",
             "Anb. tilslag\n(designmanual)": g.get("anbefalet_tilslag") or "—",
             "Rudeåbning":            g.get("rudeaabning") or "—",
-            "Radial stivhed\n(kN/m @ 0,5%)": g.get("radial_stivhed") if g.get("radial_stivhed") else "—",
+            "Radial stivhed\n(kN/m @ 0,5%)": f"{g['radial_stivhed']}" if g.get("radial_stivhed") else "—",
             "GWP A1–A3\n(kg CO₂/m²)": f"{g['gwp']:.2f}" if g.get("gwp") else "—",
             "Min. levetid":          g.get("min_levetid") or "—",
             "Overlæg Eu ≥ 5\n(cm)": g.get("overlap_eu_ge5_cm", 30),
@@ -1650,7 +1810,7 @@ def render_geonet_database() -> None:
 
     st.dataframe(
         df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=tabel_hoejde,
     )
@@ -1703,8 +1863,108 @@ def render_designdiagrammer() -> None:
                 række[f"Eo={eo}"] = f"{val:.1f}" if val is not None else "—"
             rækker.append(række)
         df = pd.DataFrame(rækker)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.dataframe(df, width="stretch", hide_index=True)
         st.markdown("")
+
+
+def render_materialer() -> None:
+    st.title("🪨 Materialer")
+    st.caption(
+        "Redigér materialebasen. Ændringer gemmes automatisk og slår igennem "
+        "i Brugerdefineret-tilstand."
+    )
+    st.divider()
+
+    import pandas as pd
+
+    kol_a, kol_b, kol_c = st.columns([1, 1, 4])
+    with kol_a:
+        if st.button("➕ Tilføj materiale", width="stretch"):
+            eksisterende = {
+                m["navn"].casefold()
+                for m in st.session_state.get("materialer", [])
+            }
+            navn = "Nyt materiale"
+            nr = 2
+            while navn.casefold() in eksisterende:
+                navn = f"Nyt materiale {nr}"
+                nr += 1
+            st.session_state["materialer"].append({
+                "navn": navn,
+                "lagtype": "Bærelag",
+                "phi": 35,
+                "max_korn": 32,
+                "anvendelse": "",
+            })
+            gem_materialer(st.session_state["materialer"])
+            st.rerun()
+
+    with kol_b:
+        if st.button("🔄 Nulstil til standard", width="stretch", type="secondary"):
+            slet_json_og_nulstil()
+            st.session_state["materialer"] = indlaes_materialer()
+            st.rerun()
+
+    df = pd.DataFrame(
+        st.session_state.get("materialer", []),
+        columns=["navn", "lagtype", "phi", "max_korn", "anvendelse"],
+    )
+
+    redigeret = st.data_editor(
+        df,
+        width="stretch",
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            "navn": st.column_config.TextColumn(
+                "Materiale",
+                required=True,
+            ),
+            "lagtype": st.column_config.SelectboxColumn(
+                "Lagtype",
+                options=["Bærelag", "Bundsikring"],
+                required=True,
+            ),
+            "phi": st.column_config.NumberColumn(
+                "φ (°)",
+                min_value=20,
+                max_value=60,
+                step=1,
+                format="%d",
+                required=True,
+            ),
+            "max_korn": st.column_config.NumberColumn(
+                "Max korn (mm)",
+                min_value=0,
+                max_value=500,
+                step=1,
+                format="%d",
+                required=False,
+            ),
+            "anvendelse": st.column_config.TextColumn(
+                "Anvendelse",
+            ),
+        },
+        key="mat_editor",
+    )
+
+    ny_liste = _normaliser_materialer(redigeret.to_dict("records"))
+    duplikater = _duplikerede_materialenavne(ny_liste)
+
+    if not ny_liste:
+        st.error("Materialelisten skal indeholde mindst ét materiale.")
+        st.stop()
+
+    if duplikater:
+        st.error(
+            "Materialenavne skal være unikke. Ret duplikater: "
+            + ", ".join(duplikater)
+        )
+        st.stop()
+
+    if ny_liste != st.session_state["materialer"]:
+        st.session_state["materialer"] = ny_liste
+        gem_materialer(ny_liste)
 
 
 # ===========================================================================
