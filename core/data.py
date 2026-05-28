@@ -349,193 +349,458 @@ MATERIAL_NAVNE = [m["navn"] for m in MATERIAL_DB] + ["Manuel indtastning"]
 
 GEONET_DB = [
     # --- Tensar-serien ---
+    # Tekniske data (trækstyrke, maskestørrelse, dimensioner, GWP) for SS30, HX5.5,
+    # HX165, NX750 og NX850 er ikke tilgængelige i de foreliggende kildedokumenter.
+    # Korrektionsfaktorer og belastningsklasser er fra Tensar Geonet Designmanual sept. 2024.
     {
         "navn": "Tensar SS30",
         "serie": "Tensar",
+        "type": "Biaxialt",
+        "effektindeks": "90",
         "korrektion": 0.10,
         "max_korn": None,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [3, 4, 5],
-        "bemærkning": "Effektindeks 90",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 90. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
     },
     {
         "navn": "Tensar TriAx TX150",
         "serie": "Tensar",
+        "type": "Triaxialt",
+        "effektindeks": "90",
         "korrektion": 0.10,
         "max_korn": None,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [1, 2, 3, 4],
-        "bemærkning": "Effektindeks 90",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 90. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
     },
     {
         "navn": "Tensar HX5.5",
         "serie": "Tensar",
+        "type": "Hexagonalt",
+        "effektindeks": "95",
         "korrektion": 0.05,
         "max_korn": None,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [1, 2, 3, 4, 5],
-        "bemærkning": "Effektindeks 95",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 95. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
     },
     {
         "navn": "Tensar TriAx TX160",
         "serie": "Tensar",
+        "type": "Triaxialt",
+        "effektindeks": "100",
         "korrektion": 0.00,
         "max_korn": 80,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "Triangulær, ribbe 40 mm",
         "min_daklag": 20,
         "klasser": [3, 4, 5, 6],
-        "bemærkning": "REFERENCE — effektindeks 100",
+        "radial_stivhed": 390,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "REFERENCE (Tensar-design) — effektindeks 100. Maks. tid uden afdækning: < 2 uger.",
     },
     {
         "navn": "Tensar HX165",
         "serie": "Tensar",
+        "type": "Hexagonalt",
+        "effektindeks": "105",
         "korrektion": -0.05,
         "max_korn": None,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [4, 5, 6],
-        "bemærkning": "Effektindeks 105",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 105. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
     },
     {
         "navn": "Tensar InterAx NX750",
         "serie": "Tensar",
+        "type": "Hexagonalt",
+        "effektindeks": "110–120",
         "korrektion": -0.10,
         "max_korn": None,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [5, 6],
-        "bemærkning": "Effektindeks 110–120",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 110–120. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
     },
     {
         "navn": "Tensar InterAx NX850",
         "serie": "Tensar",
+        "type": "Hexagonalt",
+        "effektindeks": "115–130",
         "korrektion": -0.15,
         "max_korn": None,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [5, 6],
-        "bemærkning": "Effektindeks 115–130",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 115–130. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
     },
     # --- GS-GRID-serien ---
+    # Kilde: GS-GRID/E'GRID Designmanual okt. 2025 + GS-GRID Biaxial datablad jun. 2025
     {
         "navn": "GS-GRID B20/20",
         "serie": "GS-GRID",
+        "type": "Biaxialt",
+        "effektindeks": "80",
         "korrektion": 0.20,
         "max_korn": 64,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "37×37 mm",
         "min_daklag": 20,
         "klasser": [1, 2, 3],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": 0.55,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 80.",
     },
     {
         "navn": "GS-GRID B20/20L",
         "serie": "GS-GRID",
+        "type": "Biaxialt",
+        "effektindeks": "80",
         "korrektion": 0.20,
         "max_korn": 64,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [1, 2, 3],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 80.",
     },
     {
         "navn": "GS-GRID B30/30",
         "serie": "GS-GRID",
+        "type": "Biaxialt",
+        "effektindeks": "90",
         "korrektion": 0.10,
         "max_korn": 64,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "35×35 mm",
         "min_daklag": 20,
         "klasser": [3, 4, 5],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": 0.81,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 90.",
     },
     {
         "navn": "GS-GRID B30/30L",
         "serie": "GS-GRID",
+        "type": "Biaxialt",
+        "effektindeks": "90",
         "korrektion": 0.10,
         "max_korn": 120,
+        "anbefalet_tilslag": "0–150 mm",
+        "rudeaabning": "65×65 mm",
         "min_daklag": 40,
         "klasser": [3, 4, 5],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": 0.87,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 90. Stor rudeåbning — egnet til groft tilslag.",
     },
     {
         "navn": "GS-GRID B30/30XL",
         "serie": "GS-GRID",
+        "type": "Biaxialt",
+        "effektindeks": "90",
         "korrektion": 0.10,
         "max_korn": 200,
+        "anbefalet_tilslag": "0–200 mm",
+        "rudeaabning": "100×100 mm",
         "min_daklag": 60,
         "klasser": [4, 5, 6],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": 0.83,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 90. Meget stor rudeåbning — til meget groft tilslag.",
     },
     {
         "navn": "GS-GRID B40/40",
         "serie": "GS-GRID",
+        "type": "Biaxialt",
+        "effektindeks": "100",
         "korrektion": 0.00,
         "max_korn": 64,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "35×35 mm",
         "min_daklag": 20,
         "klasser": [4, 5, 6],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": 1.15,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 100. Svarende til E'GRID T6 på GS/E'GRID-skalaen.",
     },
     {
         "navn": "GS-GRID B40/40L",
         "serie": "GS-GRID",
+        "type": "Biaxialt",
+        "effektindeks": "100",
         "korrektion": 0.00,
         "max_korn": 120,
+        "anbefalet_tilslag": "0–150 mm",
+        "rudeaabning": "60×60 mm",
         "min_daklag": 40,
         "klasser": [4, 5, 6],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": 1.17,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Effektindeks 100. Stor rudeåbning — egnet til groft tilslag.",
     },
     {
         "navn": "GS-GRID SX160",
         "serie": "GS-GRID",
+        "type": "Hexagonalt",
+        "effektindeks": "100",
         "korrektion": 0.00,
         "max_korn": 80,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "Hexagonalt pitch 80 mm",
         "min_daklag": 20,
         "klasser": [3, 4, 5, 6],
-        "bemærkning": "REFERENCE",
+        "radial_stivhed": 390,
+        "gwp": 0.51,
+        "min_levetid": ">25 år",
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "REFERENCE (GS/E'GRID-design) — effektindeks 100. Maks. tid uden afdækning: < 2 uger.",
     },
     {
         "navn": "GS-GRID SX170",
         "serie": "GS-GRID",
+        "type": "Hexagonalt",
+        "effektindeks": "110",
         "korrektion": -0.10,
         "max_korn": 150,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "Hexagonalt pitch 80 mm",
         "min_daklag": 20,
         "klasser": [4, 5, 6],
-        "bemærkning": "",
+        "radial_stivhed": 480,
+        "gwp": 0.62,
+        "min_levetid": ">25 år",
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": (
+            "Effektindeks 110. Maks. kornstørrelse 150 mm (datablad), men designmanualens "
+            "anbefalede tilslag er 0–80 mm (samme som SX160, grundet identisk hexagonalt pitch). "
+            "Maks. tid uden afdækning: < 2 uger."
+        ),
     },
     # --- E'GRID-serien ---
+    # Kilde: GS-GRID/E'GRID Designmanual okt. 2025
     {
         "navn": "E'GRID T6",
         "serie": "E'GRID",
+        "type": "Hexagonalt",
+        "effektindeks": "100",
         "korrektion": 0.00,
         "max_korn": 80,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "Hexagonalt pitch 80 mm",
         "min_daklag": 20,
         "klasser": [3, 4, 5, 6],
-        "bemærkning": "Alternativ til SX160 — REFERENCE",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Alternativ til GS-GRID SX160 — REFERENCE (GS/E'GRID-design), effektindeks 100.",
     },
     {
         "navn": "E'GRID T7",
         "serie": "E'GRID",
+        "type": "Hexagonalt",
+        "effektindeks": "110",
         "korrektion": -0.10,
         "max_korn": 80,
+        "anbefalet_tilslag": "0–80 mm",
+        "rudeaabning": "Hexagonalt pitch 80 mm",
         "min_daklag": 20,
         "klasser": [4, 5, 6],
-        "bemærkning": "Alternativ til SX170",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": "Alternativ til GS-GRID SX170 — effektindeks 110.",
     },
     {
         "navn": "E'GRID T9L",
         "serie": "E'GRID",
+        "type": "Hexagonalt",
+        "effektindeks": "110",
         "korrektion": -0.10,
         "max_korn": 150,
+        "anbefalet_tilslag": "0–150 mm",
+        "rudeaabning": "Hexagonalt pitch 120 mm",
         "min_daklag": 40,
         "klasser": [4, 5, 6],
-        "bemærkning": "",
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
+        "bemærkning": (
+            "Effektindeks rettet til 110 (korrektionsfaktor −0,10). "
+            "GS/E'GRID Designmanual fig. 7 angiver eksplicit: "
+            "\"E'GRID T9L – Aflæst bærelagstykkelse REDUCERES med 10 %\"."
+        ),
     },
     # --- Manuel ---
     {
         "navn": "Anden armering (manuel)",
         "serie": "Manuel",
+        "type": "—",
+        "effektindeks": "—",
         "korrektion": 0.00,
         "max_korn": None,
+        "anbefalet_tilslag": None,
+        "rudeaabning": None,
         "min_daklag": 20,
         "klasser": [1, 2, 3, 4, 5, 6],
+        "radial_stivhed": None,
+        "gwp": None,
+        "min_levetid": None,
+        "overlap_eu_ge5_cm": 30,
+        "overlap_eu_lt5_cm": 40,
         "bemærkning": "Korrektionsfaktor indtastes manuelt",
     },
 ]
 
 # Hjælpeliste — kun navne, bruges til dropdowns
 GEONET_NAVNE = [g["navn"] for g in GEONET_DB]
+
+# ---------------------------------------------------------------------------
+# 5b. GEONET_NOTER
+#     Kilde: geonet_database_komplet.xlsx — "DB Geonet v2"
+#     Vigtige noter og kildehenvisninger fra den komplette produktdatabase.
+# ---------------------------------------------------------------------------
+
+GEONET_NOTER = [
+    {
+        "titel": "Rettelse: E'GRID T9L effektindeks",
+        "tekst": (
+            "E'GRID T9L er rettet fra effektindeks 100 (korrektionsfaktor 0,00) til "
+            "effektindeks 110 (korrektionsfaktor −0,10). "
+            "BEGRUNDELSE: GS-GRID/E'GRID Designmanual fig. 6 angiver indeks 100 for T9L, "
+            "men fig. 7 (tekst) angiver eksplicit: "
+            "\"E'GRID T9L – Aflæst bærelagstykkelse REDUCERES med 10 %\"."
+        ),
+    },
+    {
+        "titel": "Forskel mellem datablad og designmanual: Maskestørrelse vs. rudeåbning",
+        "tekst": (
+            "For de biaxiale GS-GRID produkter angiver databladet 'maskestørrelse (ca.)' "
+            "og designmanualen (figur 9) angiver 'rudeåbning'. Begge er vist i tabellen."
+        ),
+    },
+    {
+        "titel": "GS-GRID SX170: Maks. kornstørrelse vs. anbefalet tilslag",
+        "tekst": (
+            "GS-GRID SX170 har maks. kornstørrelse < 150 mm (datablad), men designmanualens "
+            "figur 9 angiver anbefalet tilslag 0–80 mm — samme som SX160. "
+            "Dette skyldes at SX170 har samme hexagonale pitch (80 mm) som SX160. "
+            "Den højere max-korn på SX170 er en databladsgrænse, ikke en designanbefaling. "
+            "I praksis anvendes 0–80 mm tilslag ved SX170."
+        ),
+    },
+    {
+        "titel": "Tensar-serien: Manglende tekniske data",
+        "tekst": (
+            "Datablade for Tensar SS30, HX5.5, HX165, InterAx NX750 og NX850 indgår ikke "
+            "i de foreliggende kildedokumenter. Tekniske data (trækstyrke, maskestørrelse, "
+            "dimensioner, GWP m.v.) for disse produkter kan ikke verificeres. "
+            "Korrektionsfaktorer og belastningsklasser er fra Tensar Geonet Designmanual sept. 2024."
+        ),
+    },
+    {
+        "titel": "2-lags opbygning",
+        "tekst": (
+            "Begge designmanualer anbefaler ved total bærelagstykkelse > 50 cm at anvende "
+            "2 eller flere lag geonet. Afstand mellem lag: min. 20 cm og maks. 50 cm "
+            "(GS/E'GRID) / maks. 40 cm (Tensar). Øverste lag skal placeres min. 20 cm "
+            "under overside af bærelag. I 2-lags Tensar-konstruktioner kan øverste lag "
+            "udføres i TriAx TX150 med TX160 i bunden."
+        ),
+    },
+    {
+        "titel": "Overlæg i samlinger",
+        "tekst": (
+            "For alle produkter (begge serier): min. 30 cm overlæg ved Eu ≥ 5 MPa. "
+            "Min. 40 cm overlæg ved Eu < 5 MPa."
+        ),
+    },
+    {
+        "titel": "Kildedokumenter",
+        "tekst": (
+            "1) GS-GRID/E'GRID Designmanual, BG Byggros, okt. 2025  |  "
+            "2) Tensar Geonet Designmanual, BG Byggros, sept. 2024  |  "
+            "3) GS-GRID Biaxial teknisk datablad (B-serien), BG Byggros, jun. 2025  |  "
+            "4) GS-GRID SX teknisk datablad (SX160/SX170), BG Byggros, okt. 2025  |  "
+            "5) Tensar TriAx TX160 teknisk specifikation, Tensar International, aug. 2024"
+        ),
+    },
+]
 
 
 # ---------------------------------------------------------------------------

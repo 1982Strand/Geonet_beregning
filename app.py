@@ -23,6 +23,7 @@ from core.data import (
     BELASTNINGSKLASSER,
     GEONET_NAVNE,
     GEONET_DB,
+    GEONET_NOTER,
     MATERIAL_NAVNE,
     MATERIAL_DB,
     EU_MIN, EU_MAX,
@@ -1591,6 +1592,7 @@ def render_materialer() -> None:
     st.caption("Database over bærelagsmaterialer og deres friktionsvinkler.")
     st.divider()
 
+    import pandas as pd
 
     df = pd.DataFrame([
         {
@@ -1607,25 +1609,75 @@ def render_materialer() -> None:
 
 def render_geonet_database() -> None:
     st.title("🕸️ Geonet database")
-    st.caption("Oversigt over alle geonet-produkter med effektindeks og belastningsklasser.")
+    st.caption(
+        "Oversigt over alle geonet-produkter med effektindeks, belastningsklasser og tekniske data. "
+        "Kilde: GS-GRID/E'GRID Designmanual okt. 2025 · Tensar Designmanual sept. 2024 · datablade jun.–okt. 2025."
+    )
     st.divider()
 
     import pandas as pd
 
-    df = pd.DataFrame([
-        {
-            "Produkt":        g["navn"],
-            "Serie":          g["serie"],
-            "Korrektion":     f"{g['korrektion']:+.0%}",
-            "Min dæklag (cm)": g["min_daklag"],
-            "Max korn (mm)":  g["max_korn"] if g["max_korn"] else "—",
-            "Klasser":        ", ".join(str(k) for k in g["klasser"]),
-            "Bemærkning":     g.get("bemærkning", ""),
-        }
-        for g in GEONET_DB
-        if g["navn"] != "Anden armering (manuel)"
-    ])
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    # ── Tabel ──────────────────────────────────────────────────────────────
+    rækker = []
+    for g in GEONET_DB:
+        if g["navn"] == "Anden armering (manuel)":
+            continue
+        rækker.append({
+            "Produkt":               g["navn"],
+            "Serie":                 g["serie"],
+            "Type":                  g.get("type", "—"),
+            "Effektindeks":          g.get("effektindeks", "—"),
+            "Korrektions-\nfaktor":  f"{g['korrektion']:+.0%}",
+            "BK":                    ", ".join(str(k) for k in g["klasser"]),
+            "Min. dæklag\n(cm)":     g["min_daklag"],
+            "Maks. korn\n(datablad mm)": g["max_korn"] if g["max_korn"] else "—",
+            "Anb. tilslag\n(designmanual)": g.get("anbefalet_tilslag") or "—",
+            "Rudeåbning":            g.get("rudeaabning") or "—",
+            "Radial stivhed\n(kN/m @ 0,5%)": g.get("radial_stivhed") if g.get("radial_stivhed") else "—",
+            "GWP A1–A3\n(kg CO₂/m²)": f"{g['gwp']:.2f}" if g.get("gwp") else "—",
+            "Min. levetid":          g.get("min_levetid") or "—",
+            "Overlæg Eu ≥ 5\n(cm)": g.get("overlap_eu_ge5_cm", 30),
+            "Overlæg Eu < 5\n(cm)": g.get("overlap_eu_lt5_cm", 40),
+            "Bemærkning":            g.get("bemærkning", ""),
+        })
+
+    df = pd.DataFrame(rækker)
+
+    # Beregn nødvendig højde så hele tabellen vises uden scroll
+    row_height_px = 38
+    header_px = 60
+    tabel_hoejde = header_px + len(rækker) * row_height_px
+
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        height=tabel_hoejde,
+    )
+
+    # ── Kolonnebeskrivelser ────────────────────────────────────────────────
+    with st.expander("📖 Kolonnebeskrivelser", expanded=False):
+        st.markdown("""
+| Kolonne | Forklaring |
+|---|---|
+| **Effektindeks** | Relativ effektivitet ift. referenceproduktet (= 100). Højere indeks = tyndere bærelag. |
+| **Korrektionsfaktor** | Direkte korrektionsfaktor brugt i beregningen. Negativt = tykkelsen reduceres. |
+| **BK** | Anbefalede belastningsklasser (1–6) iflg. designmanualerne. |
+| **Min. dæklag** | Mindste lagtykkelse over geonet (cm) — under dette kan geonettets funktion ikke garanteres. |
+| **Maks. korn (datablad)** | Maksimal kornstørrelse angivet i produktdatabladet (mm). |
+| **Anb. tilslag (designmanual)** | Anbefalet tilslagsstørrelse iflg. dimensioneringsmanual — kan afvige fra databladsgrænse. |
+| **Rudeåbning** | Maskestørrelse/pitch fra designmanual — afgørende for interlock med tilslaget. |
+| **Radial stivhed** | Radial stivhed ved 0,5 % tøjning (kN/m) — kun tilgængeligt for hexagonale produkter. |
+| **GWP A1–A3** | Klimaaftryk i produktionsfasen (kg CO₂-ækvivalent pr. m²). |
+| **Min. levetid** | Teknisk minimumslevetid angivet i datablad. |
+| **Overlæg Eu ≥ 5 / < 5** | Påkrævet overlæg i samlinger (cm) afhængig af underbundens E-modul. |
+        """)
+
+    # ── Vigtige noter ─────────────────────────────────────────────────────
+    st.subheader("📝 Database-noter og kildehenvisninger")
+    for note in GEONET_NOTER:
+        with st.expander(f"ℹ️ {note['titel']}", expanded=False):
+            st.markdown(note["tekst"])
 
 
 def render_designdiagrammer() -> None:
