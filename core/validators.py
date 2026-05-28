@@ -263,15 +263,14 @@ def valider_input(
                 f"Juster procenterne så de giver mening i opbygningen."
             )
 
-    # A9: Individuelle lag < 200 mm (mm-mode)
+    # A9: Individuelle lag < 100 mm (mm-mode)
     if mat and any(lag.get("tykkelse_mm") is not None for lag in mat):
         for idx, lag in enumerate(mat, start=1):
             t = lag.get("tykkelse_mm")
-            if t is not None and 0 < t < MIN_DAKLAG_STANDARD:
+            if t is not None and 0 < t < 100:
                 advarsler.append(
                     f"Lag {idx} ({lag.get('navn', 'ukendt')}) er kun "
-                    f"{t:.0f} mm — under minimumsdæklaget på "
-                    f"{MIN_DAKLAG_STANDARD} mm. "
+                    f"{t:.0f} mm — under minimum på 100 mm. "
                     f"Meget tynde lag er svære at komprimere korrekt og "
                     f"kan forringe bæreevnen."
                 )
@@ -390,13 +389,13 @@ def valider_opbygning(
             f"Øg mindst ét lag."
         )
 
-    # B2: Individuelle lag < 200 mm
+    # B2: Individuelle lag < 100 mm
     for idx, lag in enumerate(lag_liste, start=1):
         t = lag.get("tykkelse_mm") or 0
-        if 0 < t < MIN_DAKLAG_STANDARD:
+        if 0 < t < 100:
             advarsler.append(
                 f"Lag {idx} ({lag.get('navn', '?')}) er {t:.0f} mm "
-                f"— under minimum {MIN_DAKLAG_STANDARD} mm."
+                f"— under minimum 100 mm."
             )
 
     # B3: Kornstørrelse vs. geonet max_korn

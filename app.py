@@ -51,6 +51,8 @@ MATERIALER_JSON = os.path.join(
     os.path.dirname(__file__),
     "materialer_brugerdefineret.json",
 )
+MIN_LAGTYKKELSE_MM = 100
+MIN_TOTAL_OPBYGNING_MM = 200
 
 
 def _standard_materialer() -> list[dict]:
@@ -789,9 +791,12 @@ def _render_oversigt_expanders(
     advarsler_unik: list[str] = []
     seen_a: set[str] = set()
     for lm in ("1_lag", "2_lag"):
+        bedste = bedste_1 if lm == "1_lag" else bedste_2
+        t_armeret_mm = bedste["t_armeret_mm"] if bedste is not None else None
         val = valider_input(
             eu=eu, eo=eo, phi=phi, lag_mode=lm,
             geonet=geonet, materialer=materialer,
+            t_armeret_mm=t_armeret_mm,
         )
         for a in val.get("advarsler", []):
             advarsler_pr_lag.append((a, lm))
@@ -1373,6 +1378,11 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
         horizontal=True,
         key="bd_lag_mode_mat",
     )
+    if lag_mode_mat == "mm (absolut)":
+        st.caption(
+            f"Hvert lag skal være mindst {MIN_LAGTYKKELSE_MM} mm. "
+            f"Den samlede opbygning skal være mindst {MIN_TOTAL_OPBYGNING_MM} mm."
+        )
 
     materialer: list[dict] = []
     phi_vaerdier: list[float] = []
@@ -1436,8 +1446,19 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
             phi_vaerdier.append(phi_i)
 
             if lag_mode_mat == "mm (absolut)":
+                t_key = f"bd_t_{i}"
+                if (
+                    t_key in st.session_state
+                    and st.session_state[t_key] < MIN_LAGTYKKELSE_MM
+                ):
+                    st.session_state[t_key] = MIN_LAGTYKKELSE_MM
                 t_i = st.number_input(
-                    "Tykkelse (mm)", 0, 2000, 300, 50, key=f"bd_t_{i}",
+                    "Tykkelse (mm)",
+                    min_value=MIN_LAGTYKKELSE_MM,
+                    max_value=2000,
+                    value=300,
+                    step=50,
+                    key=t_key,
                 )
                 materialer.append({
                     "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
@@ -1462,6 +1483,12 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
 
     if lag_mode_mat == "mm (absolut)":
         total_t = sum(m["tykkelse_mm"] for m in materialer)
+        if total_t < MIN_TOTAL_OPBYGNING_MM:
+            st.error(
+                f"Den samlede opbygning er {total_t:.0f} mm. "
+                f"Den skal være mindst {MIN_TOTAL_OPBYGNING_MM} mm."
+            )
+            st.stop()
         phi_weighted = (
             sum(m["phi"] * m["tykkelse_mm"] for m in materialer) / total_t
             if total_t > 0
