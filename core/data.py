@@ -175,6 +175,146 @@ EO_KOLONNER = [30, 45, 60, 80, 120, 150]
 
 
 # ---------------------------------------------------------------------------
+# 1b. Rådata fra designdiagrammer
+#    Kilde: Excel fane "7. Opslagstabeller", tabel 7.2.
+#    Hver tabel er aflæste punkter fra designmanualernes diagrammer.
+# ---------------------------------------------------------------------------
+
+DESIGNDIAGRAM_RAW_TABLES = [
+    {
+        "diagram_nr": 1,
+        "eo": 30,
+        "klasse": 1,
+        "image_name": "Diagram 1.png",
+        "rows": [
+            {"tykkelse_cm": 0, "eu_uarmeret": 30, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 10, "eu_uarmeret": 25, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 20, "eu_uarmeret": 21, "eu_1_lag": 15, "eu_2_lag": None},
+            {"tykkelse_cm": 30, "eu_uarmeret": 18, "eu_1_lag": 11.5, "eu_2_lag": None},
+            {"tykkelse_cm": 40, "eu_uarmeret": 14.5, "eu_1_lag": 9, "eu_2_lag": None},
+            {"tykkelse_cm": 50, "eu_uarmeret": 12, "eu_1_lag": 6.5, "eu_2_lag": None},
+            {"tykkelse_cm": 60, "eu_uarmeret": 10, "eu_1_lag": 5, "eu_2_lag": None},
+            {"tykkelse_cm": 70, "eu_uarmeret": 8, "eu_1_lag": 3, "eu_2_lag": None},
+            {"tykkelse_cm": 80, "eu_uarmeret": 6, "eu_1_lag": 2, "eu_2_lag": None},
+            {"tykkelse_cm": 90, "eu_uarmeret": 5, "eu_1_lag": 0, "eu_2_lag": None},
+            {"tykkelse_cm": 100, "eu_uarmeret": 3.5, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 110, "eu_uarmeret": 3, "eu_1_lag": None, "eu_2_lag": None},
+        ],
+    },
+    {
+        "diagram_nr": 2,
+        "eo": 45,
+        "klasse": 2,
+        "image_name": "Diagram 2.png",
+        "rows": [
+            {"tykkelse_cm": 0, "eu_uarmeret": 45, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 10, "eu_uarmeret": 36, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 20, "eu_uarmeret": 29, "eu_1_lag": 20, "eu_2_lag": None},
+            {"tykkelse_cm": 30, "eu_uarmeret": 22, "eu_1_lag": 15.5, "eu_2_lag": None},
+            {"tykkelse_cm": 40, "eu_uarmeret": 18, "eu_1_lag": 12, "eu_2_lag": None},
+            {"tykkelse_cm": 50, "eu_uarmeret": 15, "eu_1_lag": 9, "eu_2_lag": 6.5},
+            {"tykkelse_cm": 60, "eu_uarmeret": 12, "eu_1_lag": 6, "eu_2_lag": 4.5},
+            {"tykkelse_cm": 70, "eu_uarmeret": 10, "eu_1_lag": 4.5, "eu_2_lag": 3},
+            {"tykkelse_cm": 80, "eu_uarmeret": 8, "eu_1_lag": 3.5, "eu_2_lag": 2},
+            {"tykkelse_cm": 90, "eu_uarmeret": 6, "eu_1_lag": 2, "eu_2_lag": 1},
+            {"tykkelse_cm": 100, "eu_uarmeret": 5, "eu_1_lag": 1, "eu_2_lag": None},
+            {"tykkelse_cm": 110, "eu_uarmeret": 3.5, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 120, "eu_uarmeret": 3, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 130, "eu_uarmeret": 2.5, "eu_1_lag": None, "eu_2_lag": None},
+        ],
+    },
+    {
+        "diagram_nr": 3,
+        "eo": 60,
+        "klasse": 3,
+        "image_name": "Diagram 3.png",
+        "rows": [
+            {"tykkelse_cm": 10, "eu_uarmeret": 45, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 20, "eu_uarmeret": 36, "eu_1_lag": 27, "eu_2_lag": None},
+            {"tykkelse_cm": 30, "eu_uarmeret": 29, "eu_1_lag": 20, "eu_2_lag": None},
+            {"tykkelse_cm": 40, "eu_uarmeret": 23, "eu_1_lag": 16, "eu_2_lag": None},
+            {"tykkelse_cm": 50, "eu_uarmeret": 18.5, "eu_1_lag": 12, "eu_2_lag": 9},
+            {"tykkelse_cm": 60, "eu_uarmeret": 15, "eu_1_lag": 9, "eu_2_lag": 6.5},
+            {"tykkelse_cm": 70, "eu_uarmeret": 12, "eu_1_lag": 6.5, "eu_2_lag": 4.5},
+            {"tykkelse_cm": 80, "eu_uarmeret": 10, "eu_1_lag": 4.5, "eu_2_lag": 3},
+            {"tykkelse_cm": 90, "eu_uarmeret": 7.5, "eu_1_lag": 3, "eu_2_lag": 1.5},
+            {"tykkelse_cm": 100, "eu_uarmeret": 6, "eu_1_lag": 1.5, "eu_2_lag": 0.5},
+            {"tykkelse_cm": 110, "eu_uarmeret": 5, "eu_1_lag": 1, "eu_2_lag": None},
+            {"tykkelse_cm": 120, "eu_uarmeret": 3.5, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 130, "eu_uarmeret": 3, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 140, "eu_uarmeret": 2.5, "eu_1_lag": None, "eu_2_lag": None},
+        ],
+    },
+    {
+        "diagram_nr": 4,
+        "eo": 80,
+        "klasse": 4,
+        "image_name": "Diagram 4.png",
+        "rows": [
+            {"tykkelse_cm": 20, "eu_uarmeret": 45, "eu_1_lag": 33, "eu_2_lag": None},
+            {"tykkelse_cm": 30, "eu_uarmeret": 36, "eu_1_lag": 26, "eu_2_lag": None},
+            {"tykkelse_cm": 40, "eu_uarmeret": 29, "eu_1_lag": 20, "eu_2_lag": None},
+            {"tykkelse_cm": 50, "eu_uarmeret": 23, "eu_1_lag": 14, "eu_2_lag": None},
+            {"tykkelse_cm": 60, "eu_uarmeret": 18.5, "eu_1_lag": 10.5, "eu_2_lag": 8},
+            {"tykkelse_cm": 70, "eu_uarmeret": 15, "eu_1_lag": 8, "eu_2_lag": 6},
+            {"tykkelse_cm": 80, "eu_uarmeret": 12, "eu_1_lag": 5.5, "eu_2_lag": 4},
+            {"tykkelse_cm": 90, "eu_uarmeret": 10, "eu_1_lag": 4.5, "eu_2_lag": 3},
+            {"tykkelse_cm": 100, "eu_uarmeret": 8, "eu_1_lag": 3, "eu_2_lag": 2},
+            {"tykkelse_cm": 110, "eu_uarmeret": 5.5, "eu_1_lag": 2, "eu_2_lag": 1},
+            {"tykkelse_cm": 120, "eu_uarmeret": 4.5, "eu_1_lag": 1, "eu_2_lag": None},
+            {"tykkelse_cm": 130, "eu_uarmeret": 3.5, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 140, "eu_uarmeret": 3, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 150, "eu_uarmeret": 2.5, "eu_1_lag": None, "eu_2_lag": None},
+        ],
+    },
+    {
+        "diagram_nr": 5,
+        "eo": 120,
+        "klasse": 5,
+        "image_name": "Diagram 5.png",
+        "rows": [
+            {"tykkelse_cm": 30, "eu_uarmeret": 45, "eu_1_lag": 33, "eu_2_lag": None},
+            {"tykkelse_cm": 40, "eu_uarmeret": 36, "eu_1_lag": 25, "eu_2_lag": None},
+            {"tykkelse_cm": 50, "eu_uarmeret": 29, "eu_1_lag": 19, "eu_2_lag": 14},
+            {"tykkelse_cm": 60, "eu_uarmeret": 23, "eu_1_lag": 13.5, "eu_2_lag": 10},
+            {"tykkelse_cm": 70, "eu_uarmeret": 18.5, "eu_1_lag": 10, "eu_2_lag": 8},
+            {"tykkelse_cm": 80, "eu_uarmeret": 15, "eu_1_lag": 8, "eu_2_lag": 5.5},
+            {"tykkelse_cm": 90, "eu_uarmeret": 12, "eu_1_lag": 6, "eu_2_lag": 4},
+            {"tykkelse_cm": 100, "eu_uarmeret": 10, "eu_1_lag": 4.5, "eu_2_lag": 3},
+            {"tykkelse_cm": 110, "eu_uarmeret": 8, "eu_1_lag": 3, "eu_2_lag": 1.5},
+            {"tykkelse_cm": 120, "eu_uarmeret": 6, "eu_1_lag": 2, "eu_2_lag": 1},
+            {"tykkelse_cm": 130, "eu_uarmeret": 5, "eu_1_lag": 1, "eu_2_lag": None},
+            {"tykkelse_cm": 140, "eu_uarmeret": 3.5, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 150, "eu_uarmeret": 3, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 160, "eu_uarmeret": 2.5, "eu_1_lag": None, "eu_2_lag": None},
+        ],
+    },
+    {
+        "diagram_nr": 6,
+        "eo": 150,
+        "klasse": 6,
+        "image_name": "Diagram 6.png",
+        "rows": [
+            {"tykkelse_cm": 40, "eu_uarmeret": 45, "eu_1_lag": 32, "eu_2_lag": None},
+            {"tykkelse_cm": 50, "eu_uarmeret": 36, "eu_1_lag": 24, "eu_2_lag": 18},
+            {"tykkelse_cm": 60, "eu_uarmeret": 29, "eu_1_lag": 17, "eu_2_lag": 12},
+            {"tykkelse_cm": 70, "eu_uarmeret": 23, "eu_1_lag": 12, "eu_2_lag": 9},
+            {"tykkelse_cm": 80, "eu_uarmeret": 18.5, "eu_1_lag": 8.5, "eu_2_lag": 6.5},
+            {"tykkelse_cm": 90, "eu_uarmeret": 15, "eu_1_lag": 6, "eu_2_lag": 4.5},
+            {"tykkelse_cm": 100, "eu_uarmeret": 12, "eu_1_lag": 5, "eu_2_lag": 3},
+            {"tykkelse_cm": 110, "eu_uarmeret": 10, "eu_1_lag": 3.5, "eu_2_lag": 2},
+            {"tykkelse_cm": 120, "eu_uarmeret": 8, "eu_1_lag": 2.5, "eu_2_lag": 1},
+            {"tykkelse_cm": 130, "eu_uarmeret": 6, "eu_1_lag": 1.5, "eu_2_lag": None},
+            {"tykkelse_cm": 140, "eu_uarmeret": 5, "eu_1_lag": 1, "eu_2_lag": None},
+            {"tykkelse_cm": 150, "eu_uarmeret": 3.5, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 160, "eu_uarmeret": 3, "eu_1_lag": None, "eu_2_lag": None},
+            {"tykkelse_cm": 170, "eu_uarmeret": 2.5, "eu_1_lag": None, "eu_2_lag": None},
+        ],
+    },
+]
+
+
+# ---------------------------------------------------------------------------
 # 2. BELASTNINGSKLASSER
 #    Kilde: Excel fane 7.5
 # ---------------------------------------------------------------------------

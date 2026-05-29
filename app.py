@@ -34,6 +34,7 @@ from core.data import (
     cv_til_eu,
     eo_til_klasse,
     T_BASIS_TABLE,
+    DESIGNDIAGRAM_RAW_TABLES,
     EU_RAEKKER,
     EO_KOLONNER,
 )
@@ -263,6 +264,10 @@ st.markdown(f"""
     font-size:0.95rem; font-weight:700; color:#333;
     border-bottom:2px solid {GRØN}; padding-bottom:0.25rem;
     margin-bottom:0.4rem;
+  }}
+
+  .diagram-række-afstand {{
+    height: 1.8rem;
   }}
 
   hr {{ margin: 0.75rem 0; }}
@@ -1478,11 +1483,14 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                     "pct": float(p_i),
                 })
 
+    if lag_mode_mat == "mm (absolut)":
+        total_t = sum(m["tykkelse_mm"] for m in materialer)
+        st.markdown(f"**Samlet tykkelse af opbygning:** {total_t:.0f} mm")
+
     if lag_mode_mat.startswith("%"):
         st.metric("Sum af andele", f"{total_pct:.1f} %")
 
     if lag_mode_mat == "mm (absolut)":
-        total_t = sum(m["tykkelse_mm"] for m in materialer)
         if total_t < MIN_TOTAL_OPBYGNING_MM:
             st.error(
                 f"Den samlede opbygning er {total_t:.0f} mm. "
@@ -1870,28 +1878,115 @@ def render_geonet_database() -> None:
 def render_designdiagrammer() -> None:
     st.title("📊 Designdiagrammer")
     st.caption(
-        "Opslagstabeller for bærelagstykkelse (cm) fordelt på Eu, Eo og lag-type."
+        "Designdiagrammer fra designmanualerne, samt aflæste værdier og opslagstabel"
     )
     st.divider()
 
     import pandas as pd
 
-    for lag_type, overskrift in [
-        ("uarmeret", "Uarmeret bærelagstykkelse (cm)"),
-        ("1_lag",    "Armeret med 1 lag geonet (cm)"),
-        ("2_lag",    "Armeret med 2 lag geonet (cm)"),
-    ]:
-        st.subheader(overskrift)
+    def _tabeltal(v) -> str:
+        if v is None:
+            return "—"
+        v = float(v)
+        if v.is_integer():
+            return f"{int(v)}"
+        return _dk_num(v, ".1f")
+
+    def _raw_dataframe(diagram: dict) -> pd.DataFrame:
+        return pd.DataFrame([
+            {
+                "Tykkelse (cm)": _tabeltal(row["tykkelse_cm"]),
+                "Eu uarmeret": _tabeltal(row["eu_uarmeret"]),
+                "Eu 1 lag": _tabeltal(row["eu_1_lag"]),
+                "Eu 2 lag": _tabeltal(row["eu_2_lag"]),
+            }
+            for row in diagram["rows"]
+        ])
+
+    def _er_direkte_aflaest(eo: int, lag_key: str, eu: float, val) -> bool:
+        if val is None:
+            return False
+        diagram = next(
+            (d for d in DESIGNDIAGRAM_RAW_TABLES if d["eo"] == eo),
+            None,
+        )
+        if diagram is None:
+            return False
+        raw_key = {
+            "uarmeret": "eu_uarmeret",
+            "1_lag": "eu_1_lag",
+            "2_lag": "eu_2_lag",
+        }[lag_key]
+        return any(row[raw_key] == eu for row in diagram["rows"])
+
+    def _samletabel_data() -> tuple[pd.DataFrame, pd.DataFrame]:
         rækker = []
+        styles = []
         for eu in EU_RAEKKER:
-            række = {"Eu (MPa)": eu}
+            række = {"Eu, underbund (MPa)": _tabeltal(eu)}
+            style_row = {"Eu, underbund (MPa)": ""}
+            har_værdi = False
             for eo in EO_KOLONNER:
-                val = T_BASIS_TABLE[eu][eo].get(lag_type)
-                række[f"Eo={eo}"] = f"{val:.1f}" if val is not None else "—"
-            rækker.append(række)
-        df = pd.DataFrame(rækker)
-        st.dataframe(df, width="stretch", hide_index=True)
-        st.markdown("")
+                vals = T_BASIS_TABLE[eu][eo]
+                for lag_key, label in [
+                    ("uarmeret", "Uarmeret"),
+                    ("1_lag", "1 lag"),
+                    ("2_lag", "2/flere lag"),
+                ]:
+                    col = f"Eo {eo} · {label}"
+                    val = vals.get(lag_key)
+                    række[col] = _tabeltal(val)
+                    if val is None:
+                        style_row[col] = "color: #777;"
+                    elif _er_direkte_aflaest(eo, lag_key, eu, val):
+                        har_værdi = True
+                        style_row[col] = "background-color: #E8F5E9;"
+                    else:
+                        har_værdi = True
+                        style_row[col] = "background-color: #FFF8E1;"
+            if har_værdi:
+                rækker.append(række)
+                styles.append(style_row)
+        return pd.DataFrame(rækker), pd.DataFrame(styles)
+
+    diagram_table_height = 490
+
+    for diagram in DESIGNDIAGRAM_RAW_TABLES:
+        kol_diagram, kol_tabel = st.columns([1.1, 1], gap="large")
+        with kol_diagram:
+            image_path = os.path.join(
+                os.path.dirname(__file__),
+                "diagrambilleder",
+                diagram["image_name"],
+            )
+            st.image(image_path, width="stretch")
+        with kol_tabel:
+            st.markdown("**Aflæste diagramdata**")
+            st.dataframe(
+                _raw_dataframe(diagram),
+                width="stretch",
+                height=diagram_table_height,
+                hide_index=True,
+            )
+        st.markdown('<div class="diagram-række-afstand"></div>', unsafe_allow_html=True)
+
+    st.divider()
+    st.subheader("Samletabel")
+    st.markdown(
+        "Rækkerne viser faste beregningspunkter for underbundens E-modul "
+        "**Eu**. Kolonnerne viser den nødvendige bærelagstykkelse i cm ved "
+        "de forskellige belastningsniveauer **Eo**. "
+        "Samletabellen er dannet ud fra de aflæste diagramdata ovenfor. "
+        "Grønne værdier er direkte aflæst, og gule værdier er lineært "
+        "interpoleret mellem de omkringliggende aflæsninger. Rækker uden "
+        "gyldige værdier vises ikke."
+    )
+    samletabel_df, samletabel_styles = _samletabel_data()
+    st.dataframe(
+        samletabel_df.style.apply(lambda _: samletabel_styles, axis=None),
+        width="stretch",
+        hide_index=True,
+    )
 
 
 def render_materialer() -> None:
