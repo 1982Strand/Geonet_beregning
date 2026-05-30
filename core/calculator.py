@@ -34,32 +34,17 @@ def _find_eu_naboer(
     t_basis_table: dict | None = None,
 ) -> tuple[float, float] | None:
     """
-    Find de to nærmeste Eu-rækker i tabellen der omslutter den givne Eu.
+    Find Eu-rækken i tabellen.
 
-    Returnerer (eu_lower, eu_upper) som begge er nøgler i T_BASIS_TABLE.
-    Returnerer None hvis Eu er præcis en tabelværdi (interpolation springer over),
-    i så fald er eu_lower == eu_upper == eu.
-
-    Eksempel: eu=11 → (10, 12). eu=10 → (10, 10).
+    Diagramtabellerne indeholder færdige opslagspunkter for hver Eu-værdi,
+    så appen interpolerer ikke længere mellem Eu-rækker.
     """
     eu_raekker = _aktive_eu_raekker(t_basis_table)
 
     if eu in eu_raekker:
         return (eu, eu)
 
-    lower = None
-    upper = None
-    for raekke in eu_raekker:
-        if raekke < eu:
-            lower = raekke
-        elif raekke > eu and upper is None:
-            upper = raekke
-            break
-
-    if lower is None or upper is None:
-        return None
-
-    return (lower, upper)
+    return None
 
 
 def _slaa_op(
@@ -84,23 +69,6 @@ def _slaa_op(
     # Håndter tastefejl i nøgle ("2_dag" i stedet for "2_lag" for Eu=45, Eo=80)
     val = eo_data.get(lag_type)
     return val
-
-
-def _interpoler(
-    eu: float,
-    eu_lower: float,
-    eu_upper: float,
-    t_lower: float,
-    t_upper: float,
-) -> float:
-    """
-    Lineær interpolation mellem to Eu-rækker.
-    Hvis eu_lower == eu_upper returneres t_lower direkte.
-    """
-    if eu_lower == eu_upper:
-        return t_lower
-    faktor = (eu - eu_lower) / (eu_upper - eu_lower)
-    return t_lower + faktor * (t_upper - t_lower)
 
 
 # ---------------------------------------------------------------------------
@@ -165,20 +133,14 @@ def beregn(
     t_low_uarm = _slaa_op(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
     t_high_uarm = _slaa_op(eu_upper, eo, "uarmeret", t_basis_table=t_basis_table)
 
-    if t_low_uarm is None or t_high_uarm is None:
-        return {
-            "fejl": (
-                f"Uarmeret opslag for Eu={eu} MPa / Eo={eo} MPa er "
-                f"uden for diagrammets gyldighedsområde."
-            )
-        }
+    uarmeret_mangler = t_low_uarm is None or t_high_uarm is None
 
-    # Interpolation
-    t_basis_arm_cm = _interpoler(eu, eu_lower, eu_upper, t_low_arm, t_high_arm)
-    t_basis_uarm_cm = _interpoler(eu, eu_lower, eu_upper, t_low_uarm, t_high_uarm)
+    # Direkte opslag i diagramtabellen
+    t_basis_arm_cm = t_low_arm
+    t_basis_uarm_cm = None if uarmeret_mangler else t_low_uarm
 
     t_basis_arm_mm = t_basis_arm_cm * 10.0
-    t_basis_uarm_mm = t_basis_uarm_cm * 10.0
+    t_basis_uarm_mm = t_basis_uarm_cm * 10.0 if t_basis_uarm_cm is not None else None
 
     # -- Trin 5: φ-korrektion --
     # -- Trin 6: Net-korrektion --
@@ -186,11 +148,20 @@ def beregn(
     samlet_faktor = 1.0 + phi_korrektion + net_korrektion
 
     t_armeret_mm = t_basis_arm_mm * samlet_faktor
-    # T_uarmeret er altid ren referencetabel — ingen φ/net-korrektion
+    # T_uarmeret er altid ren referencetabel — ingen φ/net-korrektion.
+    # For meget lave Eu-værdier kan uarmeret være uden for diagrammet,
+    # mens armerede resultater stadig er defineret.
     t_uarmeret_mm = t_basis_uarm_mm
-
-    reduktion_mm = t_uarmeret_mm - t_armeret_mm
-    reduktion_pct = reduktion_mm / t_uarmeret_mm if t_uarmeret_mm > 0 else 0.0
+    reduktion_mm = (
+        t_uarmeret_mm - t_armeret_mm
+        if t_uarmeret_mm is not None
+        else None
+    )
+    reduktion_pct = (
+        reduktion_mm / t_uarmeret_mm
+        if reduktion_mm is not None and t_uarmeret_mm > 0
+        else None
+    )
 
     return {
         # Inputs (til forklaringsvisning)
@@ -208,15 +179,21 @@ def beregn(
         "t_high_uarm_cm": t_high_uarm,
         "t_basis_arm_cm": round(t_basis_arm_cm, 1),
         "t_basis_arm_mm": round(t_basis_arm_mm, 0),
-        "t_basis_uarm_cm": round(t_basis_uarm_cm, 1),
-        "t_basis_uarm_mm": round(t_basis_uarm_mm, 0),
+        "t_basis_uarm_cm": round(t_basis_uarm_cm, 1) if t_basis_uarm_cm is not None else None,
+        "t_basis_uarm_mm": round(t_basis_uarm_mm, 0) if t_basis_uarm_mm is not None else None,
         "phi_korrektion": round(phi_korrektion, 4),
         "samlet_faktor": round(samlet_faktor, 4),
         # Slutresultater
         "t_armeret_mm": round(t_armeret_mm, 0),
-        "t_uarmeret_mm": round(t_uarmeret_mm, 0),
-        "reduktion_mm": round(reduktion_mm, 0),
-        "reduktion_pct": round(reduktion_pct, 4),
+        "t_uarmeret_mm": round(t_uarmeret_mm, 0) if t_uarmeret_mm is not None else None,
+        "reduktion_mm": round(reduktion_mm, 0) if reduktion_mm is not None else None,
+        "reduktion_pct": round(reduktion_pct, 4) if reduktion_pct is not None else None,
+        "uarmeret_mangler": uarmeret_mangler,
+        "uarmeret_fejl": (
+            f"Der er ikke defineret nogen uarmeret bærelagstykkelse for Eu={eu} MPa / Eo={eo} MPa."
+            if uarmeret_mangler
+            else None
+        ),
         # Ingen fejl
         "fejl": None,
     }
@@ -328,8 +305,12 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         # Gennemsnitlig tykkelse for gruppen — eksakt beregnede værdi uden afrunding.
         t_repræsentativ = sum(p["t_armeret_mm"] for p in gruppe_produkter) / len(gruppe_produkter)
 
-        t_uarm = produkt["t_uarmeret_mm"] or 0
-        red_pct = (t_uarm - t_repræsentativ) / t_uarm if t_uarm > 0 else 0
+        t_uarm = produkt["t_uarmeret_mm"]
+        red_pct = (
+            (t_uarm - t_repræsentativ) / t_uarm
+            if t_uarm is not None and t_uarm > 0
+            else None
+        )
 
         # t_basis_arm_mm er identisk for alle produkter i gruppen
         # (afhænger kun af eu/eo/lag_mode, ikke af produktets korrektion)
@@ -338,8 +319,8 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         grupper.append({
             "t_armeret_mm": round(t_repræsentativ, 0),
             "t_armeret_eksakt_mm": round(t_repræsentativ, 0),
-            "reduktion_pct": round(red_pct, 4),
-            "reduktion_pct_eksakt": round(red_pct, 4),
+            "reduktion_pct": round(red_pct, 4) if red_pct is not None else None,
+            "reduktion_pct_eksakt": round(red_pct, 4) if red_pct is not None else None,
             "t_basis_arm_mm": t_basis_arm,
             "produkter": gruppe_produkter,
             "har_fejl": False,

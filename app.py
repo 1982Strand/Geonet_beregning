@@ -35,7 +35,6 @@ from core.data import (
     eo_til_klasse,
     T_BASIS_TABLE,
     DESIGNDIAGRAM_RAW_TABLES,
-    EU_RAEKKER,
     EO_KOLONNER,
 )
 from core.calculator import (
@@ -58,7 +57,6 @@ DESIGNDIAGRAMMER_JSON = os.path.join(
 )
 MIN_LAGTYKKELSE_MM = 100
 MIN_TOTAL_OPBYGNING_MM = 200
-SAMLETABEL_EU_RAEKKER = [1] + EU_RAEKKER
 
 
 def _standard_materialer() -> list[dict]:
@@ -186,39 +184,39 @@ def _diagramtal(value) -> float | None:
 def _normaliser_diagram_rows(rows: list[dict]) -> tuple[list[dict], list[str]]:
     normaliserede: list[dict] = []
     fejl: list[str] = []
-    tykkelser: set[float] = set()
+    eu_vaerdier: set[float] = set()
 
     for idx, row in enumerate(rows, start=1):
-        tykkelse = _diagramtal(row.get("tykkelse_cm", row.get("Tykkelse (cm)")))
-        eu_uarmeret = _diagramtal(row.get("eu_uarmeret", row.get("Eu uarmeret")))
-        eu_1_lag = _diagramtal(row.get("eu_1_lag", row.get("Eu 1 lag")))
-        eu_2_lag = _diagramtal(row.get("eu_2_lag", row.get("Eu 2 lag")))
+        eu = _diagramtal(row.get("eu", row.get("Eu (MPa)")))
+        t_uarmeret = _diagramtal(row.get("t_uarmeret_cm", row.get("Uarmeret tykkelse (cm)")))
+        t_1_lag = _diagramtal(row.get("t_1_lag_cm", row.get("1 lag tykkelse (cm)")))
+        t_2_lag = _diagramtal(row.get("t_2_lag_cm", row.get("2 lag tykkelse (cm)")))
 
         if (
-            tykkelse is None
-            and eu_uarmeret is None
-            and eu_1_lag is None
-            and eu_2_lag is None
+            eu is None
+            and t_uarmeret is None
+            and t_1_lag is None
+            and t_2_lag is None
         ):
             continue
 
-        if tykkelse is None:
-            fejl.append(f"Række {idx} mangler tykkelse.")
+        if eu is None:
+            fejl.append(f"Række {idx} mangler Eu.")
             continue
 
-        if tykkelse in tykkelser:
-            fejl.append(f"Tykkelse {tykkelse:g} cm findes flere gange.")
+        if eu in eu_vaerdier:
+            fejl.append(f"Eu {eu:g} MPa findes flere gange.")
             continue
-        tykkelser.add(tykkelse)
+        eu_vaerdier.add(eu)
 
         normaliserede.append({
-            "tykkelse_cm": tykkelse,
-            "eu_uarmeret": eu_uarmeret,
-            "eu_1_lag": eu_1_lag,
-            "eu_2_lag": eu_2_lag,
+            "eu": eu,
+            "t_uarmeret_cm": t_uarmeret,
+            "t_1_lag_cm": t_1_lag,
+            "t_2_lag_cm": t_2_lag,
         })
 
-    normaliserede.sort(key=lambda row: row["tykkelse_cm"])
+    normaliserede.sort(key=lambda row: row["eu"])
     return normaliserede, fejl
 
 
@@ -267,79 +265,44 @@ def slet_designdiagrammer_json_og_nulstil() -> None:
         os.remove(DESIGNDIAGRAMMER_JSON)
 
 
-def _inverse_interpoler_t_for_eu(
-    rows: list[dict],
-    eu_key: str,
-    target_eu: float,
-) -> tuple[float | None, str | None]:
-    """Find tykkelse for target Eu ud fra tilstødende aflæste punkter."""
-    tol = 1e-9
-    sorteret = sorted(rows, key=lambda row: row["tykkelse_cm"])
-
-    for row in sorteret:
-        eu = row.get(eu_key)
-        if eu is not None and abs(eu - target_eu) <= tol:
-            return row["tykkelse_cm"], "direct"
-
-    for row_a, row_b in zip(sorteret, sorteret[1:]):
-        eu_a = row_a.get(eu_key)
-        eu_b = row_b.get(eu_key)
-        if eu_a is None or eu_b is None or abs(eu_a - eu_b) <= tol:
-            continue
-        lo = min(eu_a, eu_b)
-        hi = max(eu_a, eu_b)
-        if lo - tol <= target_eu <= hi + tol:
-            t_a = row_a["tykkelse_cm"]
-            t_b = row_b["tykkelse_cm"]
-            faktor = (target_eu - eu_a) / (eu_b - eu_a)
-            return round(t_a + faktor * (t_b - t_a), 1), "interpolated"
-
-    return None, None
-
-
-def generer_samletabel_fra_diagrammer(
-    diagrammer: list[dict],
-) -> tuple[dict, dict]:
-    """Byg T_BASIS_TABLE-kompatibel tabel og cellekilder fra diagramdata."""
+def generer_t_basis_table_fra_diagrammer(diagrammer: list[dict]) -> dict:
+    """Byg T_BASIS_TABLE-kompatibel tabel direkte fra diagramdata."""
     table: dict = {}
-    sources: dict = {}
-    by_eo = {diagram["eo"]: diagram for diagram in diagrammer}
-    lag_map = {
-        "uarmeret": "eu_uarmeret",
-        "1_lag": "eu_1_lag",
-        "2_lag": "eu_2_lag",
-    }
+    tom = {"uarmeret": None, "1_lag": None, "2_lag": None}
 
-    for eu in SAMLETABEL_EU_RAEKKER:
-        table[eu] = {}
-        sources[eu] = {}
+    for diagram in diagrammer:
+        eo = diagram["eo"]
+        for row in diagram.get("rows", []):
+            eu = row["eu"]
+            table.setdefault(eu, {})
+            table[eu][eo] = {
+                "uarmeret": row.get("t_uarmeret_cm"),
+                "1_lag": row.get("t_1_lag_cm"),
+                "2_lag": row.get("t_2_lag_cm"),
+            }
+
+    for eu_data in table.values():
         for eo in EO_KOLONNER:
-            table[eu][eo] = {}
-            sources[eu][eo] = {}
-            diagram = by_eo.get(eo)
-            rows = diagram.get("rows", []) if diagram else []
-            for lag_key, eu_key in lag_map.items():
-                val, source = _inverse_interpoler_t_for_eu(rows, eu_key, float(eu))
-                table[eu][eo][lag_key] = val
-                sources[eu][eo][lag_key] = source
+            eu_data.setdefault(eo, tom.copy())
 
-    return table, sources
+    return {eu: table[eu] for eu in sorted(table)}
 
 
-def _opdater_aktiv_samletabel() -> None:
-    table, sources = generer_samletabel_fra_diagrammer(
+def _opdater_aktiv_t_basis_table() -> None:
+    st.session_state["aktiv_t_basis_table"] = generer_t_basis_table_fra_diagrammer(
         st.session_state["designdiagrammer"]
     )
-    st.session_state["aktiv_t_basis_table"] = table
-    st.session_state["aktiv_t_basis_sources"] = sources
 
 
 def _aktiv_t_basis_table() -> dict:
     return st.session_state.get("aktiv_t_basis_table", T_BASIS_TABLE)
 
 
-def _aktiv_t_basis_sources() -> dict:
-    return st.session_state.get("aktiv_t_basis_sources", {})
+def _diagrammer_har_aktuel_schema(diagrammer: list[dict]) -> bool:
+    return all(
+        all("eu" in row for row in diagram.get("rows", []))
+        for diagram in diagrammer
+    )
 
 
 def _find_materiale_session(navn: str) -> dict | None:
@@ -352,10 +315,15 @@ def _find_materiale_session(navn: str) -> dict | None:
 
 if "materialer" not in st.session_state:
     st.session_state["materialer"] = indlaes_materialer()
-if "designdiagrammer" not in st.session_state:
+diagrammer_genindlaest = False
+if (
+    "designdiagrammer" not in st.session_state
+    or not _diagrammer_har_aktuel_schema(st.session_state["designdiagrammer"])
+):
     st.session_state["designdiagrammer"] = indlaes_designdiagrammer()
-if "aktiv_t_basis_table" not in st.session_state:
-    _opdater_aktiv_samletabel()
+    diagrammer_genindlaest = True
+if "aktiv_t_basis_table" not in st.session_state or diagrammer_genindlaest:
+    _opdater_aktiv_t_basis_table()
 
 # ---------------------------------------------------------------------------
 # Farvepalette
@@ -369,7 +337,9 @@ LYS_GR = "#E8F5E9"
 # ---------------------------------------------------------------------------
 # Serie-sortering til standard-oversigten
 # ---------------------------------------------------------------------------
-SERIE_ORDER = {"Tensar": 0, "GS-GRID": 1, "E'GRID": 2, "Manuel": 3}
+SERIE_ORDER = {"Reference": 0, "Tensar": 1, "GS-GRID": 2, "E'GRID": 3, "Manuel": 4}
+REFERENCE_NAVN = "Referencenet (SX160 / T6 / TX160)"
+REFERENCE_KLASSER = [3, 4, 5, 6]
 
 # ---------------------------------------------------------------------------
 # CSS
@@ -437,6 +407,14 @@ st.markdown(f"""
   .net-kor-ref {{
     font-size:0.80rem; color:{GRÅ}; font-style:italic;
     margin:0.1rem 0 0.05rem;
+  }}
+  .klasse-ok {{
+    font-size:0.80rem; color:#555;
+    margin:0.25rem 0 0.05rem;
+  }}
+  .klasse-advarsel {{
+    font-size:0.80rem; font-weight:500; color:#BF360C;
+    margin:0.25rem 0 0.05rem;
   }}
   .bedste-label {{
     font-size:0.7rem; color:{GRØN}; text-transform:uppercase;
@@ -671,7 +649,37 @@ def _filter_klasse_anbefalede(grupper: list[dict]) -> list[dict]:
     return resultat
 
 
-def _render_gruppe_kort(gruppe: dict, primaer: bool, phi: float = 35.0) -> None:
+def _gyldige_grupper(grupper: list[dict]) -> list[dict]:
+    """Behold kun grupper med gyldig beregning, uden klassefiltrering."""
+    return [g for g in grupper if not g.get("har_fejl")]
+
+
+def _format_klasse_liste(klasser: list[int]) -> str:
+    return ", ".join(str(k) for k in sorted(klasser))
+
+
+def _klasse_linjer_html(produkter: list[dict], valgt_klasse: int | None) -> str:
+    if valgt_klasse is None:
+        return ""
+
+    linjer: list[str] = []
+    for p in _sort_produkter(produkter):
+        klasser = p.get("klasser") or []
+        kl_txt = _format_klasse_liste(klasser)
+        css = "klasse-ok" if p.get("klasse_ok") else "klasse-advarsel"
+        prefix = "Anbefalet" if p.get("klasse_ok") else "Ikke anbefalet til valgt klasse"
+        linjer.append(
+            f'<div class="{css}">{p["navn"]}: {prefix} · klasser {kl_txt}</div>'
+        )
+    return "".join(linjer)
+
+
+def _render_gruppe_kort(
+    gruppe: dict,
+    primaer: bool,
+    phi: float = 35.0,
+    valgt_klasse: int | None = None,
+) -> None:
     """
     Render én tykkelses-gruppe som kort.
     primaer=True ⇒ fremhævet grønt kort (bedste). False ⇒ dæmpet grå variant.
@@ -783,6 +791,7 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool, phi: float = 35.0) -> None:
         serie_linjer.append(
             f'<div class="gruppe-serie"><b>{serie}:</b> {", ".join(navne)}</div>'
         )
+    klasse_linjer = _klasse_linjer_html(gruppe.get("produkter", []), valgt_klasse)
 
     kort_css = "gruppe-kort" if primaer else "gruppe-kort-rest"
     tal_css  = "gruppe-tal"  if primaer else "gruppe-tal-rest"
@@ -794,6 +803,7 @@ def _render_gruppe_kort(gruppe: dict, primaer: bool, phi: float = 35.0) -> None:
         f'{phi_kor_html}'
         f'{net_kor_html}'
         f'{"".join(serie_linjer)}'
+        f'{klasse_linjer}'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -813,7 +823,7 @@ def _resultat_til_gruppe(
 
     t_eks = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
-    red_eks = (t_uarm - t_eks) / t_uarm if t_uarm else 0
+    red_eks = (t_uarm - t_eks) / t_uarm if t_uarm else None
 
     produkt = {
         "navn":           geonet["navn"],
@@ -822,7 +832,7 @@ def _resultat_til_gruppe(
         "t_armeret_mm":   t_eks,
         "t_uarmeret_mm":  t_uarm,
         "t_basis_arm_mm": res.get("t_basis_arm_mm"),
-        "reduktion_mm":   t_uarm - t_eks,
+        "reduktion_mm":   t_uarm - t_eks if t_uarm is not None else None,
         "reduktion_pct":  red_eks,
         "klasse_ok":      valgt_klasse in geonet["klasser"],
         "klasser":        geonet["klasser"],
@@ -833,13 +843,109 @@ def _resultat_til_gruppe(
     return {
         "t_armeret_mm":         round(t_eks, 0),
         "t_armeret_eksakt_mm":  round(t_eks, 0),
-        "reduktion_pct":        round(red_eks, 4),
-        "reduktion_pct_eksakt": round(red_eks, 4),
+        "reduktion_pct":        round(red_eks, 4) if red_eks is not None else None,
+        "reduktion_pct_eksakt": round(red_eks, 4) if red_eks is not None else None,
         "t_basis_arm_mm":       res.get("t_basis_arm_mm"),
         "produkter":            [produkt],
         "har_fejl":             False,
         "fejl_besked":          None,
     }
+
+
+def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
+    """Pak neutral referenceberegning som en gruppe til referencevisning."""
+    if res.get("fejl") or res.get("t_armeret_mm") is None:
+        return None
+
+    t_ref = res["t_armeret_mm"]
+    t_uarm = res["t_uarmeret_mm"]
+    red_ref = (t_uarm - t_ref) / t_uarm if t_uarm else None
+    produkt = {
+        "navn": REFERENCE_NAVN,
+        "serie": "Reference",
+        "korrektion": 0.0,
+        "t_armeret_mm": t_ref,
+        "t_uarmeret_mm": t_uarm,
+        "t_basis_arm_mm": res.get("t_basis_arm_mm"),
+        "reduktion_mm": t_uarm - t_ref if t_uarm is not None else None,
+        "reduktion_pct": red_ref,
+        "klasse_ok": valgt_klasse in REFERENCE_KLASSER,
+        "klasser": REFERENCE_KLASSER,
+        "min_daklag": None,
+        "max_korn": None,
+        "fejl": None,
+    }
+    return {
+        "t_armeret_mm": round(t_ref, 0),
+        "t_armeret_eksakt_mm": round(t_ref, 0),
+        "reduktion_pct": round(red_ref, 4) if red_ref is not None else None,
+        "reduktion_pct_eksakt": round(red_ref, 4) if red_ref is not None else None,
+        "t_basis_arm_mm": res.get("t_basis_arm_mm"),
+        "produkter": [produkt],
+        "har_fejl": False,
+        "fejl_besked": None,
+    }
+
+
+def _beregn_referencegrupper(
+    eu: float,
+    eo: float,
+    phi: float,
+    valgt_klasse: int,
+    t_basis_table: dict | None,
+) -> tuple[dict | None, dict | None, str | None, str | None]:
+    res_1 = beregn(
+        eu=eu, eo=eo, phi=phi, net_korrektion=0.0,
+        lag_mode="1_lag", t_basis_table=t_basis_table,
+    )
+    res_2 = beregn(
+        eu=eu, eo=eo, phi=phi, net_korrektion=0.0,
+        lag_mode="2_lag", t_basis_table=t_basis_table,
+    )
+    return (
+        _reference_resultat_til_gruppe(res_1, valgt_klasse),
+        _reference_resultat_til_gruppe(res_2, valgt_klasse),
+        res_1.get("fejl"),
+        res_2.get("fejl"),
+    )
+
+
+def _render_referenceblok(
+    ref_1: dict | None,
+    ref_2: dict | None,
+    fejl_1: str | None,
+    fejl_2: str | None,
+    valgt_klasse: int,
+    phi: float = 35.0,
+) -> None:
+    st.markdown("**Referencenet (SX160 / T6 / TX160)**")
+    if valgt_klasse not in REFERENCE_KLASSER:
+        st.warning(
+            "Referencenettet er ikke anbefalet til den valgte belastningsklasse. "
+            f"Referenceprodukterne er anbefalet til klasse {_format_klasse_liste(REFERENCE_KLASSER)}."
+        )
+
+    col_1, col_2 = st.columns(2, gap="large")
+    with col_1:
+        st.markdown('<div class="kol-titel">1 LAG REFERENCENET</div>', unsafe_allow_html=True)
+        if ref_1 is not None:
+            _render_gruppe_kort(ref_1, primaer=True, phi=phi, valgt_klasse=valgt_klasse)
+        else:
+            st.info(fejl_1 or "Ingen gyldigt 1-lag-resultat for referencenettet.")
+    with col_2:
+        st.markdown('<div class="kol-titel">2 LAG REFERENCENET</div>', unsafe_allow_html=True)
+        if ref_2 is not None:
+            _render_gruppe_kort(ref_2, primaer=True, phi=phi, valgt_klasse=valgt_klasse)
+        else:
+            st.info(fejl_2 or "Ingen gyldigt 2-lag-resultat for referencenettet.")
+
+
+def _render_uarmeret_mangler_besked(eu: float, eo: float) -> None:
+    st.warning(
+        "Der er ikke defineret nogen uarmeret bærelagstykkelse for "
+        f"det valgte Eu/Eo ({eu:.0f} MPa / {eo:.0f} MPa). "
+        "Armerede resultater vises stadig, hvor designdiagrammet har data."
+    )
 
 
 def _render_lag_kolonne(
@@ -868,8 +974,8 @@ def _render_lag_kolonne(
             )
         else:
             st.info(
-                f"Ingen produkter anbefalet til klasse {valgt_klasse} "
-                f"giver et gyldigt 1-lag-resultat for denne kombination. "
+                f"Ingen produkter giver et gyldigt 1-lag-resultat for "
+                f"kombinationen af det valgte Eu og klasse {valgt_klasse}. "
                 f"Prøv en anden belastningsklasse eller justér Eu."
             )
         return
@@ -880,7 +986,7 @@ def _render_lag_kolonne(
 
     st.markdown('<div class="bedste-label">Armeret bærelagstykkelse</div>',
                 unsafe_allow_html=True)
-    _render_gruppe_kort(bedste, primaer=True, phi=phi)
+    _render_gruppe_kort(bedste, primaer=True, phi=phi, valgt_klasse=valgt_klasse)
 
     if rest:
         label = (
@@ -889,7 +995,7 @@ def _render_lag_kolonne(
         )
         with st.expander(label, expanded=False):
             for g in rest:
-                _render_gruppe_kort(g, primaer=False, phi=phi)
+                _render_gruppe_kort(g, primaer=False, phi=phi, valgt_klasse=valgt_klasse)
 
 
 def _navne_kort(gruppe: dict) -> str:
@@ -1136,8 +1242,8 @@ Den beregnede bærelagstykkelse korrigeres for friktionsvinkler forskellig fra �
 1. **Bundmodulet Eu** vælges eller beregnes via sammenhæng med Cv
 2. **Krav til overflademodulet Eo** vælges alt efter belastningsklasse
 3. **Opslag i designdiagrammerne** i forhold til valg af bund- og overflademodul, til fastlæggelse af bærelagstykkelse — uarmeret og armeret med 1–2 lag geonet.
-   Der laves lineær interpolation hvis det valgte/beregnede Eu ikke er en direkte tabelværdi.
-4. **På baggrund af opslaget/interpolationen bestemmes basistykkelsen T_basis:**
+   Diagramtabellerne indeholder færdige Eu-opslag, så beregningen bruger værdierne direkte.
+4. **På baggrund af opslaget bestemmes basistykkelsen T_basis:**
    - Uarmeret: *xx mm*
    - 1 lag armering (referencenet): *xx mm*
    - 2 lag armering (referencenet): *xx mm*
@@ -1310,7 +1416,7 @@ def _vis_beregnings_breakdown(
             t_b_u = ref_uarm["t_basis_uarm_mm"]
             phi_kor_mm_u = t_b_u * phi_kor
             rows_u: list[tuple[str, str, str]] = [
-                ("T_basis (opslag/interpoleret)", f"{t_b_u:.0f} mm", ""),
+                ("T_basis (opslag)", f"{t_b_u:.0f} mm", ""),
             ]
             if abs(phi_kor_mm_u) > 0.5:
                 rows_u.append((
@@ -1396,12 +1502,15 @@ def render_standard() -> None:
     eu = input_underbund(key_prefix="std")
     valgt_klasse, _kl_info, eo = input_belastning(key_prefix="std")
     st.caption(
-        "ℹ️ Standard-tilstanden bruger φ = 35° og viser kun geonet-"
-        "produkter, der er anbefalet til den valgte belastningsklasse."
+        "ℹ️ Standard-tilstanden bruger φ = 35°. Produkter uden for den valgte "
+        "belastningsklasse vises med advarsel."
     )
 
     # --- Beregn alt -----------------------------------------------------
     t_basis_table = _aktiv_t_basis_table()
+    ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
+        eu, eo, 35.0, valgt_klasse, t_basis_table
+    )
     prod_1lag = beregn_alle_produkter(eu, eo, "1_lag", t_basis_table=t_basis_table)
     prod_2lag = beregn_alle_produkter(eu, eo, "2_lag", t_basis_table=t_basis_table)
 
@@ -1420,12 +1529,8 @@ def render_standard() -> None:
             t_uarm = p["t_uarmeret_mm"]
             break
 
-    grupper_1 = _filter_klasse_anbefalede(
-        grupper_produkter(prod_1lag, tolerance_mm=5.0)
-    )
-    grupper_2 = _filter_klasse_anbefalede(
-        grupper_produkter(prod_2lag, tolerance_mm=5.0)
-    )
+    grupper_1 = _gyldige_grupper(grupper_produkter(prod_1lag, tolerance_mm=5.0))
+    grupper_2 = _gyldige_grupper(grupper_produkter(prod_2lag, tolerance_mm=5.0))
 
     bedste_1 = (
         sorted(grupper_1, key=lambda g: g["t_armeret_eksakt_mm"])[0]
@@ -1451,6 +1556,14 @@ def render_standard() -> None:
                 f'</div>',
                 unsafe_allow_html=True,
             )
+        else:
+            _render_uarmeret_mangler_besked(eu, eo)
+
+        _render_referenceblok(
+            ref_1, ref_2, ref_fejl_1, ref_fejl_2,
+            valgt_klasse=valgt_klasse,
+        )
+        st.markdown("")
 
         kol_1, kol_2 = st.columns(2, gap="large")
         with kol_1:
@@ -1861,6 +1974,9 @@ def render_brugerdefineret() -> None:
 
     if not specifikt_mode:
         # OVERSIGT-MODE — som Standard, men med custom phi
+        ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
+            eu, eo, phi, valgt_klasse, t_basis_table
+        )
         prod_1lag = beregn_alle_produkter(
             eu, eo, "1_lag", phi=phi, t_basis_table=t_basis_table
         )
@@ -1883,12 +1999,8 @@ def render_brugerdefineret() -> None:
                 t_uarm = p["t_uarmeret_mm"]
                 break
 
-        grupper_1 = _filter_klasse_anbefalede(
-            grupper_produkter(prod_1lag, tolerance_mm=5.0)
-        )
-        grupper_2 = _filter_klasse_anbefalede(
-            grupper_produkter(prod_2lag, tolerance_mm=5.0)
-        )
+        grupper_1 = _gyldige_grupper(grupper_produkter(prod_1lag, tolerance_mm=5.0))
+        grupper_2 = _gyldige_grupper(grupper_produkter(prod_2lag, tolerance_mm=5.0))
         bedste_1 = (
             sorted(grupper_1, key=lambda g: g["t_armeret_eksakt_mm"])[0]
             if grupper_1 else None
@@ -1903,6 +2015,14 @@ def render_brugerdefineret() -> None:
         else:
             if t_uarm is not None:
                 _render_uarm_banner_bd(t_uarm, phi)
+            else:
+                _render_uarmeret_mangler_besked(eu, eo)
+            _render_referenceblok(
+                ref_1, ref_2, ref_fejl_1, ref_fejl_2,
+                valgt_klasse=valgt_klasse,
+                phi=phi,
+            )
+            st.markdown("")
             kol_1, kol_2 = st.columns(2, gap="large")
             with kol_1:
                 _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag", phi=phi)
@@ -1939,6 +2059,8 @@ def render_brugerdefineret() -> None:
         else:
             if t_uarm is not None:
                 _render_uarm_banner_bd(t_uarm, phi)
+            else:
+                _render_uarmeret_mangler_besked(eu, eo)
 
             grupper_1 = [bedste_1] if bedste_1 else []
             grupper_2 = [bedste_2] if bedste_2 else []
@@ -2108,69 +2230,29 @@ def render_geonet_database() -> None:
 def render_designdiagrammer() -> None:
     st.title("📊 Designdiagrammer")
     st.caption(
-        "Designdiagrammer fra designmanualerne, samt aflæste værdier og opslagstabel"
+        "Designdiagrammer fra designmanualerne, samt redigerbare diagramdata. "
+        "Beregningerne bruger tabellerne direkte som opslag."
     )
     if st.button("Nulstil diagramdata til standard", type="secondary"):
         slet_designdiagrammer_json_og_nulstil()
         st.session_state["designdiagrammer"] = _standard_designdiagrammer()
-        _opdater_aktiv_samletabel()
+        _opdater_aktiv_t_basis_table()
         st.rerun()
 
     st.divider()
 
     import pandas as pd
 
-    def _tabeltal(v) -> str:
-        if v is None:
-            return "—"
-        v = float(v)
-        if v.is_integer():
-            return f"{int(v)}"
-        return _dk_num(v, ".1f")
-
     def _raw_dataframe(diagram: dict) -> pd.DataFrame:
         return pd.DataFrame([
             {
-                "Tykkelse (cm)": row["tykkelse_cm"],
-                "Eu uarmeret": row["eu_uarmeret"],
-                "Eu 1 lag": row["eu_1_lag"],
-                "Eu 2 lag": row["eu_2_lag"],
+                "Eu (MPa)": row["eu"],
+                "Uarmeret tykkelse (cm)": row["t_uarmeret_cm"],
+                "1 lag tykkelse (cm)": row["t_1_lag_cm"],
+                "2 lag tykkelse (cm)": row["t_2_lag_cm"],
             }
             for row in diagram["rows"]
         ])
-
-    def _samletabel_data() -> tuple[pd.DataFrame, pd.DataFrame]:
-        table = _aktiv_t_basis_table()
-        sources = _aktiv_t_basis_sources()
-        rækker = []
-        styles = []
-        for eu in SAMLETABEL_EU_RAEKKER:
-            række = {"Eu, underbund (MPa)": _tabeltal(eu)}
-            style_row = {"Eu, underbund (MPa)": ""}
-            har_værdi = False
-            for eo in EO_KOLONNER:
-                vals = table.get(eu, {}).get(eo, {})
-                source_vals = sources.get(eu, {}).get(eo, {})
-                for lag_key, label in [
-                    ("uarmeret", "Uarmeret"),
-                    ("1_lag", "1 lag"),
-                    ("2_lag", "2/flere lag"),
-                ]:
-                    col = f"Eo {eo} · {label}"
-                    val = vals.get(lag_key)
-                    række[col] = _tabeltal(val)
-                    if val is None:
-                        style_row[col] = "color: #777;"
-                    elif source_vals.get(lag_key) == "direct":
-                        har_værdi = True
-                        style_row[col] = "background-color: #E8F5E9;"
-                    else:
-                        har_værdi = True
-                        style_row[col] = "background-color: #FFF8E1;"
-            if har_værdi:
-                rækker.append(række)
-                styles.append(style_row)
-        return pd.DataFrame(rækker), pd.DataFrame(styles)
 
     diagram_table_height = 490
     redigerede_diagrammer: list[dict] = []
@@ -2193,28 +2275,28 @@ def render_designdiagrammer() -> None:
                 hide_index=True,
                 num_rows="dynamic",
                 column_config={
-                    "Tykkelse (cm)": st.column_config.NumberColumn(
-                        "Tykkelse (cm)",
+                    "Eu (MPa)": st.column_config.NumberColumn(
+                        "Eu (MPa)",
                         min_value=0.0,
                         step=1.0,
+                        format="%.0f",
+                    ),
+                    "Uarmeret tykkelse (cm)": st.column_config.NumberColumn(
+                        "Uarmeret tykkelse (cm)",
+                        min_value=0.0,
+                        step=0.1,
                         format="%.1f",
                     ),
-                    "Eu uarmeret": st.column_config.NumberColumn(
-                        "Eu uarmeret",
+                    "1 lag tykkelse (cm)": st.column_config.NumberColumn(
+                        "1 lag tykkelse (cm)",
                         min_value=0.0,
-                        step=0.5,
+                        step=0.1,
                         format="%.1f",
                     ),
-                    "Eu 1 lag": st.column_config.NumberColumn(
-                        "Eu 1 lag",
+                    "2 lag tykkelse (cm)": st.column_config.NumberColumn(
+                        "2 lag tykkelse (cm)",
                         min_value=0.0,
-                        step=0.5,
-                        format="%.1f",
-                    ),
-                    "Eu 2 lag": st.column_config.NumberColumn(
-                        "Eu 2 lag",
-                        min_value=0.0,
-                        step=0.5,
+                        step=0.1,
                         format="%.1f",
                     ),
                 },
@@ -2237,25 +2319,7 @@ def render_designdiagrammer() -> None:
     elif normaliserede_diagrammer != st.session_state["designdiagrammer"]:
         st.session_state["designdiagrammer"] = normaliserede_diagrammer
         gem_designdiagrammer(normaliserede_diagrammer)
-        _opdater_aktiv_samletabel()
-
-    st.divider()
-    st.subheader("Samletabel")
-    st.markdown(
-        "Rækkerne viser faste beregningspunkter for underbundens E-modul "
-        "**Eu**. Kolonnerne viser den nødvendige bærelagstykkelse i cm ved "
-        "de forskellige belastningsniveauer **Eo**. "
-        "Samletabellen er dannet ud fra de aflæste diagramdata ovenfor. "
-        "Grønne værdier er direkte aflæst, og gule værdier er lineært "
-        "interpoleret mellem de omkringliggende aflæsninger. Rækker uden "
-        "gyldige værdier vises ikke."
-    )
-    samletabel_df, samletabel_styles = _samletabel_data()
-    st.dataframe(
-        samletabel_df.style.apply(lambda _: samletabel_styles, axis=None),
-        width="stretch",
-        hide_index=True,
-    )
+        _opdater_aktiv_t_basis_table()
 
 
 def render_materialer() -> None:

@@ -139,13 +139,14 @@ def valider_input(
                     f"er uden for opslagstabellens gyldige område (\"—\"). "
                     f"Prøv et lavere Eo, et lavere Eu, eller skift til 1 lag."
                 )
-            # Tjek også uarmeret (til resultatvisning)
+            # Tjek også uarmeret (til resultatvisning), men lad ikke
+            # manglende uarmeret blokere armerede resultater.
             t_u_lower = _slaa_op(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
-            if t_u_lower is None and not fejl:
-                fejl.append(
-                    f"Uarmeret opslag for Eu={eu} MPa / Eo={eo} MPa "
-                    f"er uden for opslagstabellens gyldige område. "
-                    f"Prøv et lavere Eu eller Eo."
+            t_u_upper = _slaa_op(eu_upper, eo, "uarmeret", t_basis_table=t_basis_table)
+            if t_u_lower is None or t_u_upper is None:
+                advarsler.append(
+                    f"Der er ikke defineret nogen uarmeret bærelagstykkelse "
+                    f"for Eu={eu} MPa / Eo={eo} MPa."
                 )
 
     # -----------------------------------------------------------------------
