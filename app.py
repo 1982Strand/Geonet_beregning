@@ -598,27 +598,45 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
     if state_key not in st.session_state:
         st.session_state[state_key] = 4
 
-    kl_cols = st.columns(6)
-    for kl_nr, kl_data in BELASTNINGSKLASSER.items():
-        with kl_cols[kl_nr - 1]:
-            aktiv = st.session_state[state_key] == kl_nr
-            if st.button(
-                f"{KLASSE_IKON[kl_nr]}\n**{kl_nr}**",
-                key=f"{key_prefix}_kl_{kl_nr}",
-                type="primary" if aktiv else "secondary",
-                width="stretch",
-                help=f"Klasse {kl_nr}: {kl_data['anvendelse']}",
-            ):
-                st.session_state[state_key] = kl_nr
-                st.rerun()
+    kol_knapper, kol_diagram, _kol_luft = st.columns([1.1, 0.95, 0.45], gap="large")
+    with kol_knapper:
+        kl_cols = st.columns(2)
+        for kl_nr, kl_data in BELASTNINGSKLASSER.items():
+            with kl_cols[(kl_nr - 1) % 2]:
+                aktiv = st.session_state[state_key] == kl_nr
+                if st.button(
+                    f"{KLASSE_IKON[kl_nr]}\n**{kl_nr}**",
+                    key=f"{key_prefix}_kl_{kl_nr}",
+                    type="primary" if aktiv else "secondary",
+                    width="stretch",
+                    help=f"Klasse {kl_nr}: {kl_data['anvendelse']}",
+                ):
+                    st.session_state[state_key] = kl_nr
+                    st.rerun()
 
     valgt = st.session_state[state_key]
     info  = BELASTNINGSKLASSER[valgt]
     eo    = float(info["eo"])
-    st.caption(
-        f"**Klasse {valgt}** · {info['belastning']} · "
-        f"Eo = {eo:.0f} MPa · _{info['anvendelse']}_"
-    )
+    with kol_knapper:
+        st.caption(
+            f"**Klasse {valgt}** · {info['belastning']} · "
+            f"Eo = {eo:.0f} MPa · _{info['anvendelse']}_"
+        )
+    with kol_diagram:
+        diagram = next(
+            (
+                d for d in st.session_state.get("designdiagrammer", [])
+                if d["klasse"] == valgt
+            ),
+            None,
+        )
+        if diagram:
+            image_path = os.path.join(
+                os.path.dirname(__file__),
+                "diagrambilleder",
+                diagram["image_name"],
+            )
+            st.image(image_path, width="stretch")
     return valgt, info, eo
 
 
