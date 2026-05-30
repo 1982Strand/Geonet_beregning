@@ -952,7 +952,7 @@ GEONET_NOTER = [
 K_PHI = -0.02
 
 # Gyldighedsgrænser
-EU_MIN = 3.0    # MPa — hård fejl under denne grænse
+EU_MIN = 1.0    # MPa — hård fejl under denne grænse
 EU_MAX = 45.0   # MPa — hård fejl over denne grænse
 EO_MIN = 30.0   # MPa
 EO_MAX = 150.0  # MPa

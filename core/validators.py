@@ -52,6 +52,7 @@ def valider_input(
     geonet: dict | None,
     materialer: list[dict] | None,
     t_armeret_mm: float | None = None,
+    t_basis_table: dict | None = None,
 ) -> dict:
     """
     Valider alle inputs og returner fejl, advarsler og anbefalinger.
@@ -127,11 +128,11 @@ def valider_input(
     # F5: T_basis-opslag returnerer None (kombination uden for diagrammet)
     # Kun tjekket hvis de foregående input-fejl ikke allerede blokerer
     if not fejl and lag_mode in ("1_lag", "2_lag"):
-        naboer = _find_eu_naboer(eu)
+        naboer = _find_eu_naboer(eu, t_basis_table=t_basis_table)
         if naboer is not None:
             eu_lower, eu_upper = naboer
-            t_lower = _slaa_op(eu_lower, eo, lag_mode)
-            t_upper = _slaa_op(eu_upper, eo, lag_mode)
+            t_lower = _slaa_op(eu_lower, eo, lag_mode, t_basis_table=t_basis_table)
+            t_upper = _slaa_op(eu_upper, eo, lag_mode, t_basis_table=t_basis_table)
             if t_lower is None or t_upper is None:
                 fejl.append(
                     f"Kombinationen Eu={eu} MPa / Eo={eo} MPa / {lag_mode.replace('_', ' ')} "
@@ -139,7 +140,7 @@ def valider_input(
                     f"Prøv et lavere Eo, et lavere Eu, eller skift til 1 lag."
                 )
             # Tjek også uarmeret (til resultatvisning)
-            t_u_lower = _slaa_op(eu_lower, eo, "uarmeret")
+            t_u_lower = _slaa_op(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
             if t_u_lower is None and not fejl:
                 fejl.append(
                     f"Uarmeret opslag for Eu={eu} MPa / Eo={eo} MPa "
@@ -158,7 +159,7 @@ def valider_input(
     # -----------------------------------------------------------------------
     if t_armeret_mm is None:
         net_korrektion = geonet["korrektion"] if geonet else 0.0
-        resultat = beregn(eu, eo, phi, net_korrektion, lag_mode)
+        resultat = beregn(eu, eo, phi, net_korrektion, lag_mode, t_basis_table=t_basis_table)
         if resultat.get("fejl"):
             # Beregningsfejl — returner som hård fejl
             fejl.append(resultat["fejl"])
@@ -168,7 +169,7 @@ def valider_input(
     else:
         # Genberegn uarmeret til brug i anbefalinger
         net_korrektion = geonet["korrektion"] if geonet else 0.0
-        _res = beregn(eu, eo, 35.0, 0.0, lag_mode)
+        _res = beregn(eu, eo, 35.0, 0.0, lag_mode, t_basis_table=t_basis_table)
         t_uarmeret_mm = _res.get("t_uarmeret_mm", 0)
 
     # -----------------------------------------------------------------------

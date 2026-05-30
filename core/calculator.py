@@ -22,7 +22,17 @@ from .data import (
 # Interne hjælpefunktioner
 # ---------------------------------------------------------------------------
 
-def _find_eu_naboer(eu: float) -> tuple[float, float] | None:
+def _aktive_eu_raekker(t_basis_table: dict | None = None) -> list[float]:
+    """Returner sorterede Eu-rækker for den valgte opslagstabel."""
+    if t_basis_table is None:
+        return EU_RAEKKER
+    return sorted(t_basis_table.keys())
+
+
+def _find_eu_naboer(
+    eu: float,
+    t_basis_table: dict | None = None,
+) -> tuple[float, float] | None:
     """
     Find de to nærmeste Eu-rækker i tabellen der omslutter den givne Eu.
 
@@ -32,12 +42,14 @@ def _find_eu_naboer(eu: float) -> tuple[float, float] | None:
 
     Eksempel: eu=11 → (10, 12). eu=10 → (10, 10).
     """
-    if eu in EU_RAEKKER:
+    eu_raekker = _aktive_eu_raekker(t_basis_table)
+
+    if eu in eu_raekker:
         return (eu, eu)
 
     lower = None
     upper = None
-    for raekke in EU_RAEKKER:
+    for raekke in eu_raekker:
         if raekke < eu:
             lower = raekke
         elif raekke > eu and upper is None:
@@ -50,14 +62,20 @@ def _find_eu_naboer(eu: float) -> tuple[float, float] | None:
     return (lower, upper)
 
 
-def _slaa_op(eu_raekke: float, eo: float, lag_type: str) -> float | None:
+def _slaa_op(
+    eu_raekke: float,
+    eo: float,
+    lag_type: str,
+    t_basis_table: dict | None = None,
+) -> float | None:
     """
     Direkte opslag i T_BASIS_TABLE.
     Returnerer tykkelse i cm, eller None hvis udenfor gyldighed ("—").
 
     lag_type: "uarmeret" | "1_lag" | "2_lag"
     """
-    eu_data = T_BASIS_TABLE.get(eu_raekke)
+    table = t_basis_table or T_BASIS_TABLE
+    eu_data = table.get(eu_raekke)
     if eu_data is None:
         return None
     eo_data = eu_data.get(eo)
@@ -95,6 +113,7 @@ def beregn(
     phi: float,
     net_korrektion: float,
     lag_mode: str,
+    t_basis_table: dict | None = None,
 ) -> dict:
     """
     Beregn bærelagstykkelse med og uden armering.
@@ -122,15 +141,16 @@ def beregn(
     phi_korrektion = K_PHI * (phi - 35.0)
 
     # -- Trin 4: Opslag i designdiagram --
-    naboer = _find_eu_naboer(eu)
+    eu_raekker = _aktive_eu_raekker(t_basis_table)
+    naboer = _find_eu_naboer(eu, t_basis_table=t_basis_table)
     if naboer is None:
-        return {"fejl": f"Eu={eu} MPa er uden for tabelområdet ({EU_RAEKKER[0]}–{EU_RAEKKER[-1]} MPa)"}
+        return {"fejl": f"Eu={eu} MPa er uden for tabelområdet ({eu_raekker[0]}–{eu_raekker[-1]} MPa)"}
 
     eu_lower, eu_upper = naboer
 
     # Armeret (valgt lag_mode)
-    t_low_arm = _slaa_op(eu_lower, eo, lag_mode)
-    t_high_arm = _slaa_op(eu_upper, eo, lag_mode)
+    t_low_arm = _slaa_op(eu_lower, eo, lag_mode, t_basis_table=t_basis_table)
+    t_high_arm = _slaa_op(eu_upper, eo, lag_mode, t_basis_table=t_basis_table)
 
     if t_low_arm is None or t_high_arm is None:
         return {
@@ -142,8 +162,8 @@ def beregn(
         }
 
     # Uarmeret
-    t_low_uarm = _slaa_op(eu_lower, eo, "uarmeret")
-    t_high_uarm = _slaa_op(eu_upper, eo, "uarmeret")
+    t_low_uarm = _slaa_op(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
+    t_high_uarm = _slaa_op(eu_upper, eo, "uarmeret", t_basis_table=t_basis_table)
 
     if t_low_uarm is None or t_high_uarm is None:
         return {
@@ -211,6 +231,7 @@ def beregn_alle_produkter(
     eo: float,
     lag_mode: str,
     phi: float = 35.0,
+    t_basis_table: dict | None = None,
 ) -> list[dict]:
     """
     Beregn T_armeret for alle geonet-produkter med en given friktionsvinkel.
@@ -239,6 +260,7 @@ def beregn_alle_produkter(
             phi=phi,
             net_korrektion=geonet["korrektion"],
             lag_mode=lag_mode,
+            t_basis_table=t_basis_table,
         )
 
         klasse_ok = (
