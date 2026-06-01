@@ -1129,6 +1129,7 @@ def _opbygnings_snit_svg(
     geonet_label: str = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6",
     ikke_defineret: str | None = None,
     max_baerelag_px: int = 220,
+    best_case_mm: float | None = None,
 ) -> str:
     """Render et enkelt opbygnings-snit som inline SVG.
 
@@ -1185,15 +1186,32 @@ def _opbygnings_snit_svg(
 
     # ↕ mm-label i venstre side, centreret på bærelagsblokken
     mm_label_y = (baerelag_y1 + baerelag_y2) / 2
-    mm_label = (
+    mm_label_parts = [
         f'<text x="38" y="{mm_label_y - 4}" '
         f'font-family="system-ui, sans-serif" font-size="11" '
-        f'fill="#444" text-anchor="middle">↕</text>'
+        f'fill="#444" text-anchor="middle">↕</text>',
         f'<text x="38" y="{mm_label_y + 10}" '
         f'font-family="system-ui, sans-serif" font-size="12" '
         f'font-weight="600" fill="#333" text-anchor="middle">'
-        f'{t_baerelag_mm:.0f} mm</text>'
-    )
+        f'{t_baerelag_mm:.0f} mm</text>',
+    ]
+    # Interval-produkter (NX750/NX850): vis best-case under hovedtallet.
+    if best_case_mm is not None and round(best_case_mm) < round(t_baerelag_mm):
+        mm_label_parts.append(
+            f'<text x="38" y="{mm_label_y + 24}" '
+            f'font-family="system-ui, sans-serif" font-size="9" '
+            f'fill="#555" text-anchor="middle">'
+            f'↓ {best_case_mm:.0f} mm</text>'
+            f'<text x="38" y="{mm_label_y + 34}" '
+            f'font-family="system-ui, sans-serif" font-size="8" '
+            f'fill="#777" text-anchor="middle" font-style="italic">'
+            f'under optimale</text>'
+            f'<text x="38" y="{mm_label_y + 43}" '
+            f'font-family="system-ui, sans-serif" font-size="8" '
+            f'fill="#777" text-anchor="middle" font-style="italic">'
+            f'forhold</text>'
+        )
+    mm_label = "".join(mm_label_parts)
 
     # Geonet-linjer (stiplet, rød) — label vises ved hver linje,
     # opdelt i flere linjer (splittet på " / ") for læselighed.
@@ -1278,12 +1296,42 @@ def _opbygnings_snit_svg(
     )
 
 
+_REF_VALG = "Referencenet (TX160 / SX160 / T6)"
+
+
+def _produkt_t(produkter: list[dict] | None, navn: str) -> float | None:
+    """Slå t_armeret_mm op for et produkt i en liste fra beregn_alle_produkter."""
+    if not produkter:
+        return None
+    for p in produkter:
+        if p["navn"] == navn and p.get("fejl") is None:
+            return p.get("t_armeret_mm")
+    return None
+
+
+def _produkt_t_best(produkter: list[dict] | None, navn: str) -> float | None:
+    """Best-case-tykkelse for interval-produkter (None hvis ikke interval)."""
+    if not produkter:
+        return None
+    for p in produkter:
+        if p["navn"] == navn and p.get("fejl") is None:
+            return p.get("t_armeret_mm_min")
+    return None
+
+
 def _render_opbygningsvisualisering(
     eu: float,
     ref_1: dict | None,
     ref_2: dict | None,
+    prod_1lag: list[dict] | None = None,
+    prod_2lag: list[dict] | None = None,
 ) -> None:
-    """Tre opbygnings-snit side om side, baseret på referencenettet."""
+    """Tre opbygnings-snit side om side. Default: referencenettet.
+
+    Hvis prod_1lag/prod_2lag er givet, vises en dropdown der lader brugeren
+    skifte til et hvilket som helst gyldigt produkt fra resultatlisten.
+    """
+    # ── Find uarmeret-tykkelse (uafhængig af produktvalg) ──────────────
     t_uarm = None
     for r in (ref_1, ref_2):
         if r is not None and r.get("produkter"):
@@ -1292,25 +1340,84 @@ def _render_opbygningsvisualisering(
                 t_uarm = t_uarm_kandidat
                 break
 
-    t_1 = ref_1["t_armeret_mm"] if ref_1 is not None else None
-    t_2 = ref_2["t_armeret_mm"] if ref_2 is not None else None
+    # ── Dropdown med valgmuligheder ────────────────────────────────────
+    # Saml gyldige produktnavne på tværs af 1-lag og 2-lag, sorteret efter
+    # bedste (mindste) 1-lags-tykkelse — dem uden 1-lag bagest.
+    navne_sorteret: list[str] = []
+    if prod_1lag is not None or prod_2lag is not None:
+        navne_set: dict[str, tuple[float, float, float]] = {}
+        for p in (prod_1lag or []) + (prod_2lag or []):
+            if p["navn"] == "Anden armering (manuel)":
+                continue
+            if p.get("fejl") is not None:
+                continue
+            if p["navn"] in navne_set:
+                continue
+            t1 = _produkt_t(prod_1lag, p["navn"])
+            t2 = _produkt_t(prod_2lag, p["navn"])
+            if t1 is None and t2 is None:
+                continue
+            sort_t1 = t1 if t1 is not None else 1e9
+            navne_set[p["navn"]] = (sort_t1, t1 or 1e9, t2 or 1e9)
+        navne_sorteret = sorted(navne_set.keys(), key=lambda n: navne_set[n])
 
-    # Skalering: største definerede tykkelse → MAX_BAERELAG_PX (220 px)
+    valg = _REF_VALG
+    if navne_sorteret:
+        def _format_valg(navn: str) -> str:
+            if navn == _REF_VALG:
+                return navn
+            t1 = _produkt_t(prod_1lag, navn)
+            t2 = _produkt_t(prod_2lag, navn)
+            t1_str = f"{t1:.0f} mm" if t1 is not None else "—"
+            t2_str = f"{t2:.0f} mm" if t2 is not None else "—"
+            return f"{navn}  ·  1 lag: {t1_str}  ·  2 lag: {t2_str}"
+
+        valg = st.selectbox(
+            "Vis opbygning for:",
+            [_REF_VALG] + navne_sorteret,
+            index=0,
+            format_func=_format_valg,
+            key="opbygning_geonet_valg",
+        )
+
+    # ── Bestem snittenes tykkelser ud fra valget ───────────────────────
+    if valg == _REF_VALG:
+        t_1 = ref_1["t_armeret_mm"] if ref_1 is not None else None
+        t_2 = ref_2["t_armeret_mm"] if ref_2 is not None else None
+        t_1_best = None
+        t_2_best = None
+        produkt_navn_vis = None
+        geonet_label = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6"
+    else:
+        t_1 = _produkt_t(prod_1lag, valg)
+        t_2 = _produkt_t(prod_2lag, valg)
+        t_1_best = _produkt_t_best(prod_1lag, valg)
+        t_2_best = _produkt_t_best(prod_2lag, valg)
+        produkt_navn_vis = valg
+        geonet_label = valg
+
+    # ── Skalering: brug t_uarm hvis defineret, ellers største armerede ─
     kandidater = [t for t in (t_uarm, t_1, t_2) if t is not None]
     if not kandidater:
-        st.caption("Ingen gyldige referenceberegninger at visualisere.")
+        st.caption("Ingen gyldige beregninger at visualisere.")
         return
     t_max = max(kandidater)
     mm_per_px = t_max / 220.0
 
-    st.caption(
-        "Snittene viser opbygninger med **referencenettet** "
-        "(Tensar TriAx TX160 / GS-GRID SX160 / E'GRID T6). "
-        "Højderne er proportionale, så besparelsen ved armering er aflæselig."
-    )
+    # ── Caption (dynamisk efter valg) ──────────────────────────────────
+    if valg == _REF_VALG:
+        st.caption(
+            "Snittene viser opbygninger med **referencenettet** "
+            "(Tensar TriAx TX160 / GS-GRID SX160 / E'GRID T6). "
+            "Højderne er proportionale, så besparelsen ved armering er aflæselig."
+        )
+    else:
+        st.caption(
+            f"Snittene viser opbygninger med **{produkt_navn_vis}**. "
+            f"Højderne er proportionale, så besparelsen ved armering er aflæselig."
+        )
 
-    # Flex-layout med fast lille afstand — st.columns lægger ekstra
-    # padding på hver kolonne og spreder SVG'erne for langt fra hinanden.
+    # ── Byg de 3 SVG'er ────────────────────────────────────────────────
     svg_uarm = _opbygnings_snit_svg(
         "Uarmeret", t_uarm, mm_per_px, eu, geonet_y_fracs=[],
         ikke_defineret=(
@@ -1320,22 +1427,23 @@ def _render_opbygningsvisualisering(
     )
     svg_1 = _opbygnings_snit_svg(
         "1 lag geonet", t_1, mm_per_px, eu,
-        # Nederste lag: på underbund/bærelag-overgangen.
-        # Trækkes 1 % op fra bunden så linjen ikke skjules af kanten.
         geonet_y_fracs=[0.99] if t_1 is not None else [],
         ikke_defineret=(
             None if t_1 is not None
             else "Ikke gyldigt for denne kombination"
         ),
+        geonet_label=geonet_label,
+        best_case_mm=t_1_best,
     )
     svg_2 = _opbygnings_snit_svg(
         "2 lag geonet", t_2, mm_per_px, eu,
-        # Nederste lag på underbund, øverste midt i bærelaget.
         geonet_y_fracs=[0.5, 0.99] if t_2 is not None else [],
         ikke_defineret=(
             None if t_2 is not None
             else "Ikke gyldigt for denne kombination"
         ),
+        geonet_label=geonet_label,
+        best_case_mm=t_2_best,
     )
 
     st.markdown(
@@ -1358,6 +1466,8 @@ def _render_oversigt_expanders(
     *,
     ref_1: dict | None = None,
     ref_2: dict | None = None,
+    prod_1lag: list[dict] | None = None,
+    prod_2lag: list[dict] | None = None,
     phi: float = 35.0,
     geonet: dict | None = None,
     geonet_navn: str | None = None,
@@ -1376,10 +1486,13 @@ def _render_oversigt_expanders(
     """
     materialer = materialer or []
 
-    # --- Opbygningsvisualisering (referencenet) --------------------------
+    # --- Opbygningsvisualisering (referencenet eller valgt produkt) -----
     if ref_1 is not None or ref_2 is not None:
-        with st.expander("🧱 Opbygning — referencenet", expanded=False):
-            _render_opbygningsvisualisering(eu, ref_1, ref_2)
+        with st.expander("🧱 Opbygning", expanded=False):
+            _render_opbygningsvisualisering(
+                eu, ref_1, ref_2,
+                prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+            )
 
     # --- Advarsler -------------------------------------------------------
     # Validator-kørslen bruger den valgte phi/geonet/materialer-kontekst.
@@ -1940,6 +2053,7 @@ def render_standard() -> None:
     _render_oversigt_expanders(
         eu, eo, valgt_klasse, bedste_1, bedste_2,
         ref_1=ref_1, ref_2=ref_2,
+        prod_1lag=prod_1lag, prod_2lag=prod_2lag,
         t_basis_table=t_basis_table,
     )
 
@@ -2337,17 +2451,20 @@ def render_brugerdefineret() -> None:
     bedste_1: dict | None = None
     bedste_2: dict | None = None
 
+    # Reference- og produktberegninger bruges i begge modes — både til
+    # at vise reference-banneret og til opbygnings-expanderens dropdown.
+    ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
+        eu, eo, phi, valgt_klasse, t_basis_table
+    )
+    prod_1lag = beregn_alle_produkter(
+        eu, eo, "1_lag", phi=phi, t_basis_table=t_basis_table
+    )
+    prod_2lag = beregn_alle_produkter(
+        eu, eo, "2_lag", phi=phi, t_basis_table=t_basis_table
+    )
+
     if not specifikt_mode:
         # OVERSIGT-MODE — som Standard, men med custom phi
-        ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
-            eu, eo, phi, valgt_klasse, t_basis_table
-        )
-        prod_1lag = beregn_alle_produkter(
-            eu, eo, "1_lag", phi=phi, t_basis_table=t_basis_table
-        )
-        prod_2lag = beregn_alle_produkter(
-            eu, eo, "2_lag", phi=phi, t_basis_table=t_basis_table
-        )
 
         alle_fejler_1 = all(p["fejl"] for p in prod_1lag)
         alle_fejler_2 = all(p["fejl"] for p in prod_2lag)
@@ -2482,6 +2599,7 @@ def render_brugerdefineret() -> None:
     _render_oversigt_expanders(
         eu, eo, valgt_klasse, bedste_1, bedste_2,
         ref_1=ref_1, ref_2=ref_2,
+        prod_1lag=prod_1lag, prod_2lag=prod_2lag,
         phi=phi,
         geonet=geonet,
         geonet_navn=geonet_navn,
