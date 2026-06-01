@@ -663,8 +663,10 @@ MATERIAL_NAVNE = [m["navn"] for m in MATERIAL_DB] + ["Manuel indtastning"]
 
 GEONET_DB = [
     # --- Tensar-serien ---
-    # Tekniske data (trækstyrke, maskestørrelse, dimensioner, GWP) for SS30, HX5.5,
-    # HX165, NX750 og NX850 er ikke tilgængelige i de foreliggende kildedokumenter.
+    # Tekniske data (trækstyrke, maskestørrelse, dimensioner, GWP) for SS30, HX5.5
+    # og HX165 er ikke tilgængelige i de foreliggende kildedokumenter. For NX750 og
+    # NX850 findes Product Identification Data Sheets (PIDS, dec. 2024), som leverer
+    # identifikations- og holdbarhedsdata, men ikke designværdier.
     # Korrektionsfaktorer og belastningsklasser er fra Tensar Geonet Designmanual sept. 2024.
     {
         "navn": "Tensar SS30",
@@ -762,9 +764,10 @@ GEONET_DB = [
         "type": "Hexagonalt",
         "effektindeks": "110–120",
         "korrektion": -0.10,
+        "korrektion_interval": (-0.20, -0.10),
         "max_korn": None,
         "anbefalet_tilslag": None,
-        "rudeaabning": None,
+        "rudeaabning": "Hexagonal/trapezoidal/triangulær, ribbeafstand 80 mm",
         "min_daklag": 20,
         "klasser": [5, 6],
         "radial_stivhed": None,
@@ -772,7 +775,13 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "Effektindeks 110–120. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
+        "bemærkning": (
+            "Effektindeks 110–120 ⇒ korrektion fra −20 % (bedste) til −10 % (konservativ). "
+            "Coekstruderet, integralt formet hexagonalt geonet med rektangulære ribber og "
+            "knudetykkelse 3,5 mm. EPD-certificeret (EN 15804+A2:2019). 100 % modstand mod "
+            "kemisk nedbrydning, 90 % modstand mod UV/forvitring. PIDS angiver ikke "
+            "designværdier (trækstyrke, radial stivhed, GWP, maks. korn)."
+        ),
     },
     {
         "navn": "Tensar InterAx NX850",
@@ -780,9 +789,10 @@ GEONET_DB = [
         "type": "Hexagonalt",
         "effektindeks": "115–130",
         "korrektion": -0.15,
+        "korrektion_interval": (-0.30, -0.15),
         "max_korn": None,
         "anbefalet_tilslag": None,
-        "rudeaabning": None,
+        "rudeaabning": "Hexagonal/trapezoidal/triangulær, ribbeafstand 80 mm",
         "min_daklag": 20,
         "klasser": [5, 6],
         "radial_stivhed": None,
@@ -790,7 +800,13 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "Effektindeks 115–130. Tekniske specifikationer ikke tilgængelige i foreliggende kildedokumenter.",
+        "bemærkning": (
+            "Effektindeks 115–130 ⇒ korrektion fra −30 % (bedste) til −15 % (konservativ). "
+            "Coekstruderet, integralt formet hexagonalt geonet med rektangulære ribber og "
+            "knudetykkelse 4,5 mm. EPD-certificeret (EN 15804+A2:2019). 100 % modstand mod "
+            "kemisk nedbrydning, 90 % modstand mod UV/forvitring. PIDS angiver ikke "
+            "designværdier (trækstyrke, radial stivhed, GWP, maks. korn)."
+        ),
     },
     # --- GS-GRID-serien ---
     # Kilde: GS-GRID/E'GRID Designmanual okt. 2025 + GS-GRID Biaxial datablad jun. 2025
@@ -1069,22 +1085,21 @@ GEONET_NOTER = [
         ),
     },
     {
-        "titel": "GS-GRID SX170: Maks. kornstørrelse vs. anbefalet tilslag",
+        "titel": "Forskel mellem datablad og designmanual: Maks. kornstørrelse vs. anbefalet tilslag",
         "tekst": (
-            "GS-GRID SX170 har maks. kornstørrelse < 150 mm (datablad), men designmanualens "
-            "figur 9 angiver anbefalet tilslag 0–80 mm — samme som SX160. "
-            "Dette skyldes at SX170 har samme hexagonale pitch (80 mm) som SX160. "
-            "Den højere max-korn på SX170 er en databladsgrænse, ikke en designanbefaling. "
-            "I praksis anvendes 0–80 mm tilslag ved SX170."
+            "For enkelte geonet, GS-GRID B20/20, B30/30, B30/30L, B40/40, overstiger den anbefalede tilslagsstørrelse fra designmanualen den maksimale kornstørrelse fra databladet. "
+            "For GS-GRID SX170 er det omvendt, hvor den anbefalede tilslagsstørrelse er mindre end den maksimale kornstørrelse. "
         ),
     },
     {
         "titel": "Tensar-serien: Manglende tekniske data",
         "tekst": (
-            "Datablade for Tensar SS30, HX5.5, HX165, InterAx NX750 og NX850 indgår ikke "
-            "i de foreliggende kildedokumenter. Tekniske data (trækstyrke, maskestørrelse, "
-            "dimensioner, GWP m.v.) for disse produkter kan ikke verificeres. "
-            "Korrektionsfaktorer og belastningsklasser er fra Tensar Geonet Designmanual sept. 2024."
+            "Datablade for Tensar SS30, HX5.5 og HX165 indgår ikke i de foreliggende "
+            "kildedokumenter. For Tensar InterAx NX750 og NX850 findes kun Product "
+            "Identification Data Sheet (PIDS, dec. 2024), som leverer identifikations- "
+            "og holdbarhedsdata, men eksplicit ikke designværdier (trækstyrke, radial "
+            "stivhed, GWP, maks. kornstørrelse). Korrektionsfaktorer og belastningsklasser "
+            "er fra Tensar Geonet Designmanual sept. 2024."
         ),
     },
     {
@@ -1093,8 +1108,8 @@ GEONET_NOTER = [
             "Begge designmanualer anbefaler ved total bærelagstykkelse > 50 cm at anvende "
             "2 eller flere lag geonet. Afstand mellem lag: min. 20 cm og maks. 50 cm "
             "(GS/E'GRID) / maks. 40 cm (Tensar). Øverste lag skal placeres min. 20 cm "
-            "under overside af bærelag. I 2-lags Tensar-konstruktioner kan øverste lag "
-            "udføres i TriAx TX150 med TX160 i bunden."
+            "under overside af bærelag. I designmanualerne vises eksempler på der kan anvendes "
+            "forskellige produkter ved flerlagsopbygninger."
         ),
     },
     {
@@ -1111,7 +1126,9 @@ GEONET_NOTER = [
             "2) Tensar Geonet Designmanual, BG Byggros, sept. 2024  |  "
             "3) GS-GRID Biaxial teknisk datablad (B-serien), BG Byggros, jun. 2025  |  "
             "4) GS-GRID SX teknisk datablad (SX160/SX170), BG Byggros, okt. 2025  |  "
-            "5) Tensar TriAx TX160 teknisk specifikation, Tensar International, aug. 2024"
+            "5) Tensar TriAx TX160 teknisk specifikation, Tensar International, aug. 2024  |  "
+            "6) Tensar InterAx NX750 Product Identification Data Sheet (PIDS), Tensar, dec. 2024  |  "
+            "7) Tensar InterAx NX850 Product Identification Data Sheet (PIDS), Tensar, dec. 2024"
         ),
     },
 ]

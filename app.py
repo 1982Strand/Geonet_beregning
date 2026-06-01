@@ -693,12 +693,55 @@ def _render_gruppe_kort(
         if gruppe.get("produkter") else None
     )
 
+    # Interval-produkter (fx NX750/NX850): vises i egen gruppe med spænd.
+    # Efter grupper_produkter() er en interval-gruppe altid mono-produkt, så
+    # vi læser tallene direkte fra det ene produkt.
+    interval_p = (
+        gruppe["produkter"][0]
+        if gruppe.get("produkter")
+        and gruppe["produkter"][0].get("t_armeret_mm_min") is not None
+        else None
+    )
+    if interval_p is not None:
+        t_low_vis = round(interval_p["t_armeret_mm_min"])
+        t_high_vis = round(interval_p["t_armeret_mm_max"])
+        if t_low_vis == t_high_vis:
+            tal_html = f'{t_high_vis:.0f} mm'
+        else:
+            tal_html = (
+                f'{t_low_vis:.0f}–{t_high_vis:.0f} mm'
+                f'<span style="font-size:0.55em;font-weight:400;color:#555;'
+                f'margin-left:8px">(største–laveste effektindeks)</span>'
+            )
+    else:
+        t_low_vis = None
+        t_high_vis = round(t_vis)
+        tal_html = f'{t_vis:.0f} mm'
+
     # ↓ mm-reduktionslinje
-    if t_uarm_prod is not None and red_pct is not None:
+    if interval_p is not None and t_uarm_prod is not None and t_low_vis is not None:
+        red_mm_best = round(t_uarm_prod - t_low_vis)    # største reduktion (best case)
+        red_mm_kons = round(t_uarm_prod - t_high_vis)   # mindste reduktion (konservativ)
+        red_pct_best = red_mm_best / t_uarm_prod if t_uarm_prod > 0 else 0
+        red_pct_kons = red_mm_kons / t_uarm_prod if t_uarm_prod > 0 else 0
+        if t_low_vis == t_high_vis:
+            red_linje = (
+                f'<div class="gruppe-red-linje">'
+                f'Reduceres ↓ {red_mm_best} mm ({red_pct_best:.0%})'
+                f'</div>'
+            )
+        else:
+            red_linje = (
+                f'<div class="gruppe-red-linje">'
+                f'Reduceres ↓ {red_mm_best} mm ({red_pct_best:.0%}) '
+                f'/ {red_mm_kons} mm ({red_pct_kons:.0%})'
+                f'</div>'
+            )
+    elif t_uarm_prod is not None and red_pct is not None:
         red_mm = round(t_uarm_prod - t_vis)
         red_pct_str = f"{red_pct:.0%}"
         red_linje = (
-            f'<div class="gruppe-red-linje">↓ {red_mm} mm ({red_pct_str})</div>'
+            f'<div class="gruppe-red-linje">Reduceres ↓ {red_mm} mm ({red_pct_str})</div>'
         )
     else:
         red_linje = ""
@@ -730,9 +773,20 @@ def _render_gruppe_kort(
     net_kor_html = ""
     t_basis = gruppe.get("t_basis_arm_mm")
     if t_basis and t_basis > 0 and gruppe.get("produkter"):
-        korrektioner = sorted({p["korrektion"] for p in gruppe["produkter"]})
+        kor_vaerdier: set[float] = set()
+        for p in gruppe["produkter"]:
+            if p.get("korrektion_min") is not None:
+                kor_vaerdier.add(p["korrektion_min"])
+                kor_vaerdier.add(p["korrektion_max"])
+            else:
+                kor_vaerdier.add(p["korrektion"])
+        korrektioner = sorted(kor_vaerdier)
         kor_min = korrektioner[0]
         kor_max = korrektioner[-1]
+        # Skelnetegn: interval-produkter bruger "/", andre blandede grupper bruger "til"
+        interval_separator = (
+            interval_p is not None and t_low_vis is not None and t_low_vis != t_high_vis
+        )
         delta_min = round(t_basis * kor_min)  # mm; negativ = sparer, positiv = koster mere
         delta_max = round(t_basis * kor_max)
 
@@ -757,29 +811,28 @@ def _render_gruppe_kort(
                     f'</div>'
                 )
         else:
-            # Blandet gruppe — vis interval
+            # Blandet gruppe — vis interval. Interval-produkter bruger
+            # "best-case / konservativ, ift. reference"; andre blandede
+            # grupper bruger den klassiske "{d_lo} til {d_hi}"-syntaks.
             d_lo, d_hi = delta_min, delta_max
             if d_hi <= 0:
-                # Alt er besparelser (kor < 0)
-                net_kor_html = (
-                    f'<div class="net-kor-spar">'
-                    f'net-kor: {d_lo:+d} til {d_hi:+d} mm ift. reference'
-                    f'</div>'
+                css = "net-kor-spar"
+            elif d_lo >= 0:
+                css = "net-kor-pen"
+            else:
+                css = "net-kor-ref"
+            if interval_separator:
+                pct_lo = int(round(kor_min * 100))
+                pct_hi = int(round(kor_max * 100))
+                tekst = (
+                    f'net-kor: {d_lo:+d} mm ({pct_lo:+d}%) / '
+                    f'{d_hi:+d} mm ({pct_hi:+d}%), ift. reference'
                 )
             elif d_lo >= 0:
-                # Alt er tillæg (kor > 0)
-                net_kor_html = (
-                    f'<div class="net-kor-pen">'
-                    f'net-kor: +{d_lo} til +{d_hi} mm ift. reference'
-                    f'</div>'
-                )
+                tekst = f'net-kor: +{d_lo} til +{d_hi} mm ift. reference'
             else:
-                # Blandet fortegn — neutral
-                net_kor_html = (
-                    f'<div class="net-kor-ref">'
-                    f'net-kor: {d_lo:+d} til {d_hi:+d} mm ift. reference'
-                    f'</div>'
-                )
+                tekst = f'net-kor: {d_lo:+d} til {d_hi:+d} mm ift. reference'
+            net_kor_html = f'<div class="{css}">{tekst}</div>'
 
     pr_serie: dict[str, list[dict]] = {}
     for p in _sort_produkter(gruppe["produkter"]):
@@ -798,7 +851,7 @@ def _render_gruppe_kort(
 
     st.markdown(
         f'<div class="{kort_css}">'
-        f'<span class="{tal_css}">{t_vis:.0f} mm</span>'
+        f'<span class="{tal_css}">{tal_html}</span>'
         f'{red_linje}'
         f'{phi_kor_html}'
         f'{net_kor_html}'
@@ -1066,6 +1119,236 @@ def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str]:
     return navne, dk_str, korn_str
 
 
+def _opbygnings_snit_svg(
+    titel: str,
+    t_baerelag_mm: float | None,
+    mm_per_px: float,
+    eu: float,
+    geonet_y_fracs: list[float],
+    *,
+    geonet_label: str = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6",
+    ikke_defineret: str | None = None,
+    max_baerelag_px: int = 220,
+) -> str:
+    """Render et enkelt opbygnings-snit som inline SVG.
+
+    Alle snit har samme total-højde (TITEL_H + max_baerelag_px + UNDERBUND_H
+    + BUND_MARGIN), så underbundens bund ligger på samme y-koordinat
+    i alle kolonner — bund-justeret layout.
+
+    geonet_y_fracs er liste af y-positioner (0.0 = top af bærelag,
+    1.0 = bund af bærelag) hvor geonet-linjer skal tegnes.
+
+    ikke_defineret: hvis sat, vises i stedet for et faktisk snit
+    (fx når uarmeret er udenfor tabelområdet).
+    """
+    BOX_X1, BOX_X2 = 78, 252
+    BOX_W = BOX_X2 - BOX_X1
+    TITEL_H = 26
+    UNDERBUND_H = 56
+    BUND_MARGIN = 26
+
+    # Fælles total-højde og underbund-position på tværs af alle snit.
+    h_total = TITEL_H + max_baerelag_px + UNDERBUND_H + BUND_MARGIN
+    underbund_y1 = TITEL_H + max_baerelag_px
+    underbund_y2 = underbund_y1 + UNDERBUND_H
+
+    titel_html = (
+        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="16" '
+        f'font-family="system-ui, sans-serif" font-size="13" '
+        f'font-weight="600" fill="#333" text-anchor="middle">{titel}</text>'
+    )
+
+    if ikke_defineret is not None or t_baerelag_mm is None:
+        # Stiplet placeholder fylder hele bærelags-området så den
+        # alligevel bund-justeres med de andre snit.
+        besked = ikke_defineret or "Ikke defineret"
+        return (
+            f'<svg viewBox="0 0 360 {h_total}" '
+            f'xmlns="http://www.w3.org/2000/svg" '
+            f'style="width:100%;height:auto;max-height:{h_total}px">'
+            f'{titel_html}'
+            f'<rect x="{BOX_X1}" y="{TITEL_H}" width="{BOX_W}" '
+            f'height="{max_baerelag_px}" '
+            f'fill="#F5F5F5" stroke="#BDBDBD" stroke-width="1" '
+            f'stroke-dasharray="4 3"/>'
+            f'<text x="{(BOX_X1 + BOX_X2) / 2}" '
+            f'y="{TITEL_H + max_baerelag_px / 2 + 4}" '
+            f'font-family="system-ui, sans-serif" font-size="12" '
+            f'fill="#888" text-anchor="middle" font-style="italic">{besked}</text>'
+            f'</svg>'
+        )
+
+    baerelag_px = max(40, round(t_baerelag_mm / mm_per_px))
+    baerelag_y2 = underbund_y1
+    baerelag_y1 = baerelag_y2 - baerelag_px
+
+    # ↕ mm-label i venstre side, centreret på bærelagsblokken
+    mm_label_y = (baerelag_y1 + baerelag_y2) / 2
+    mm_label = (
+        f'<text x="38" y="{mm_label_y - 4}" '
+        f'font-family="system-ui, sans-serif" font-size="11" '
+        f'fill="#444" text-anchor="middle">↕</text>'
+        f'<text x="38" y="{mm_label_y + 10}" '
+        f'font-family="system-ui, sans-serif" font-size="12" '
+        f'font-weight="600" fill="#333" text-anchor="middle">'
+        f'{t_baerelag_mm:.0f} mm</text>'
+    )
+
+    # Geonet-linjer (stiplet, rød) — label vises ved hver linje,
+    # opdelt i flere linjer (splittet på " / ") for læselighed.
+    label_linjer = [s.strip() for s in geonet_label.split("/")]
+    n_linjer = len(label_linjer)
+    linje_h = 11  # px mellem baselines
+    geonet_elems: list[str] = []
+    for frac in geonet_y_fracs:
+        y = baerelag_y1 + frac * baerelag_px
+        geonet_elems.append(
+            f'<line x1="{BOX_X1 - 4}" x2="{BOX_X2 + 4}" '
+            f'y1="{y}" y2="{y}" stroke="{RØD}" stroke-width="2" '
+            f'stroke-dasharray="6 3"/>'
+        )
+        # Centrér label-blokken vertikalt om y (geonet-linjen).
+        første_baseline = y - (n_linjer - 1) * linje_h / 2 + 3
+        tspans = "".join(
+            f'<tspan x="{BOX_X2 + 8}" '
+            f'dy="{0 if i == 0 else linje_h}">{linje}</tspan>'
+            for i, linje in enumerate(label_linjer)
+        )
+        geonet_elems.append(
+            f'<text x="{BOX_X2 + 8}" y="{første_baseline}" '
+            f'font-family="system-ui, sans-serif" font-size="9.5" '
+            f'fill="{RØD}">{tspans}</text>'
+        )
+
+    # Placér "Bærelag"-teksten i den øverste rene strækning af bærelaget
+    # — fra toppen ned til den øverste geonet-linje (eller bunden hvis
+    # der ikke er nogen). Det undgår at teksten overlapper en geonet-linje
+    # i fx 2-lags-snittet, hvor øverste lag står midt i bærelaget.
+    geonet_y_abs = [baerelag_y1 + f * baerelag_px for f in geonet_y_fracs]
+    øverste_geonet_y = min(geonet_y_abs) if geonet_y_abs else baerelag_y2
+    baerelag_tekst_y = (baerelag_y1 + øverste_geonet_y) / 2 + 4
+    underbund_tekst_y = (underbund_y1 + underbund_y2) / 2 + 4
+
+    return (
+        f'<svg viewBox="0 0 360 {h_total}" '
+        f'xmlns="http://www.w3.org/2000/svg" '
+        f'style="width:100%;height:auto;max-height:{h_total}px">'
+        f'<defs>'
+        # Bærelag: lys grå med små prikker
+        f'<pattern id="pat_baerelag" patternUnits="userSpaceOnUse" '
+        f'width="8" height="8">'
+        f'<rect width="8" height="8" fill="#E8E8E8"/>'
+        f'<circle cx="2" cy="2" r="0.9" fill="#9E9E9E"/>'
+        f'<circle cx="6" cy="6" r="0.9" fill="#9E9E9E"/>'
+        f'</pattern>'
+        # Underbund: oliven/brun med diagonale streger
+        f'<pattern id="pat_underbund" patternUnits="userSpaceOnUse" '
+        f'width="9" height="9" patternTransform="rotate(45)">'
+        f'<rect width="9" height="9" fill="#A89377"/>'
+        f'<line x1="0" y1="0" x2="0" y2="9" stroke="#6E5B40" stroke-width="1.2"/>'
+        f'</pattern>'
+        f'</defs>'
+        f'{titel_html}'
+        # Bærelag
+        f'<rect x="{BOX_X1}" y="{baerelag_y1}" width="{BOX_W}" '
+        f'height="{baerelag_px}" fill="url(#pat_baerelag)" '
+        f'stroke="#666" stroke-width="1"/>'
+        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="{baerelag_tekst_y}" '
+        f'font-family="system-ui, sans-serif" font-size="12" '
+        f'font-weight="600" fill="#333" text-anchor="middle">'
+        f'Bærelag</text>'
+        # Underbund
+        f'<rect x="{BOX_X1}" y="{underbund_y1}" width="{BOX_W}" '
+        f'height="{UNDERBUND_H}" fill="url(#pat_underbund)" '
+        f'stroke="#5C4A33" stroke-width="1"/>'
+        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="{underbund_tekst_y - 6}" '
+        f'font-family="system-ui, sans-serif" font-size="11" '
+        f'font-weight="600" fill="#fff" text-anchor="middle">'
+        f'Underbund</text>'
+        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="{underbund_tekst_y + 9}" '
+        f'font-family="system-ui, sans-serif" font-size="10.5" '
+        f'fill="#fff" text-anchor="middle">'
+        f'Eu = {eu:g} MPa</text>'
+        # mm-label på venstre side
+        f'{mm_label}'
+        # Geonet-linjer ovenpå
+        f'{"".join(geonet_elems)}'
+        f'</svg>'
+    )
+
+
+def _render_opbygningsvisualisering(
+    eu: float,
+    ref_1: dict | None,
+    ref_2: dict | None,
+) -> None:
+    """Tre opbygnings-snit side om side, baseret på referencenettet."""
+    t_uarm = None
+    for r in (ref_1, ref_2):
+        if r is not None and r.get("produkter"):
+            t_uarm_kandidat = r["produkter"][0].get("t_uarmeret_mm")
+            if t_uarm_kandidat is not None:
+                t_uarm = t_uarm_kandidat
+                break
+
+    t_1 = ref_1["t_armeret_mm"] if ref_1 is not None else None
+    t_2 = ref_2["t_armeret_mm"] if ref_2 is not None else None
+
+    # Skalering: største definerede tykkelse → MAX_BAERELAG_PX (220 px)
+    kandidater = [t for t in (t_uarm, t_1, t_2) if t is not None]
+    if not kandidater:
+        st.caption("Ingen gyldige referenceberegninger at visualisere.")
+        return
+    t_max = max(kandidater)
+    mm_per_px = t_max / 220.0
+
+    st.caption(
+        "Snittene viser opbygninger med **referencenettet** "
+        "(Tensar TriAx TX160 / GS-GRID SX160 / E'GRID T6). "
+        "Højderne er proportionale, så besparelsen ved armering er aflæselig."
+    )
+
+    # Flex-layout med fast lille afstand — st.columns lægger ekstra
+    # padding på hver kolonne og spreder SVG'erne for langt fra hinanden.
+    svg_uarm = _opbygnings_snit_svg(
+        "Uarmeret", t_uarm, mm_per_px, eu, geonet_y_fracs=[],
+        ikke_defineret=(
+            None if t_uarm is not None
+            else f"Uarmeret bærelag ikke defineret for Eu = {eu:g} MPa"
+        ),
+    )
+    svg_1 = _opbygnings_snit_svg(
+        "1 lag geonet", t_1, mm_per_px, eu,
+        # Nederste lag: på underbund/bærelag-overgangen.
+        # Trækkes 1 % op fra bunden så linjen ikke skjules af kanten.
+        geonet_y_fracs=[0.99] if t_1 is not None else [],
+        ikke_defineret=(
+            None if t_1 is not None
+            else "Ikke gyldigt for denne kombination"
+        ),
+    )
+    svg_2 = _opbygnings_snit_svg(
+        "2 lag geonet", t_2, mm_per_px, eu,
+        # Nederste lag på underbund, øverste midt i bærelaget.
+        geonet_y_fracs=[0.5, 0.99] if t_2 is not None else [],
+        ikke_defineret=(
+            None if t_2 is not None
+            else "Ikke gyldigt for denne kombination"
+        ),
+    )
+
+    st.markdown(
+        f'<div style="display:flex;gap:16px;justify-content:flex-start;'
+        f'flex-wrap:wrap;max-width:100%">'
+        f'<div style="flex:1 1 320px;max-width:440px">{svg_uarm}</div>'
+        f'<div style="flex:1 1 320px;max-width:440px">{svg_1}</div>'
+        f'<div style="flex:1 1 320px;max-width:440px">{svg_2}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_oversigt_expanders(
     eu: float,
     eo: float,
@@ -1073,6 +1356,8 @@ def _render_oversigt_expanders(
     bedste_1: dict | None,
     bedste_2: dict | None,
     *,
+    ref_1: dict | None = None,
+    ref_2: dict | None = None,
     phi: float = 35.0,
     geonet: dict | None = None,
     geonet_navn: str | None = None,
@@ -1090,6 +1375,11 @@ def _render_oversigt_expanders(
     _resultat_til_gruppe().
     """
     materialer = materialer or []
+
+    # --- Opbygningsvisualisering (referencenet) --------------------------
+    if ref_1 is not None or ref_2 is not None:
+        with st.expander("🧱 Opbygning — referencenet", expanded=False):
+            _render_opbygningsvisualisering(eu, ref_1, ref_2)
 
     # --- Advarsler -------------------------------------------------------
     # Validator-kørslen bruger den valgte phi/geonet/materialer-kontekst.
@@ -1129,25 +1419,46 @@ def _render_oversigt_expanders(
     # det er den værdi der konkret skal bygges, og som matcher kortenes
     # headline-tal.
     if bedste_1 is not None and bedste_1["t_armeret_mm"] > 500:
+        # Best-case suffiks tilføjes for interval-produkter (NX750/NX850)
+        interval_1 = next(
+            (p for p in bedste_1.get("produkter", [])
+             if p.get("t_armeret_mm_min") is not None),
+            None,
+        )
+        t_1_str = f"<b>{bedste_1['t_armeret_mm']:.0f} mm</b>"
+        if interval_1 is not None:
+            t_1_best = round(interval_1["t_armeret_mm_min"])
+            t_1_str = (
+                f"{t_1_str}, og under optimale forhold "
+                f"helt ned til <b>{t_1_best} mm</b>"
+            )
         msg = (
-            f"Bedste opnåelige bærelagstykkelse med 1 lag geonet er "
-            f"<b>{bedste_1['t_armeret_mm']:.0f} mm</b> "
-            f"({_navne_kort(bedste_1)}). "
+            f"Mindst mulige bærelagstykkelse med 1 lag geonet er "
+            f"{t_1_str} ({_navne_kort(bedste_1)}). "
             f"Ved opbygninger over 500 mm kan der med fordel anvendes "
             f"2 lag net for yderligere reduktion"
         )
         if bedste_2 is not None:
-            msg += (
-                f" — her: <b>{bedste_2['t_armeret_mm']:.0f} mm</b> "
-                f"({_navne_kort(bedste_2)})."
+            interval_2 = next(
+                (p for p in bedste_2.get("produkter", [])
+                 if p.get("t_armeret_mm_min") is not None),
+                None,
             )
+            t_2_str = f"<b>{bedste_2['t_armeret_mm']:.0f} mm</b>"
+            if interval_2 is not None:
+                t_2_best = round(interval_2["t_armeret_mm_min"])
+                t_2_str = (
+                    f"{t_2_str}, og under optimale forhold "
+                    f"<b>{t_2_best} mm</b>"
+                )
+            msg += f" — her: {t_2_str} ({_navne_kort(bedste_2)})."
         else:
             msg += " (ikke gyldigt for denne kombination)."
         anbefalinger.append(msg)
 
     if bedste_2 is not None and bedste_2["t_armeret_mm"] < 400:
         msg = (
-            f"Bedste opnåelige tykkelse med 2 lag geonet er kun "
+            f"Mindst mulige tykkelse med 2 lag geonet er kun "
             f"<b>{bedste_2['t_armeret_mm']:.0f} mm</b>. "
             f"1 lag geonet er sandsynligvis tilstrækkeligt for denne belastning"
         )
@@ -1236,13 +1547,13 @@ def _render_oversigt_expanders(
         st.markdown("""
 Trinvis beregning, baseret på designmanualer og intern forsøgsdata fra Byggros:
 
-Der beregnes en bærelagstykkelse ud fra 1 eller 2 lag armering med udgangspunkt i et referencenet.
+Der beregnes en bærelagstykkelse ud fra 1 eller 2 lag armering med udgangspunkt i et referencenet (Tensar TriAx TX160, GS-GRID SX160 eller E'GRID T6).
 Den beregnede bærelagstykkelse korrigeres for friktionsvinkler forskellig fra φ = 35° samt effektindeks af forskellige geonet.
 
 1. **Bundmodulet Eu** vælges eller beregnes via sammenhæng med Cv
 2. **Krav til overflademodulet Eo** vælges alt efter belastningsklasse
-3. **Opslag i designdiagrammerne** i forhold til valg af bund- og overflademodul, til fastlæggelse af bærelagstykkelse — uarmeret og armeret med 1–2 lag geonet.
-   Diagramtabellerne indeholder færdige Eu-opslag, så beregningen bruger værdierne direkte.
+3. **Opslag i designdiagrammerne** foretages på baggrund af valg af bund- og overflademodul, hvor bærelagstykkelsen bestemmes - uarmeret og armeret med 1–2 lag geonet.
+   Der er lavet forudgående interpolation imellem designdiagrammerns tabelværdier, for at danne en komplet tabel for hvert designdiagram. 
 4. **På baggrund af opslaget bestemmes basistykkelsen T_basis:**
    - Uarmeret: *xx mm*
    - 1 lag armering (referencenet): *xx mm*
@@ -1276,7 +1587,6 @@ Den beregnede bærelagstykkelse korrigeres for friktionsvinkler forskellig fra �
 
    **T_armeret = T_basis × (1 + φ-kor + net-kor)**
 
-_Kilde: GS-GRID Designmanual og Tensar Designmanual, samt interne forsøgsdata fra Byggros_
         """)
 
 
@@ -1322,7 +1632,7 @@ def _render_breakdown_tabel(
             pct_str = f"{red_pct:.0%}"
             red_html = (
                 f'<span style="color:{GRØN};font-size:0.85em;margin-left:10px">'
-                f'↓ {red_mm:.0f} mm fra uarmeret ({pct_str})'
+                f'Reduceres ↓ {red_mm:.0f} mm fra uarmeret ({pct_str})'
                 f'</span>'
             )
         result_html = (
@@ -1341,6 +1651,48 @@ def _render_breakdown_tabel(
         f'padding:0.75rem 1rem;border:1px solid #C8E6C9;margin-bottom:0.5rem">'
         f'{result_lines}'
         f'{result_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_breakdown_best_case(
+    eu: float,
+    eo: float,
+    phi: float,
+    lag_mode: str,
+    kor_best: float,
+    t_konservativ: float | None,
+    t_uarm: float | None,
+    t_basis_table: dict | None,
+) -> None:
+    """
+    Vis en best-case-linje under breakdown-tabellen for interval-produkter
+    (NX750/NX850). Tabellen ovenfor viser den konservative ende; her vises
+    hvad samme beregning giver med best-case-korrektionen.
+    """
+    res = beregn(
+        eu=eu, eo=eo, phi=phi, net_korrektion=kor_best,
+        lag_mode=lag_mode, t_basis_table=t_basis_table,
+    )
+    if res.get("fejl") is not None:
+        return
+    t_best = res.get("t_armeret_mm")
+    if t_best is None or t_konservativ is None:
+        return
+    kor_pct = _dk_num(kor_best * 100, "+.0f")
+    if t_uarm and t_uarm > 0:
+        red_mm = round(t_uarm - t_best)
+        red_pct = (t_uarm - t_best) / t_uarm
+        reduktion_txt = f" (Reduceres ↓ {red_mm} mm fra uarmeret, {red_pct:.0%})"
+    else:
+        reduktion_txt = ""
+    st.markdown(
+        f'<div style="font-size:0.85rem;color:#444;'
+        f'padding:4px 10px 0 10px;margin-top:-6px">'
+        f'Best case (effektindeks i øvre ende, net-kor {kor_pct} %): '
+        f'<b>{t_best:.0f} mm</b>{reduktion_txt} — '
+        f'interval: <b>{t_best:.0f}–{t_konservativ:.0f} mm</b>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -1372,6 +1724,7 @@ def _vis_beregnings_breakdown(
         net_navn_1 = geonet_navn or geonet["navn"]
         net_navn_2 = net_navn_1
         note = None
+        interval = geonet.get("korrektion_interval")
     else:
         # Oversigt-mode: brug bedste produkt per lag-mode
         if bedste_1 is not None and bedste_1.get("produkter"):
@@ -1390,6 +1743,7 @@ def _vis_beregnings_breakdown(
             "Net-korrektionen vist her gælder det bedst reducerende produkt. "
             "Andre produkter har andre korrektioner — se kolonnerne ovenfor."
         )
+        interval = None
 
     # Kald beregn() med de relevante net-korrektioner
     ref_uarm = beregn(
@@ -1456,6 +1810,11 @@ def _vis_beregnings_breakdown(
                 red_mm_1  = (t_uarm_final - t_1_final) if (t_uarm_final and t_1_final) else None
                 red_pct_1 = (red_mm_1 / t_uarm_final)  if (red_mm_1 and t_uarm_final)  else None
                 _render_breakdown_tabel(rows_1, t_1_final, t_uarm_final, red_mm_1, red_pct_1)
+                if interval is not None:
+                    _render_breakdown_best_case(
+                        eu, eo, phi, "1_lag", interval[0],
+                        t_1_final, t_uarm_final, t_basis_table,
+                    )
             else:
                 st.caption("Ingen gyldigt 1-lag resultat for denne kombination.")
 
@@ -1484,6 +1843,11 @@ def _vis_beregnings_breakdown(
                 red_mm_2  = (t_uarm_final - t_2_final) if (t_uarm_final and t_2_final) else None
                 red_pct_2 = (red_mm_2 / t_uarm_final)  if (red_mm_2 and t_uarm_final)  else None
                 _render_breakdown_tabel(rows_2, t_2_final, t_uarm_final, red_mm_2, red_pct_2)
+                if interval is not None:
+                    _render_breakdown_best_case(
+                        eu, eo, phi, "2_lag", interval[0],
+                        t_2_final, t_uarm_final, t_basis_table,
+                    )
             else:
                 st.caption("Ingen gyldigt 2-lag resultat for denne kombination.")
 
@@ -1575,6 +1939,7 @@ def render_standard() -> None:
     st.divider()
     _render_oversigt_expanders(
         eu, eo, valgt_klasse, bedste_1, bedste_2,
+        ref_1=ref_1, ref_2=ref_2,
         t_basis_table=t_basis_table,
     )
 
@@ -2044,6 +2409,30 @@ def render_brugerdefineret() -> None:
         bedste_1 = _resultat_til_gruppe(res_1, geonet, valgt_klasse)
         bedste_2 = _resultat_til_gruppe(res_2, geonet, valgt_klasse)
 
+        # Interval-produkter (NX750/NX850): kør beregn() en ekstra gang med
+        # best-case-korrektionen og berig produkt-dict'en med min/max-felter.
+        interval = geonet.get("korrektion_interval") if geonet else None
+        if interval is not None:
+            kor_best, kor_kons = interval
+            for gruppe, lag_mode in ((bedste_1, "1_lag"), (bedste_2, "2_lag")):
+                if gruppe is None or not gruppe.get("produkter"):
+                    continue
+                res_best = beregn(
+                    eu=eu, eo=eo, phi=phi, net_korrektion=kor_best,
+                    lag_mode=lag_mode, t_basis_table=t_basis_table,
+                )
+                if res_best.get("fejl") is not None:
+                    continue
+                produkt = gruppe["produkter"][0]
+                produkt["korrektion_min"] = kor_best
+                produkt["korrektion_max"] = kor_kons
+                produkt["t_armeret_mm_min"] = res_best.get("t_armeret_mm")
+                produkt["t_armeret_mm_max"] = produkt["t_armeret_mm"]
+                produkt["reduktion_mm_min"] = produkt.get("reduktion_mm")
+                produkt["reduktion_mm_max"] = res_best.get("reduktion_mm")
+                produkt["reduktion_pct_min"] = produkt.get("reduktion_pct")
+                produkt["reduktion_pct_max"] = res_best.get("reduktion_pct")
+
         t_uarm = None
         for r in (res_1, res_2):
             if not r.get("fejl") and r.get("t_uarmeret_mm") is not None:
@@ -2092,6 +2481,7 @@ def render_brugerdefineret() -> None:
     st.divider()
     _render_oversigt_expanders(
         eu, eo, valgt_klasse, bedste_1, bedste_2,
+        ref_1=ref_1, ref_2=ref_2,
         phi=phi,
         geonet=geonet,
         geonet_navn=geonet_navn,
@@ -2174,7 +2564,11 @@ def render_geonet_database() -> None:
             "Serie":                 g["serie"],
             "Type":                  g.get("type", "—"),
             "Effektindeks":          g.get("effektindeks", "—"),
-            "Korrektions-\nfaktor":  f"{g['korrektion']:+.0%}",
+            "Korrektions-\nfaktor": (
+                f"{g['korrektion_interval'][0]:+.0%} til {g['korrektion_interval'][1]:+.0%}"
+                if g.get("korrektion_interval") is not None
+                else f"{g['korrektion']:+.0%}"
+            ),
             "BK":                    ", ".join(str(k) for k in g["klasser"]),
             "Min. dæklag\n(cm)":     g["min_daklag"],
             "Maks. korn\n(datablad mm)": f"{g['max_korn']}" if g["max_korn"] else "—",

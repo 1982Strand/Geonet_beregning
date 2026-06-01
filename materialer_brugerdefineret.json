@@ -1,0 +1,86 @@
+[
+  {
+    "navn": "Bundsand",
+    "lagtype": "Bundsikring",
+    "phi": 35,
+    "max_korn": 8,
+    "anvendelse": "Bundlag, friktionsmateriale"
+  },
+  {
+    "navn": "Bundgrus 0-8",
+    "lagtype": "Bundsikring",
+    "phi": 38,
+    "max_korn": 8,
+    "anvendelse": "Bundsikring"
+  },
+  {
+    "navn": "SG I 0-32",
+    "lagtype": "Bærelag",
+    "phi": 40,
+    "max_korn": 32,
+    "anvendelse": "Stabilgrus, øvre bærelag"
+  },
+  {
+    "navn": "SG II 0-32",
+    "lagtype": "Bærelag",
+    "phi": 40,
+    "max_korn": 32,
+    "anvendelse": "Stabilgrus"
+  },
+  {
+    "navn": "Knust beton 0-32",
+    "lagtype": "Bærelag",
+    "phi": 40,
+    "max_korn": 32,
+    "anvendelse": "Genbrugsmateriale, øvre bærelag"
+  },
+  {
+    "navn": "Skærver 0-32",
+    "lagtype": "Bærelag",
+    "phi": 45,
+    "max_korn": 32,
+    "anvendelse": "Topbærelag, høj kvalitet"
+  },
+  {
+    "navn": "Skærver 0-64",
+    "lagtype": "Bærelag",
+    "phi": 45,
+    "max_korn": 64,
+    "anvendelse": "Bærelag"
+  },
+  {
+    "navn": "Skærver 0-90",
+    "lagtype": "Bærelag",
+    "phi": 45,
+    "max_korn": 90,
+    "anvendelse": "Bærelag (kan også anvendes som bundsikring)"
+  },
+  {
+    "navn": "Skærver 0-120",
+    "lagtype": "Bundsikring",
+    "phi": 45,
+    "max_korn": 120,
+    "anvendelse": "Bundsikring"
+  },
+  {
+    "navn": "Skærver 0-150",
+    "lagtype": "Bundsikring",
+    "phi": 45,
+    "max_korn": 150,
+    "anvendelse": "Bundsikring grov"
+  },
+  {
+    "navn": "Skærver 0-200",
+    "lagtype": "Bundsikring",
+    "phi": 45,
+    "max_korn": 200,
+    "anvendelse": "Bundsikring meget grov"
+  },
+  {
+    "navn": "Skærver 0-250",
+    "lagtype": "Bundsikring",
+    "phi": 45,
+    "max_korn": 250,
+    "anvendelse": "Bundsikring ekstrem"
+  }
+]

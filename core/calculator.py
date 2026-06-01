@@ -245,7 +245,7 @@ def beregn_alle_produkter(
             or belastningsklasse in geonet["klasser"]
         )
 
-        resultater.append({
+        række = {
             "navn": geonet["navn"],
             "serie": geonet["serie"],
             "korrektion": geonet["korrektion"],
@@ -259,7 +259,32 @@ def beregn_alle_produkter(
             "min_daklag": geonet["min_daklag"],
             "max_korn": geonet["max_korn"],
             "fejl": resultat.get("fejl"),
-        })
+        }
+
+        # Interval-produkter (fx Tensar InterAx NX750/NX850): kør beregn()
+        # to gange — én pr. ende af korrektionsintervallet. Den konservative
+        # ende svarer til geonet["korrektion"] og bevares som række["t_armeret_mm"]
+        # så sortering/gruppering forbliver konservativ.
+        interval = geonet.get("korrektion_interval")
+        if interval is not None and resultat.get("fejl") is None:
+            kor_best, kor_kons = interval
+            res_best = beregn(
+                eu=eu, eo=eo, phi=phi,
+                net_korrektion=kor_best,
+                lag_mode=lag_mode,
+                t_basis_table=t_basis_table,
+            )
+            if res_best.get("fejl") is None:
+                række["korrektion_min"] = kor_best
+                række["korrektion_max"] = kor_kons
+                række["t_armeret_mm_min"] = res_best.get("t_armeret_mm")
+                række["t_armeret_mm_max"] = resultat.get("t_armeret_mm")
+                række["reduktion_mm_min"] = resultat.get("reduktion_mm")
+                række["reduktion_mm_max"] = res_best.get("reduktion_mm")
+                række["reduktion_pct_min"] = resultat.get("reduktion_pct")
+                række["reduktion_pct_max"] = res_best.get("reduktion_pct")
+
+        resultater.append(række)
 
     # Sorter: produkter med fejl til sidst, ellers stigende tykkelse
     resultater.sort(key=lambda r: (
@@ -294,11 +319,37 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         if produkt["navn"] in brugte:
             continue
 
+        # Interval-produkter (fx Tensar InterAx NX750/NX850) får hver deres
+        # egen gruppe — deres "X–Y mm"-spænd gælder kun det specifikke produkt
+        # og må ikke sammenblandes med produkter uden interval.
+        if produkt.get("t_armeret_mm_min") is not None:
+            t = produkt["t_armeret_mm"]
+            t_uarm = produkt.get("t_uarmeret_mm")
+            red_pct = (
+                (t_uarm - t) / t_uarm
+                if t_uarm is not None and t_uarm > 0
+                else None
+            )
+            grupper.append({
+                "t_armeret_mm": round(t, 0),
+                "t_armeret_eksakt_mm": round(t, 0),
+                "reduktion_pct": round(red_pct, 4) if red_pct is not None else None,
+                "reduktion_pct_eksakt": round(red_pct, 4) if red_pct is not None else None,
+                "t_basis_arm_mm": produkt.get("t_basis_arm_mm"),
+                "produkter": [produkt],
+                "har_fejl": False,
+                "fejl_besked": None,
+            })
+            brugte.add(produkt["navn"])
+            continue
+
         t = produkt["t_armeret_mm"]
-        # Find alle produkter inden for tolerancen
+        # Find alle produkter inden for tolerancen — interval-produkter ekskluderes
+        # da de allerede er placeret i deres egne grupper ovenfor.
         gruppe_produkter = [
             p for p in gyldige
             if p["navn"] not in brugte
+            and p.get("t_armeret_mm_min") is None
             and abs(p["t_armeret_mm"] - t) <= tolerance_mm
         ]
 
