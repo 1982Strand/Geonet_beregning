@@ -1979,8 +1979,7 @@ def render_standard() -> None:
     eu = input_underbund(key_prefix="std")
     valgt_klasse, _kl_info, eo = input_belastning(key_prefix="std")
     st.caption(
-        "ℹ️ Standard-tilstanden bruger φ = 35°. Produkter uden for den valgte "
-        "belastningsklasse vises med advarsel."
+        "ℹ️ I resultatoversigten vises hvilke belastningsklasser produkterne anbefales til. Der vises en advarsel, hvis et produkt ikke anbefales anvendt til den valgte klasse."
     )
 
     # --- Beregn alt -----------------------------------------------------
@@ -2630,7 +2629,8 @@ def render_sidebar() -> str:
             '<div class="sb-header">'
             '<div class="sb-logo">🏗️</div>'
             '<div class="sb-title">Beregningsværktøj</div>'
-            '<div class="sb-sub">BG Byggros · v1.3</div>'
+            '<div class="sb-sub">BG Byggros · v0.3</div>'
+            '<div class="sb-sub">Udviklet af DST</div>'
             "</div>",
             unsafe_allow_html=True,
         )
@@ -2666,7 +2666,6 @@ def render_geonet_database() -> None:
     st.title("🕸️ Geonet database")
     st.caption(
         "Oversigt over alle geonet-produkter med effektindeks, belastningsklasser og tekniske data. "
-        "Kilde: GS-GRID/E'GRID Designmanual okt. 2025 · Tensar Designmanual sept. 2024 · datablade jun.–okt. 2025."
     )
     st.divider()
 
@@ -2691,7 +2690,7 @@ def render_geonet_database() -> None:
             "Min. dæklag\n(cm)":     g["min_daklag"],
             "Maks. korn\n(datablad mm)": f"{g['max_korn']}" if g["max_korn"] else "—",
             "Anb. tilslag\n(designmanual)": g.get("anbefalet_tilslag") or "—",
-            "Rudeåbning":            g.get("rudeaabning") or "—",
+            "Rudeåbning/maskestørrelse":            g.get("rudeaabning") or "—",
             "Radial stivhed\n(kN/m @ 0,5%)": f"{g['radial_stivhed']}" if g.get("radial_stivhed") else "—",
             "GWP A1–A3\n(kg CO₂/m²)": f"{g['gwp']:.2f}" if g.get("gwp") else "—",
             "Min. levetid":          g.get("min_levetid") or "—",
@@ -2724,8 +2723,8 @@ def render_geonet_database() -> None:
 | **BK** | Anbefalede belastningsklasser (1–6) iflg. designmanualerne. |
 | **Min. dæklag** | Mindste lagtykkelse over geonet (cm) — under dette kan geonettets funktion ikke garanteres. |
 | **Maks. korn (datablad)** | Maksimal kornstørrelse angivet i produktdatabladet (mm). |
-| **Anb. tilslag (designmanual)** | Anbefalet tilslagsstørrelse iflg. dimensioneringsmanual — kan afvige fra databladsgrænse. |
-| **Rudeåbning** | Maskestørrelse/pitch fra designmanual — afgørende for interlock med tilslaget. |
+| **Anb. tilslag (designmanual)** | Anbefalet tilslagsstørrelse iflg. dimensioneringsmanual. |
+| **Rudeåbning** | Maskestørrelse/pitch fra designmanual. |
 | **Radial stivhed** | Radial stivhed ved 0,5 % tøjning (kN/m) — kun tilgængeligt for hexagonale produkter. |
 | **GWP A1–A3** | Klimaaftryk i produktionsfasen (kg CO₂-ækvivalent pr. m²). |
 | **Min. levetid** | Teknisk minimumslevetid angivet i datablad. |
@@ -2743,7 +2742,7 @@ def render_designdiagrammer() -> None:
     st.title("📊 Designdiagrammer")
     st.caption(
         "Designdiagrammer fra designmanualerne, samt redigerbare diagramdata. "
-        "Beregningerne bruger tabellerne direkte som opslag."
+        "Beregningerne bruger tabellerne direkte som opslag, da der er lavet forudgående interpolation imellem værdier fra de originale designdiagrammer."
     )
     if st.button("Nulstil diagramdata til standard", type="secondary"):
         slet_designdiagrammer_json_og_nulstil()
@@ -2837,7 +2836,7 @@ def render_designdiagrammer() -> None:
 def render_materialer() -> None:
     st.title("🪨 Materialer")
     st.caption(
-        "Redigér materialebasen. Ændringer gemmes automatisk og slår igennem "
+        "Anvend standard materialerne til dimensioneringen, eller indtast egne materialer. Ændringer gemmes automatisk og anvendes ved beregninger "
         "i Brugerdefineret-tilstand."
     )
     st.divider()
@@ -2954,9 +2953,9 @@ if aktiv_side == "dimensionering":
         key="tilstand",
         help=(
             "**Standard:** Vælg Eu/Cv og belastningsklasse — få en oversigt over "
-            "alle geonet-produkter med deres opnåelige bærelagstykkelse (φ = 35°).  \n"
-            "**Brugerdefineret:** Vælg ét produkt med op til 3 materialelag, "
-            "vægtet φ og manuel overstyring."
+            "alle geonet-produkter med deres opnåelige bærelagstykkelse.  \n"
+            "**Brugerdefineret:** Få en oversigt over alle produkter, eller vælg ét produkt med op til 3 materialelag, "
+            "med beregning af vægtet friktionsvinkel"
         ),
     )
 
