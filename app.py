@@ -2510,6 +2510,8 @@ def render_brugerdefineret() -> None:
 
     if not specifikt_mode:
         # OVERSIGT-MODE — som Standard, men med custom phi
+        # Rapport kræver et specifikt valgt produkt — ryd evt. tidligere stash.
+        st.session_state.pop("sidste_dim", None)
 
         alle_fejler_1 = all(p["fejl"] for p in prod_1lag)
         alle_fejler_2 = all(p["fejl"] for p in prod_2lag)
@@ -2607,7 +2609,16 @@ def render_brugerdefineret() -> None:
 
         if haard_fejl_specifikt:
             vis_fejl(haard_fejl_specifikt)
+            st.session_state.pop("sidste_dim", None)
         else:
+            # Stash til Rapport-siden
+            st.session_state["sidste_dim"] = {
+                "eu": eu, "eo": eo, "valgt_klasse": valgt_klasse,
+                "phi": phi, "materialer": materialer,
+                "geonet": geonet, "geonet_navn": geonet_navn,
+                "res_1": res_1, "res_2": res_2,
+                "t_uarmeret_mm": t_uarm,
+            }
             if t_uarm is not None:
                 _render_uarm_banner_bd(t_uarm, phi)
             else:
@@ -2662,6 +2673,7 @@ _NAV_ITEMS = [
     ("🪨", "Materialer",        "materialer"),
     ("🕸️", "Geonet database",  "geonet_database"),
     ("📊", "Designdiagrammer",  "designdiagrammer"),
+    ("📄", "Rapport",            "rapport"),
 ]
 
 
@@ -2996,6 +3008,258 @@ def render_materialer() -> None:
         gem_materialer(ny_liste)
 
 
+def render_rapport() -> None:
+    """Rapport-side — generér Word/PDF ud fra den seneste dimensionering."""
+    from datetime import date as _date
+
+    from core import rapport as rapport_mod
+
+    st.title("📄 Rapport")
+    st.caption(
+        "Generér en notat-rapport (Word og PDF) baseret på den seneste "
+        "dimensionering. Standardtekster kan redigeres pr. rapport."
+    )
+    st.divider()
+
+    sd = st.session_state.get("sidste_dim")
+    if not sd or not sd.get("geonet"):
+        st.info(
+            "Du skal først foretage en dimensionering med et specifikt valgt "
+            "geonet, før rapporten kan genereres.\n\n"
+            "Gå til **Dimensionering → Brugerdefineret**, vælg "
+            "**Vælg specifikt produkt**, og udfyld inputtene."
+        )
+        if st.button("Gå til Dimensionering", type="primary"):
+            st.session_state.aktiv_side = "dimensionering"
+            st.rerun()
+        return
+
+    # Opsummering af det aktuelle beregningsgrundlag
+    st.success(
+        f"**Rapport baseret på:**  Eu = {sd['eu']:g} MPa  ·  "
+        f"Klasse {sd['valgt_klasse']} (Eo = {sd['eo']:g} MPa)  ·  "
+        f"Produkt: **{sd['geonet_navn']}**  ·  φ = {sd['phi']:.1f}°"
+    )
+
+    # --- A. Metadata --------------------------------------------------------
+    st.subheader("A. Projekt-oplysninger")
+    md_state = st.session_state.setdefault("rapport_metadata", {
+        "projekt": "", "beskrivelse": "", "omfang": "",
+        "udfoeres_for": "", "sagsbehandler": "",
+        "rapportnr": "", "dato": _date.today().isoformat(),
+    })
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        md_state["projekt"] = st.text_input(
+            "Projekt", value=md_state.get("projekt", ""), key="rap_projekt",
+        )
+        md_state["omfang"] = st.text_input(
+            "Omfang", value=md_state.get("omfang", ""), key="rap_omfang",
+        )
+        md_state["sagsbehandler"] = st.text_input(
+            "Sagsbehandler", value=md_state.get("sagsbehandler", ""),
+            key="rap_sagsbehandler",
+        )
+        md_state["rapportnr"] = st.text_input(
+            "Rapport-nr.", value=md_state.get("rapportnr", ""),
+            key="rap_rapportnr",
+        )
+    with col_b:
+        md_state["beskrivelse"] = st.text_area(
+            "Beskrivelse", value=md_state.get("beskrivelse", ""),
+            key="rap_beskrivelse", height=80,
+        )
+        md_state["udfoeres_for"] = st.text_input(
+            "Udføres for", value=md_state.get("udfoeres_for", ""),
+            key="rap_udfoeres_for",
+        )
+        valgt_dato = st.date_input(
+            "Dato",
+            value=_date.fromisoformat(md_state.get("dato")) if md_state.get("dato") else _date.today(),
+            key="rap_dato",
+        )
+        md_state["dato"] = valgt_dato.isoformat() if hasattr(valgt_dato, "isoformat") else str(valgt_dato)
+
+    st.divider()
+
+    # --- B. Dimensioneringsgrundlag — fritekst -----------------------------
+    st.subheader("B. Dimensioneringsgrundlag (fritekst)")
+    st.caption(
+        "De automatiske felter (Eu, Eo, klasse, materialer, φ, geonet) fylder "
+        "tabellen i rapporten. Brug feltet herunder til oplysninger der "
+        "mangler — fx grundvandsspejlets placering eller særlige forhold."
+    )
+    grundlag_ekstra = st.session_state.setdefault(
+        "rapport_grundlag_ekstra",
+        "Grundvandsspejl: ikke oplyst",
+    )
+    grundlag_ekstra = st.text_area(
+        "Yderligere oplysninger",
+        value=grundlag_ekstra,
+        height=120,
+        key="rap_grundlag_ekstra_widget",
+    )
+    st.session_state["rapport_grundlag_ekstra"] = grundlag_ekstra
+
+    st.divider()
+
+    # --- C. Redigerbare skabelon-sektioner ---------------------------------
+    st.subheader("C. Skabelon-tekster")
+    st.caption(
+        "Standardteksterne fra BG Byggros eksempelrapport er forudfyldt. "
+        "Du kan redigere dem pr. rapport — eller nulstille til standard."
+    )
+    tekster_state = st.session_state.setdefault("rapport_tekster", {})
+
+    for nøgle in rapport_mod.SECTION_KEYS:
+        titel = rapport_mod.SECTION_TITLER[nøgle]
+        std = rapport_mod.STANDARD_TEKSTER[nøgle]
+        nuvaerende = tekster_state.get(nøgle, std)
+        with st.expander(titel, expanded=False):
+            kol_l, kol_r = st.columns([5, 1])
+            with kol_r:
+                if st.button("🔄 Nulstil", key=f"rap_reset_{nøgle}",
+                             width="stretch"):
+                    tekster_state[nøgle] = std
+                    st.rerun()
+            ny_tekst = st.text_area(
+                "Tekst", value=nuvaerende, height=220,
+                key=f"rap_tekst_{nøgle}", label_visibility="collapsed",
+            )
+            tekster_state[nøgle] = ny_tekst
+
+    st.divider()
+
+    # --- D. Visualiseringsvalg + preview -----------------------------------
+    st.subheader("D. Visualisering")
+
+    res_1 = sd.get("res_1") or {}
+    res_2 = sd.get("res_2") or {}
+    t_1 = res_1.get("t_armeret_mm") if not res_1.get("fejl") else None
+    t_2 = res_2.get("t_armeret_mm") if not res_2.get("fejl") else None
+    t_uarm = sd.get("t_uarmeret_mm")
+
+    uarm_muligt = t_uarm is not None
+    to_lag_muligt = t_1 is not None and t_1 >= 500.0
+
+    kol_v1, kol_v2, kol_v3 = st.columns(3)
+    with kol_v1:
+        vis_uarm = st.checkbox(
+            "Uarmeret opbygning",
+            value=uarm_muligt,
+            disabled=not uarm_muligt,
+            key="rap_vis_uarm",
+            help=(
+                None if uarm_muligt
+                else "Uarmeret tykkelse er ikke defineret for denne "
+                     "Eu/Eo-kombination."
+            ),
+        )
+    with kol_v2:
+        vis_1lag = st.checkbox(
+            "1 lag geonet",
+            value=t_1 is not None,
+            disabled=t_1 is None,
+            key="rap_vis_1lag",
+        )
+    with kol_v3:
+        vis_2lag = st.checkbox(
+            "2 lag geonet",
+            value=to_lag_muligt,
+            disabled=not to_lag_muligt,
+            key="rap_vis_2lag",
+            help=(
+                None if to_lag_muligt
+                else "2 lag geonet anvendes kun ved opbygninger ≥ 500 mm "
+                     "(beregnet 1-lag tykkelse) — derfor ikke relevant her."
+            ),
+        )
+
+    geonet = sd.get("geonet") or {}
+    geonet_label = geonet.get("navn", "Geonet")
+
+    snit_liste: list[rapport_mod.Snit] = []
+    if vis_uarm and uarm_muligt:
+        snit_liste.append(rapport_mod.Snit(
+            titel="Uarmeret", t_baerelag_mm=t_uarm,
+            geonet_y_fracs=[],
+        ))
+    if vis_1lag and t_1 is not None:
+        snit_liste.append(rapport_mod.Snit(
+            titel="1 lag geonet", t_baerelag_mm=t_1,
+            geonet_y_fracs=[0.99],
+        ))
+    if vis_2lag and t_2 is not None and to_lag_muligt:
+        snit_liste.append(rapport_mod.Snit(
+            titel="2 lag geonet", t_baerelag_mm=t_2,
+            geonet_y_fracs=[0.5, 0.99],
+        ))
+
+    if not snit_liste:
+        st.warning(
+            "Vælg mindst ét snit (uarmeret / 1 lag / 2 lag) for at kunne "
+            "generere rapporten."
+        )
+        visu_png: bytes | None = None
+    else:
+        visu_png = rapport_mod.render_opbygning_png(
+            eu=sd["eu"], snit_liste=snit_liste, geonet_label=geonet_label,
+        )
+        st.image(visu_png, caption="Preview af opbygnings-visualisering")
+
+    st.divider()
+
+    # --- E. Generér rapport -----------------------------------------------
+    st.subheader("E. Generér rapport")
+
+    rapport_data = {
+        "metadata": dict(md_state),
+        "dim": sd,
+        "tekster": dict(tekster_state),
+        "grundlag_ekstra": grundlag_ekstra,
+        "visualisering_png": visu_png,
+    }
+
+    filnavn_base = (
+        md_state.get("projekt") or "MSL-rapport"
+    ).strip().replace("/", "-").replace("\\", "-")[:60] or "MSL-rapport"
+    dato_kort = md_state.get("dato", "")
+    filnavn_base = f"Dimensionering - {filnavn_base} - {dato_kort}".rstrip(" -")
+
+    klar = snit_liste is not None and len(snit_liste) > 0
+
+    kol_d1, kol_d2 = st.columns(2)
+    with kol_d1:
+        if klar:
+            docx_bytes = rapport_mod.byg_rapport_docx(rapport_data)
+            st.download_button(
+                "📄 Hent som Word (.docx)",
+                data=docx_bytes,
+                file_name=f"{filnavn_base}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                width="stretch",
+                type="primary",
+            )
+        else:
+            st.button("📄 Hent som Word (.docx)",
+                      disabled=True, width="stretch")
+    with kol_d2:
+        if klar:
+            pdf_bytes = rapport_mod.byg_rapport_pdf(rapport_data)
+            st.download_button(
+                "📄 Hent som PDF (.pdf)",
+                data=pdf_bytes,
+                file_name=f"{filnavn_base}.pdf",
+                mime="application/pdf",
+                width="stretch",
+                type="primary",
+            )
+        else:
+            st.button("📄 Hent som PDF (.pdf)",
+                      disabled=True, width="stretch")
+
+
 # ===========================================================================
 # Top-level layout — sidebar + routing
 # ===========================================================================
@@ -3006,7 +3270,7 @@ if aktiv_side == "dimensionering":
     st.title("🏗️ Dimensionering")
     st.caption(
         "Beregning af bærelagstykkelse med og uden geonetarmering "
-        "· Baseret på BG Byggros designmanualer for Tensar og GS-GRID, samt interne forsøgsdata"
+        "· Baseret på BG Byggros designmanualer til Tensar og GS-GRID, samt interne forsøgsdata"
     )
 
     tilstand = st.radio(
@@ -3022,10 +3286,16 @@ if aktiv_side == "dimensionering":
         ),
     )
 
-    st.caption(
-        "I standardberegningen forudsættes 1 homogent bærelag med en forudsat "
-        "friktionsvinkel på φ = 35°."
-    )
+    if tilstand == "Standard":
+        st.caption(
+            "I standardberegningen forudsættes 1 homogent bærelag med en forudsat "
+            "friktionsvinkel på φ = 35°."
+        )
+    else:
+        st.caption(
+            "I den brugerdefinerede beregning kan du selv sammensætte op til "
+            "3 materialelag, med forskellige friktionsvinkler og egenskaber."
+        )
 
     st.divider()
 
@@ -3042,3 +3312,6 @@ elif aktiv_side == "geonet_database":
 
 elif aktiv_side == "designdiagrammer":
     render_designdiagrammer()
+
+elif aktiv_side == "rapport":
+    render_rapport()
