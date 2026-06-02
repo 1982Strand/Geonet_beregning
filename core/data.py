@@ -556,50 +556,59 @@ CV_TIL_EU = [
 #    phi: friktionsvinkel i grader
 #    max_korn: maksimal kornstørrelse i mm
 #    lagtype: "Bærelag" | "Bundsikring"
+#    krav_maskestoerrelse_mm: minimum kvadratisk maskestørrelse (mm) som
+#        materialet kræver af et biaksialt geonet. None = intet krav.
+#        Bruges kun til biaksiale net (se valider_input A14).
 # ---------------------------------------------------------------------------
 
 MATERIAL_DB = [
     {
-        "navn": "Bundsand",
+        "navn": "Bundsikringssand",
         "phi": 35,
         "max_korn": 8,
         "lagtype": "Bundsikring",
-        "anvendelse": "Bundlag, friktionsmateriale",
+        "anvendelse": "Frostsikring og drænlag",
+        "krav_maskestoerrelse_mm": 35,
     },
     {
-        "navn": "Bundgrus 0-80",
+        "navn": "Bundgrus 0-8",
         "phi": 38,
-        "max_korn": 80,
+        "max_korn": 8,
         "lagtype": "Bundsikring",
-        "anvendelse": "Bundsikring",
+        "anvendelse": "Frostsikring og drænlag",
+        "krav_maskestoerrelse_mm": 65,
     },
     {
-        "navn": "SG I 0-32",
+        "navn": "Stabilgrus SGI 0-32",
         "phi": 40,
         "max_korn": 32,
         "lagtype": "Bærelag",
-        "anvendelse": "Stabilgrus, øvre bærelag",
+        "anvendelse": "Bærelag",
+        "krav_maskestoerrelse_mm": 35,
     },
     {
-        "navn": "SG II 0-32",
+        "navn": "Stabilgrus SGII 0-32",
         "phi": 40,
         "max_korn": 32,
         "lagtype": "Bærelag",
-        "anvendelse": "Stabilgrus",
+        "anvendelse": "Bærelag",
+        "krav_maskestoerrelse_mm": 35,
     },
     {
         "navn": "Knust beton 0-32",
         "phi": 40,
         "max_korn": 32,
         "lagtype": "Bærelag",
-        "anvendelse": "Genbrugsmateriale, øvre bærelag",
+        "anvendelse": "Genbrugsmateriale, bærelag",
+        "krav_maskestoerrelse_mm": 35,
     },
     {
         "navn": "Skærver 0-32",
         "phi": 45,
         "max_korn": 32,
         "lagtype": "Bærelag",
-        "anvendelse": "Topbærelag, høj kvalitet",
+        "anvendelse": "Bærelag",
+        "krav_maskestoerrelse_mm": 35,
     },
     {
         "navn": "Skærver 0-64",
@@ -607,6 +616,7 @@ MATERIAL_DB = [
         "max_korn": 64,
         "lagtype": "Bærelag",
         "anvendelse": "Bærelag",
+        "krav_maskestoerrelse_mm": 35,
     },
     {
         "navn": "Skærver 0-90",
@@ -614,6 +624,7 @@ MATERIAL_DB = [
         "max_korn": 90,
         "lagtype": "Bærelag",
         "anvendelse": "Bærelag (kan også anvendes som bundsikring)",
+        "krav_maskestoerrelse_mm": 65,
     },
     {
         "navn": "Skærver 0-120",
@@ -621,6 +632,7 @@ MATERIAL_DB = [
         "max_korn": 120,
         "lagtype": "Bundsikring",
         "anvendelse": "Bundsikring",
+        "krav_maskestoerrelse_mm": 65,
     },
     {
         "navn": "Skærver 0-150",
@@ -628,6 +640,7 @@ MATERIAL_DB = [
         "max_korn": 150,
         "lagtype": "Bundsikring",
         "anvendelse": "Bundsikring grov",
+        "krav_maskestoerrelse_mm": 65,
     },
     {
         "navn": "Skærver 0-200",
@@ -635,6 +648,7 @@ MATERIAL_DB = [
         "max_korn": 200,
         "lagtype": "Bundsikring",
         "anvendelse": "Bundsikring meget grov",
+        "krav_maskestoerrelse_mm": 100,
     },
     {
         "navn": "Skærver 0-250",
@@ -642,6 +656,7 @@ MATERIAL_DB = [
         "max_korn": 250,
         "lagtype": "Bundsikring",
         "anvendelse": "Bundsikring ekstrem",
+        "krav_maskestoerrelse_mm": 100,
     },
 ]
 
@@ -819,6 +834,7 @@ GEONET_DB = [
         "max_korn": 64,
         "anbefalet_tilslag": "0–80 mm",
         "rudeaabning": "37×37 mm",
+        "maskestoerrelse_mm": 37,
         "min_daklag": 20,
         "klasser": [1, 2, 3],
         "radial_stivhed": None,
@@ -855,6 +871,7 @@ GEONET_DB = [
         "max_korn": 64,
         "anbefalet_tilslag": "0–80 mm",
         "rudeaabning": "35×35 mm",
+        "maskestoerrelse_mm": 35,
         "min_daklag": 20,
         "klasser": [3, 4, 5],
         "radial_stivhed": None,
@@ -873,6 +890,7 @@ GEONET_DB = [
         "max_korn": 120,
         "anbefalet_tilslag": "0–150 mm",
         "rudeaabning": "65×65 mm",
+        "maskestoerrelse_mm": 65,
         "min_daklag": 40,
         "klasser": [3, 4, 5],
         "radial_stivhed": None,
@@ -891,6 +909,7 @@ GEONET_DB = [
         "max_korn": 200,
         "anbefalet_tilslag": "0–200 mm",
         "rudeaabning": "100×100 mm",
+        "maskestoerrelse_mm": 100,
         "min_daklag": 60,
         "klasser": [4, 5, 6],
         "radial_stivhed": None,
@@ -909,6 +928,7 @@ GEONET_DB = [
         "max_korn": 64,
         "anbefalet_tilslag": "0–80 mm",
         "rudeaabning": "35×35 mm",
+        "maskestoerrelse_mm": 35,
         "min_daklag": 20,
         "klasser": [4, 5, 6],
         "radial_stivhed": None,
@@ -927,6 +947,7 @@ GEONET_DB = [
         "max_korn": 120,
         "anbefalet_tilslag": "0–150 mm",
         "rudeaabning": "60×60 mm",
+        "maskestoerrelse_mm": 60,
         "min_daklag": 40,
         "klasser": [4, 5, 6],
         "radial_stivhed": None,

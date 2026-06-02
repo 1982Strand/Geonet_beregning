@@ -314,6 +314,25 @@ def valider_input(
                 )
                 break  # én samlet advarsel er nok
 
+    # A14: Materialets krav til geonet-maskestørrelse vs. biaksialt net
+    # Kravet er kun defineret for biaksiale net — triaksiale/hexagonale
+    # springes over indtil kravet er afklaret for disse typer.
+    if (
+        geonet is not None
+        and geonet.get("type") == "Biaxialt"
+        and geonet.get("maskestoerrelse_mm") is not None
+    ):
+        net_maske = geonet["maskestoerrelse_mm"]
+        for idx, lag in enumerate(mat, start=1):
+            krav = lag.get("krav_maskestoerrelse_mm")
+            if krav is not None and krav > net_maske:
+                advarsler.append(
+                    f"Lag {idx} ({lag.get('navn', 'ukendt')}) kræver et "
+                    f"biaksialt geonet med maskestørrelse ≥ {krav} mm, men "
+                    f"'{geonet['navn']}' har {net_maske} mm. "
+                    f"Vælg et net med større maskestørrelse."
+                )
+
     # A13: 2-lag valgt men uarmeret tykkelse er beskeden
     if lag_mode == "2_lag" and t_uarmeret_mm is not None and t_uarmeret_mm < 600:
         advarsler.append(

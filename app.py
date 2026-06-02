@@ -67,6 +67,11 @@ def _standard_materialer() -> list[dict]:
             "lagtype": m.get("lagtype") or "Bærelag",
             "phi": int(m.get("phi") or 35),
             "max_korn": int(m["max_korn"]) if m.get("max_korn") else None,
+            "krav_maskestoerrelse_mm": (
+                int(m["krav_maskestoerrelse_mm"])
+                if m.get("krav_maskestoerrelse_mm")
+                else None
+            ),
             "anvendelse": str(m.get("anvendelse") or ""),
         }
         for m in MATERIAL_DB
@@ -114,11 +119,23 @@ def _normaliser_materiale(raw: dict) -> dict | None:
         if max_korn is not None:
             max_korn = min(max(max_korn, 0), 500) or None
 
+    krav_raw = raw.get("krav_maskestoerrelse_mm")
+    if _er_tom_vaerdi(krav_raw):
+        krav_maske = None
+    else:
+        try:
+            krav_maske = int(round(float(krav_raw)))
+        except (TypeError, ValueError):
+            krav_maske = None
+        if krav_maske is not None:
+            krav_maske = min(max(krav_maske, 0), 500) or None
+
     return {
         "navn": navn,
         "lagtype": lagtype,
         "phi": phi,
         "max_korn": max_korn,
+        "krav_maskestoerrelse_mm": krav_maske,
         "anvendelse": str(raw.get("anvendelse") or "").strip(),
     }
 
@@ -144,6 +161,24 @@ def _duplikerede_materialenavne(materialer: list[dict]) -> list[str]:
     return duplikater
 
 
+def _backfill_fra_standard(materialer: list[dict]) -> list[dict]:
+    """Fyld manglende felter fra MATERIAL_DB når materialets navn matcher.
+
+    Bruges til at migrere gamle gemte JSON-filer der ikke har nye felter
+    (fx krav_maskestoerrelse_mm). Eksisterende værdier overskrives ikke.
+    """
+    standard_by_navn = {m["navn"]: m for m in MATERIAL_DB}
+    for materiale in materialer:
+        std = standard_by_navn.get(materiale.get("navn"))
+        if std is None:
+            continue
+        if materiale.get("krav_maskestoerrelse_mm") is None:
+            std_krav = std.get("krav_maskestoerrelse_mm")
+            if std_krav is not None:
+                materiale["krav_maskestoerrelse_mm"] = int(std_krav)
+    return materialer
+
+
 def indlaes_materialer() -> list[dict]:
     """Indlæs brugerdefinerede materialer. Fallback til MATERIAL_DB."""
     if os.path.exists(MATERIALER_JSON):
@@ -151,7 +186,7 @@ def indlaes_materialer() -> list[dict]:
             with open(MATERIALER_JSON, "r", encoding="utf-8") as f:
                 materialer = _normaliser_materialer(json.load(f))
             if materialer and not _duplikerede_materialenavne(materialer):
-                return materialer
+                return _backfill_fra_standard(materialer)
         except (OSError, json.JSONDecodeError, TypeError):
             pass
     return _standard_materialer()
@@ -2250,12 +2285,19 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                 ltype_i = st.selectbox(
                     "Lagtype", ["Bærelag", "Bundsikring"], key=f"bd_lt_m_{i}"
                 )
+                krav_maske_i = None
             else:
                 phi_i = float(md["phi"])
                 korn_i = md["max_korn"]
                 ltype_i = md["lagtype"]
+                krav_maske_i = md.get("krav_maskestoerrelse_mm")
+                krav_txt = (
+                    f" · krav til geonet maskestørrelse = {krav_maske_i} mm"
+                    if krav_maske_i is not None
+                    else ""
+                )
                 st.caption(
-                    f"φ = {phi_i}° · max korn = {korn_i} mm · {ltype_i}"
+                    f"φ = {phi_i}° · max korn = {korn_i} mm · {ltype_i}{krav_txt}"
                 )
 
             phi_vaerdier.append(phi_i)
@@ -2279,6 +2321,7 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                     "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
                     "lagtype": ltype_i, "tykkelse_mm": float(t_i),
                     "pct": None,
+                    "krav_maskestoerrelse_mm": krav_maske_i,
                 })
             else:
                 pct_default = round(100.0 / antal_lag, 1)
@@ -2291,6 +2334,7 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                     "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
                     "lagtype": ltype_i, "tykkelse_mm": None,
                     "pct": float(p_i),
+                    "krav_maskestoerrelse_mm": krav_maske_i,
                 })
 
     if lag_mode_mat == "mm (absolut)":
@@ -2428,9 +2472,11 @@ def render_brugerdefineret() -> None:
             korn_txt = f"{geonet['max_korn']} mm" if geonet["max_korn"] else "—"
             kl_txt = ", ".join(str(k) for k in geonet["klasser"])
             kor_txt = f"{geonet['korrektion']:+.0%}"
+            rude_txt = geonet.get("rudeaabning") or "—"
             st.caption(
                 f"Serie: **{geonet['serie']}** · Korrektion: {kor_txt} · "
-                f"Max korn: {korn_txt} · Klasser: {kl_txt} · "
+                f"Max korn: {korn_txt} · Rudeåbning/maskestørrelse: {rude_txt} · "
+                f"Belastningsklasser: {kl_txt} · "
                 f"Min dæklag: {geonet['min_daklag']} cm"
             )
             if geonet["navn"] == "Anden armering (manuel)":
@@ -2860,6 +2906,7 @@ def render_materialer() -> None:
                 "lagtype": "Bærelag",
                 "phi": 35,
                 "max_korn": 32,
+                "krav_maskestoerrelse_mm": None,
                 "anvendelse": "",
             })
             gem_materialer(st.session_state["materialer"])
@@ -2873,7 +2920,10 @@ def render_materialer() -> None:
 
     df = pd.DataFrame(
         st.session_state.get("materialer", []),
-        columns=["navn", "lagtype", "phi", "max_korn", "anvendelse"],
+        columns=[
+            "navn", "lagtype", "phi", "max_korn",
+            "krav_maskestoerrelse_mm", "anvendelse",
+        ],
     )
 
     redigeret = st.data_editor(
@@ -2904,6 +2954,19 @@ def render_materialer() -> None:
                 min_value=0,
                 max_value=500,
                 step=1,
+                format="%d",
+                required=False,
+            ),
+            "krav_maskestoerrelse_mm": st.column_config.NumberColumn(
+                "Krav til geonet — maskestørrelse (mm)",
+                help=(
+                    "Minimum kvadratisk maskestørrelse i mm som materialet "
+                    "kræver af et biaksialt geonet. Sammenlignes kun med "
+                    "biaksiale net i Brugerdefineret-tilstand."
+                ),
+                min_value=0,
+                max_value=500,
+                step=5,
                 format="%d",
                 required=False,
             ),
