@@ -20,6 +20,7 @@ st.set_page_config(
 # Imports — efter set_page_config
 # ---------------------------------------------------------------------------
 import json
+import hashlib
 import os
 
 from core.data import (
@@ -3045,9 +3046,11 @@ def render_rapport() -> None:
     st.subheader("A. Projekt-oplysninger")
     md_state = st.session_state.setdefault("rapport_metadata", {
         "projekt": "", "beskrivelse": "", "omfang": "",
-        "udfoeres_for": "", "sagsbehandler": "",
-        "rapportnr": "", "dato": _date.today().isoformat(),
+        "udfoeres_for": "", "sagsbehandler": "", "sagsbehandler_mail": "",
+        "dato": _date.today().isoformat(),
     })
+    # Migrér gamle session-states der ikke har sagsbehandler_mail
+    md_state.setdefault("sagsbehandler_mail", "")
 
     col_a, col_b = st.columns(2)
     with col_a:
@@ -3061,9 +3064,10 @@ def render_rapport() -> None:
             "Sagsbehandler", value=md_state.get("sagsbehandler", ""),
             key="rap_sagsbehandler",
         )
-        md_state["rapportnr"] = st.text_input(
-            "Rapport-nr.", value=md_state.get("rapportnr", ""),
-            key="rap_rapportnr",
+        md_state["sagsbehandler_mail"] = st.text_input(
+            "Sagsbehandler-mail",
+            value=md_state.get("sagsbehandler_mail", ""),
+            key="rap_sagsbehandler_mail",
         )
     with col_b:
         md_state["beskrivelse"] = st.text_area(
@@ -3078,34 +3082,14 @@ def render_rapport() -> None:
             "Dato",
             value=_date.fromisoformat(md_state.get("dato")) if md_state.get("dato") else _date.today(),
             key="rap_dato",
+            format="DD/MM/YYYY",
         )
         md_state["dato"] = valgt_dato.isoformat() if hasattr(valgt_dato, "isoformat") else str(valgt_dato)
 
     st.divider()
 
-    # --- B. Dimensioneringsgrundlag — fritekst -----------------------------
-    st.subheader("B. Dimensioneringsgrundlag (fritekst)")
-    st.caption(
-        "De automatiske felter (Eu, Eo, klasse, materialer, φ, geonet) fylder "
-        "tabellen i rapporten. Brug feltet herunder til oplysninger der "
-        "mangler — fx grundvandsspejlets placering eller særlige forhold."
-    )
-    grundlag_ekstra = st.session_state.setdefault(
-        "rapport_grundlag_ekstra",
-        "Grundvandsspejl: ikke oplyst",
-    )
-    grundlag_ekstra = st.text_area(
-        "Yderligere oplysninger",
-        value=grundlag_ekstra,
-        height=120,
-        key="rap_grundlag_ekstra_widget",
-    )
-    st.session_state["rapport_grundlag_ekstra"] = grundlag_ekstra
-
-    st.divider()
-
-    # --- C. Redigerbare skabelon-sektioner ---------------------------------
-    st.subheader("C. Skabelon-tekster")
+    # --- B. Redigerbare skabelon-sektioner ---------------------------------
+    st.subheader("B. Skabelon-tekster")
     st.caption(
         "Standardteksterne fra BG Byggros eksempelrapport er forudfyldt. "
         "Du kan redigere dem pr. rapport — eller nulstille til standard."
@@ -3131,8 +3115,8 @@ def render_rapport() -> None:
 
     st.divider()
 
-    # --- D. Visualiseringsvalg + preview -----------------------------------
-    st.subheader("D. Visualisering")
+    # --- C. Visualiseringsvalg + preview -----------------------------------
+    st.subheader("C. Visualisering")
 
     res_1 = sd.get("res_1") or {}
     res_2 = sd.get("res_2") or {}
@@ -3210,14 +3194,13 @@ def render_rapport() -> None:
 
     st.divider()
 
-    # --- E. Generér rapport -----------------------------------------------
-    st.subheader("E. Generér rapport")
+    # --- D. Generér rapport -----------------------------------------------
+    st.subheader("D. Generér rapport")
 
     rapport_data = {
         "metadata": dict(md_state),
         "dim": sd,
         "tekster": dict(tekster_state),
-        "grundlag_ekstra": grundlag_ekstra,
         "visualisering_png": visu_png,
     }
 
@@ -3229,35 +3212,107 @@ def render_rapport() -> None:
 
     klar = snit_liste is not None and len(snit_liste) > 0
 
-    kol_d1, kol_d2 = st.columns(2)
-    with kol_d1:
-        if klar:
-            docx_bytes = rapport_mod.byg_rapport_docx(rapport_data)
+    visu_hash = (
+        hashlib.sha256(visu_png).hexdigest()
+        if isinstance(visu_png, bytes)
+        else None
+    )
+    rapport_fingerprint = hashlib.sha256(json.dumps(
+        {
+            "metadata": rapport_data["metadata"],
+            "dim": rapport_data["dim"],
+            "tekster": rapport_data["tekster"],
+            "visualisering_sha256": visu_hash,
+            "filnavn_base": filnavn_base,
+        },
+        sort_keys=True,
+        default=str,
+    ).encode("utf-8")).hexdigest()
+
+    if st.button(
+        "📄 Generér rapport",
+        type="primary",
+        disabled=not klar,
+        width="stretch",
+    ):
+        with st.spinner("Genererer rapport..."):
+            try:
+                docx_bytes = rapport_mod.byg_rapport_docx(rapport_data)
+            except Exception as exc:
+                st.session_state.pop("rapport_genereret", None)
+                st.error(f"Rapportens Word-fil kunne ikke genereres: {exc}")
+            else:
+                pdf_bytes = None
+                pdf_error = None
+
+                try:
+                    pdf_bytes = rapport_mod.konverter_docx_til_pdf(docx_bytes)
+                except Exception as exc:
+                    pdf_error = str(exc)
+
+                st.session_state["rapport_genereret"] = {
+                    "fingerprint": rapport_fingerprint,
+                    "filnavn_base": filnavn_base,
+                    "docx_bytes": docx_bytes,
+                    "pdf_bytes": pdf_bytes,
+                    "pdf_error": pdf_error,
+                }
+
+                if pdf_error:
+                    st.warning(
+                        "Word-rapporten er genereret, men PDF-konverteringen "
+                        f"fejlede: {pdf_error}"
+                    )
+                else:
+                    st.success("Rapporten er genereret.")
+
+    if not klar:
+        st.caption("Vælg mindst ét snit for at kunne generere rapporten.")
+
+    genereret = st.session_state.get("rapport_genereret")
+    rapport_er_aktuel = (
+        genereret
+        and genereret.get("fingerprint") == rapport_fingerprint
+    )
+
+    if genereret and not rapport_er_aktuel:
+        st.info(
+            "Rapportinput er ændret siden sidste generering. Klik "
+            "**Generér rapport** igen for at hente opdaterede filer."
+        )
+
+    if rapport_er_aktuel:
+        if genereret.get("pdf_error"):
+            st.warning(
+                "PDF kunne ikke oprettes automatisk:\n\n"
+                f"`{genereret['pdf_error']}`\n\n"
+                "Du kan altid hente Word-filen herunder og bruge 'Gem som "
+                "PDF' i Word."
+            )
+
+        if genereret.get("pdf_bytes"):
+            kol_d1, kol_d2 = st.columns(2)
+        else:
+            kol_d1 = st.container()
+            kol_d2 = None
+
+        with kol_d1:
             st.download_button(
                 "📄 Hent som Word (.docx)",
-                data=docx_bytes,
-                file_name=f"{filnavn_base}.docx",
+                data=genereret["docx_bytes"],
+                file_name=f"{genereret['filnavn_base']}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 width="stretch",
-                type="primary",
             )
-        else:
-            st.button("📄 Hent som Word (.docx)",
-                      disabled=True, width="stretch")
-    with kol_d2:
-        if klar:
-            pdf_bytes = rapport_mod.byg_rapport_pdf(rapport_data)
-            st.download_button(
-                "📄 Hent som PDF (.pdf)",
-                data=pdf_bytes,
-                file_name=f"{filnavn_base}.pdf",
-                mime="application/pdf",
-                width="stretch",
-                type="primary",
-            )
-        else:
-            st.button("📄 Hent som PDF (.pdf)",
-                      disabled=True, width="stretch")
+        if kol_d2 is not None:
+            with kol_d2:
+                st.download_button(
+                    "📄 Hent som PDF (.pdf)",
+                    data=genereret["pdf_bytes"],
+                    file_name=f"{genereret['filnavn_base']}.pdf",
+                    mime="application/pdf",
+                    width="stretch",
+                )
 
 
 # ===========================================================================
