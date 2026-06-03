@@ -56,8 +56,7 @@ DESIGNDIAGRAMMER_JSON = os.path.join(
     os.path.dirname(__file__),
     "designdiagrammer_brugerdefineret.json",
 )
-MIN_LAGTYKKELSE_MM = 100
-MIN_TOTAL_OPBYGNING_MM = 200
+MIN_LAGTYKKELSE_MM = 200
 
 
 def _standard_materialer() -> list[dict]:
@@ -1155,183 +1154,6 @@ def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str]:
     return navne, dk_str, korn_str
 
 
-def _opbygnings_snit_svg(
-    titel: str,
-    t_baerelag_mm: float | None,
-    mm_per_px: float,
-    eu: float,
-    geonet_y_fracs: list[float],
-    *,
-    geonet_label: str = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6",
-    ikke_defineret: str | None = None,
-    max_baerelag_px: int = 220,
-    best_case_mm: float | None = None,
-) -> str:
-    """Render et enkelt opbygnings-snit som inline SVG.
-
-    Alle snit har samme total-højde (TITEL_H + max_baerelag_px + UNDERBUND_H
-    + BUND_MARGIN), så underbundens bund ligger på samme y-koordinat
-    i alle kolonner — bund-justeret layout.
-
-    geonet_y_fracs er liste af y-positioner (0.0 = top af bærelag,
-    1.0 = bund af bærelag) hvor geonet-linjer skal tegnes.
-
-    ikke_defineret: hvis sat, vises i stedet for et faktisk snit
-    (fx når uarmeret er udenfor tabelområdet).
-    """
-    BOX_X1, BOX_X2 = 78, 252
-    BOX_W = BOX_X2 - BOX_X1
-    TITEL_H = 26
-    UNDERBUND_H = 56
-    BUND_MARGIN = 26
-
-    # Fælles total-højde og underbund-position på tværs af alle snit.
-    h_total = TITEL_H + max_baerelag_px + UNDERBUND_H + BUND_MARGIN
-    underbund_y1 = TITEL_H + max_baerelag_px
-    underbund_y2 = underbund_y1 + UNDERBUND_H
-
-    titel_html = (
-        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="16" '
-        f'font-family="system-ui, sans-serif" font-size="13" '
-        f'font-weight="600" fill="#333" text-anchor="middle">{titel}</text>'
-    )
-
-    if ikke_defineret is not None or t_baerelag_mm is None:
-        # Stiplet placeholder fylder hele bærelags-området så den
-        # alligevel bund-justeres med de andre snit.
-        besked = ikke_defineret or "Ikke defineret"
-        return (
-            f'<svg viewBox="0 0 360 {h_total}" '
-            f'xmlns="http://www.w3.org/2000/svg" '
-            f'style="width:100%;height:auto;max-height:{h_total}px">'
-            f'{titel_html}'
-            f'<rect x="{BOX_X1}" y="{TITEL_H}" width="{BOX_W}" '
-            f'height="{max_baerelag_px}" '
-            f'fill="#F5F5F5" stroke="#BDBDBD" stroke-width="1" '
-            f'stroke-dasharray="4 3"/>'
-            f'<text x="{(BOX_X1 + BOX_X2) / 2}" '
-            f'y="{TITEL_H + max_baerelag_px / 2 + 4}" '
-            f'font-family="system-ui, sans-serif" font-size="12" '
-            f'fill="#888" text-anchor="middle" font-style="italic">{besked}</text>'
-            f'</svg>'
-        )
-
-    baerelag_px = max(40, round(t_baerelag_mm / mm_per_px))
-    baerelag_y2 = underbund_y1
-    baerelag_y1 = baerelag_y2 - baerelag_px
-
-    # ↕ mm-label i venstre side, centreret på bærelagsblokken
-    mm_label_y = (baerelag_y1 + baerelag_y2) / 2
-    mm_label_parts = [
-        f'<text x="38" y="{mm_label_y - 4}" '
-        f'font-family="system-ui, sans-serif" font-size="11" '
-        f'fill="#444" text-anchor="middle">↕</text>',
-        f'<text x="38" y="{mm_label_y + 10}" '
-        f'font-family="system-ui, sans-serif" font-size="12" '
-        f'font-weight="600" fill="#333" text-anchor="middle">'
-        f'{t_baerelag_mm:.0f} mm</text>',
-    ]
-    # Interval-produkter (NX750/NX850): vis best-case under hovedtallet.
-    if best_case_mm is not None and round(best_case_mm) < round(t_baerelag_mm):
-        mm_label_parts.append(
-            f'<text x="38" y="{mm_label_y + 24}" '
-            f'font-family="system-ui, sans-serif" font-size="9" '
-            f'fill="#555" text-anchor="middle">'
-            f'↓ {best_case_mm:.0f} mm</text>'
-            f'<text x="38" y="{mm_label_y + 34}" '
-            f'font-family="system-ui, sans-serif" font-size="8" '
-            f'fill="#777" text-anchor="middle" font-style="italic">'
-            f'under optimale</text>'
-            f'<text x="38" y="{mm_label_y + 43}" '
-            f'font-family="system-ui, sans-serif" font-size="8" '
-            f'fill="#777" text-anchor="middle" font-style="italic">'
-            f'forhold</text>'
-        )
-    mm_label = "".join(mm_label_parts)
-
-    # Geonet-linjer (stiplet, rød) — label vises ved hver linje,
-    # opdelt i flere linjer (splittet på " / ") for læselighed.
-    label_linjer = [s.strip() for s in geonet_label.split("/")]
-    n_linjer = len(label_linjer)
-    linje_h = 11  # px mellem baselines
-    geonet_elems: list[str] = []
-    for frac in geonet_y_fracs:
-        y = baerelag_y1 + frac * baerelag_px
-        geonet_elems.append(
-            f'<line x1="{BOX_X1 - 4}" x2="{BOX_X2 + 4}" '
-            f'y1="{y}" y2="{y}" stroke="{RØD}" stroke-width="2" '
-            f'stroke-dasharray="6 3"/>'
-        )
-        # Centrér label-blokken vertikalt om y (geonet-linjen).
-        første_baseline = y - (n_linjer - 1) * linje_h / 2 + 3
-        tspans = "".join(
-            f'<tspan x="{BOX_X2 + 8}" '
-            f'dy="{0 if i == 0 else linje_h}">{linje}</tspan>'
-            for i, linje in enumerate(label_linjer)
-        )
-        geonet_elems.append(
-            f'<text x="{BOX_X2 + 8}" y="{første_baseline}" '
-            f'font-family="system-ui, sans-serif" font-size="9.5" '
-            f'fill="{RØD}">{tspans}</text>'
-        )
-
-    # Placér "Bærelag"-teksten i den øverste rene strækning af bærelaget
-    # — fra toppen ned til den øverste geonet-linje (eller bunden hvis
-    # der ikke er nogen). Det undgår at teksten overlapper en geonet-linje
-    # i fx 2-lags-snittet, hvor øverste lag står midt i bærelaget.
-    geonet_y_abs = [baerelag_y1 + f * baerelag_px for f in geonet_y_fracs]
-    øverste_geonet_y = min(geonet_y_abs) if geonet_y_abs else baerelag_y2
-    baerelag_tekst_y = (baerelag_y1 + øverste_geonet_y) / 2 + 4
-    underbund_tekst_y = (underbund_y1 + underbund_y2) / 2 + 4
-
-    return (
-        f'<svg viewBox="0 0 360 {h_total}" '
-        f'xmlns="http://www.w3.org/2000/svg" '
-        f'style="width:100%;height:auto;max-height:{h_total}px">'
-        f'<defs>'
-        # Bærelag: lys grå med små prikker
-        f'<pattern id="pat_baerelag" patternUnits="userSpaceOnUse" '
-        f'width="8" height="8">'
-        f'<rect width="8" height="8" fill="#E8E8E8"/>'
-        f'<circle cx="2" cy="2" r="0.9" fill="#9E9E9E"/>'
-        f'<circle cx="6" cy="6" r="0.9" fill="#9E9E9E"/>'
-        f'</pattern>'
-        # Underbund: oliven/brun med diagonale streger
-        f'<pattern id="pat_underbund" patternUnits="userSpaceOnUse" '
-        f'width="9" height="9" patternTransform="rotate(45)">'
-        f'<rect width="9" height="9" fill="#A89377"/>'
-        f'<line x1="0" y1="0" x2="0" y2="9" stroke="#6E5B40" stroke-width="1.2"/>'
-        f'</pattern>'
-        f'</defs>'
-        f'{titel_html}'
-        # Bærelag
-        f'<rect x="{BOX_X1}" y="{baerelag_y1}" width="{BOX_W}" '
-        f'height="{baerelag_px}" fill="url(#pat_baerelag)" '
-        f'stroke="#666" stroke-width="1"/>'
-        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="{baerelag_tekst_y}" '
-        f'font-family="system-ui, sans-serif" font-size="12" '
-        f'font-weight="600" fill="#333" text-anchor="middle">'
-        f'Bærelag</text>'
-        # Underbund
-        f'<rect x="{BOX_X1}" y="{underbund_y1}" width="{BOX_W}" '
-        f'height="{UNDERBUND_H}" fill="url(#pat_underbund)" '
-        f'stroke="#5C4A33" stroke-width="1"/>'
-        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="{underbund_tekst_y - 6}" '
-        f'font-family="system-ui, sans-serif" font-size="11" '
-        f'font-weight="600" fill="#fff" text-anchor="middle">'
-        f'Underbund</text>'
-        f'<text x="{(BOX_X1 + BOX_X2) / 2}" y="{underbund_tekst_y + 9}" '
-        f'font-family="system-ui, sans-serif" font-size="10.5" '
-        f'fill="#fff" text-anchor="middle">'
-        f'Eu = {eu:g} MPa</text>'
-        # mm-label på venstre side
-        f'{mm_label}'
-        # Geonet-linjer ovenpå
-        f'{"".join(geonet_elems)}'
-        f'</svg>'
-    )
-
-
 _REF_VALG = "Referencenet (TX160 / SX160 / T6)"
 
 
@@ -1355,18 +1177,81 @@ def _produkt_t_best(produkter: list[dict] | None, navn: str) -> float | None:
     return None
 
 
+def _sub_lag_skaleret_fra_materialer(
+    materialer: list[dict] | None, total_mm: float | None
+) -> list[dict]:
+    """Returnér materialer skaleret så summen = total_mm.
+
+    Bruger mm-mode (m["tykkelse_mm"]) hvis nogen lag har det sat,
+    ellers pct-mode (m["pct"]). Lag med 0/None bidrag filtreres væk.
+    """
+    if not materialer or not total_mm:
+        return []
+    in_mm_mode = any((m.get("tykkelse_mm") or 0) > 0 for m in materialer)
+    if in_mm_mode:
+        sum_t = sum((m.get("tykkelse_mm") or 0) for m in materialer)
+        if sum_t <= 0:
+            return []
+        return [
+            {
+                "navn": m.get("navn", "Lag"),
+                "tykkelse_mm": (m.get("tykkelse_mm") or 0) * total_mm / sum_t,
+            }
+            for m in materialer if (m.get("tykkelse_mm") or 0) > 0
+        ]
+    sum_p = sum((m.get("pct") or 0) for m in materialer)
+    if sum_p <= 0:
+        return []
+    return [
+        {
+            "navn": m.get("navn", "Lag"),
+            "tykkelse_mm": (m.get("pct") or 0) / sum_p * total_mm,
+        }
+        for m in materialer if (m.get("pct") or 0) > 0
+    ]
+
+
+def _sub_lag_uarmeret_fra_materialer(
+    materialer: list[dict] | None, t_uarm: float | None
+) -> tuple[float | None, list[dict]]:
+    """Uarmeret-snittet: brug brugerens dimensionerede tykkelser (mm-mode).
+    I pct-mode (eller uden materialer) falder vi tilbage på t_uarm-beregningen.
+    """
+    materialer = materialer or []
+    in_mm_mode = any((m.get("tykkelse_mm") or 0) > 0 for m in materialer)
+    if in_mm_mode:
+        lag = [
+            {
+                "navn": m.get("navn", "Lag"),
+                "tykkelse_mm": float(m.get("tykkelse_mm") or 0),
+            }
+            for m in materialer if (m.get("tykkelse_mm") or 0) > 0
+        ]
+        total = sum(l["tykkelse_mm"] for l in lag)
+        return (total if total > 0 else None, lag)
+    return (
+        t_uarm,
+        _sub_lag_skaleret_fra_materialer(materialer, t_uarm) if t_uarm else [],
+    )
+
+
 def _render_opbygningsvisualisering(
     eu: float,
     ref_1: dict | None,
     ref_2: dict | None,
     prod_1lag: list[dict] | None = None,
     prod_2lag: list[dict] | None = None,
+    materialer: list[dict] | None = None,
 ) -> None:
     """Tre opbygnings-snit side om side. Default: referencenettet.
 
     Hvis prod_1lag/prod_2lag er givet, vises en dropdown der lader brugeren
     skifte til et hvilket som helst gyldigt produkt fra resultatlisten.
+
+    Renderes via samme matplotlib-funktion (rapport.render_opbygning_png)
+    som bruges i rapportgenereringen — så preview i dim. og rapport er ens.
     """
+    from core import rapport as rapport_mod
     # ── Find uarmeret-tykkelse (uafhængig af produktvalg) ──────────────
     t_uarm = None
     for r in (ref_1, ref_2):
@@ -1437,8 +1322,6 @@ def _render_opbygningsvisualisering(
     if not kandidater:
         st.caption("Ingen gyldige beregninger at visualisere.")
         return
-    t_max = max(kandidater)
-    mm_per_px = t_max / 220.0
 
     # ── Caption (dynamisk efter valg) ──────────────────────────────────
     if valg == _REF_VALG:
@@ -1453,44 +1336,49 @@ def _render_opbygningsvisualisering(
             f"Højderne er proportionale, så besparelsen ved armering er aflæselig."
         )
 
-    # ── Byg de 3 SVG'er ────────────────────────────────────────────────
-    svg_uarm = _opbygnings_snit_svg(
-        "Uarmeret", t_uarm, mm_per_px, eu, geonet_y_fracs=[],
-        ikke_defineret=(
-            None if t_uarm is not None
+    # ── Byg snit-listen (samme model som rapport-trinnet) ──────────────
+    snit_liste: list[rapport_mod.Snit] = []
+
+    uarm_total, uarm_sub = _sub_lag_uarmeret_fra_materialer(materialer, t_uarm)
+    snit_liste.append(rapport_mod.Snit(
+        titel="Uarmeret",
+        t_baerelag_mm=uarm_total,
+        geonet_y_fracs=[],
+        sub_lag=uarm_sub,
+        ikke_defineret_tekst=(
+            None if uarm_total is not None
             else f"Uarmeret bærelag ikke defineret for Eu = {eu:g} MPa"
         ),
-    )
-    svg_1 = _opbygnings_snit_svg(
-        "1 lag geonet", t_1, mm_per_px, eu,
-        geonet_y_fracs=[0.99] if t_1 is not None else [],
-        ikke_defineret=(
-            None if t_1 is not None
-            else "Ikke gyldigt for denne kombination"
-        ),
-        geonet_label=geonet_label,
-        best_case_mm=t_1_best,
-    )
-    svg_2 = _opbygnings_snit_svg(
-        "2 lag geonet", t_2, mm_per_px, eu,
-        geonet_y_fracs=[0.5, 0.99] if t_2 is not None else [],
-        ikke_defineret=(
-            None if t_2 is not None
-            else "Ikke gyldigt for denne kombination"
-        ),
-        geonet_label=geonet_label,
-        best_case_mm=t_2_best,
-    )
+    ))
 
-    st.markdown(
-        f'<div style="display:flex;gap:16px;justify-content:flex-start;'
-        f'flex-wrap:wrap;max-width:100%">'
-        f'<div style="flex:1 1 320px;max-width:440px">{svg_uarm}</div>'
-        f'<div style="flex:1 1 320px;max-width:440px">{svg_1}</div>'
-        f'<div style="flex:1 1 320px;max-width:440px">{svg_2}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
+    snit_liste.append(rapport_mod.Snit(
+        titel="1 lag geonet",
+        t_baerelag_mm=t_1,
+        geonet_y_fracs=[0.99] if t_1 is not None else [],
+        sub_lag=_sub_lag_skaleret_fra_materialer(materialer, t_1),
+        ikke_defineret_tekst=(
+            None if t_1 is not None else "Ikke gyldigt for denne kombination"
+        ),
+        best_case_mm=t_1_best,
+    ))
+
+    sub_2 = _sub_lag_skaleret_fra_materialer(materialer, t_2)
+    upper_frac = rapport_mod.upper_geonet_frac_for_sub_lag(sub_2)
+    snit_liste.append(rapport_mod.Snit(
+        titel="2 lag geonet",
+        t_baerelag_mm=t_2,
+        geonet_y_fracs=[upper_frac, 0.99] if t_2 is not None else [],
+        sub_lag=sub_2,
+        ikke_defineret_tekst=(
+            None if t_2 is not None else "Ikke gyldigt for denne kombination"
+        ),
+        best_case_mm=t_2_best,
+    ))
+
+    png = rapport_mod.render_opbygning_png(
+        eu=eu, snit_liste=snit_liste, geonet_label=geonet_label,
     )
+    st.image(png)
 
 
 def _render_oversigt_expanders(
@@ -1528,6 +1416,7 @@ def _render_oversigt_expanders(
             _render_opbygningsvisualisering(
                 eu, ref_1, ref_2,
                 prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+                materialer=materialer,
             )
 
     # --- Advarsler -------------------------------------------------------
@@ -2212,6 +2101,19 @@ def _vis_phi_opsummeringsboks(
 
 
 
+def _lag_label(idx: int, antal_lag: int) -> str:
+    """UI-navn på lag-expanderen i C. Materialelag.
+
+    2 lag → Øverste/Nederste. 3 lag → Øverste/Midterste/Nederste.
+    1 lag har ingen indbyrdes position, så vi falder tilbage på 'Lag 1'.
+    """
+    if antal_lag == 2:
+        return "Øverste lag" if idx == 0 else "Nederste lag"
+    if antal_lag == 3:
+        return ("Øverste lag", "Midterste lag", "Nederste lag")[idx]
+    return f"Lag {idx + 1}"
+
+
 def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     """
     C. Materialelag — render input-sektionen og returnér
@@ -2223,24 +2125,24 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
         "Antal lag", min_value=1, max_value=3, value=2, step=1,
         key="bd_antal_lag",
     )
-    lag_mode_mat = st.radio(
-        "Angiv tykkelse som",
-        ["mm (absolut)", "% (andele)"],
-        horizontal=True,
-        key="bd_lag_mode_mat",
-    )
-    if lag_mode_mat == "mm (absolut)":
-        st.caption(
-            f"Hvert lag skal være mindst {MIN_LAGTYKKELSE_MM} mm. "
-            f"Den samlede opbygning skal være mindst {MIN_TOTAL_OPBYGNING_MM} mm."
-        )
+    st.caption(f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm.")
+
+    # Default-opbygning ved første besøg på siden: Stabilgrus SGII 0-32
+    # (øverst, 300 mm) + Bundsikringssand (nederst, 500 mm). Sat via
+    # setdefault så brugerens egne ændringer bevares ved rerun.
+    _DEFAULT_LAG = [
+        ("Stabilgrus SGII 0-32", 300),
+        ("Bundsikringssand", 500),
+    ]
+    for _idx, (_navn, _t) in enumerate(_DEFAULT_LAG):
+        st.session_state.setdefault(f"bd_mat_{_idx}", _navn)
+        st.session_state.setdefault(f"bd_t_{_idx}", _t)
 
     materialer: list[dict] = []
     phi_vaerdier: list[float] = []
-    total_pct = 0.0
 
     for i in range(int(antal_lag)):
-        with st.expander(f"Lag {i + 1}", expanded=True):
+        with st.expander(_lag_label(i, int(antal_lag)), expanded=True):
             dynamiske_navne = [
                 m["navn"] for m in st.session_state.get("materialer", [])
             ]
@@ -2303,67 +2205,35 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
 
             phi_vaerdier.append(phi_i)
 
-            if lag_mode_mat == "mm (absolut)":
-                t_key = f"bd_t_{i}"
-                if (
-                    t_key in st.session_state
-                    and st.session_state[t_key] < MIN_LAGTYKKELSE_MM
-                ):
-                    st.session_state[t_key] = MIN_LAGTYKKELSE_MM
-                t_i = st.number_input(
-                    "Tykkelse (mm)",
-                    min_value=MIN_LAGTYKKELSE_MM,
-                    max_value=2000,
-                    value=300,
-                    step=50,
-                    key=t_key,
-                )
-                materialer.append({
-                    "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
-                    "lagtype": ltype_i, "tykkelse_mm": float(t_i),
-                    "pct": None,
-                    "krav_maskestoerrelse_mm": krav_maske_i,
-                })
-            else:
-                pct_default = round(100.0 / antal_lag, 1)
-                p_i = st.number_input(
-                    "Andel (%)", 0.0, 100.0, pct_default, 5.0,
-                    key=f"bd_p_{i}",
-                )
-                total_pct += p_i
-                materialer.append({
-                    "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
-                    "lagtype": ltype_i, "tykkelse_mm": None,
-                    "pct": float(p_i),
-                    "krav_maskestoerrelse_mm": krav_maske_i,
-                })
-
-    if lag_mode_mat == "mm (absolut)":
-        total_t = sum(m["tykkelse_mm"] for m in materialer)
-        st.markdown(f"**Samlet tykkelse af opbygning:** {total_t:.0f} mm")
-
-    if lag_mode_mat.startswith("%"):
-        st.metric("Sum af andele", f"{total_pct:.1f} %")
-
-    if lag_mode_mat == "mm (absolut)":
-        if total_t < MIN_TOTAL_OPBYGNING_MM:
-            st.error(
-                f"Den samlede opbygning er {total_t:.0f} mm. "
-                f"Den skal være mindst {MIN_TOTAL_OPBYGNING_MM} mm."
+            t_key = f"bd_t_{i}"
+            if (
+                t_key in st.session_state
+                and st.session_state[t_key] < MIN_LAGTYKKELSE_MM
+            ):
+                st.session_state[t_key] = MIN_LAGTYKKELSE_MM
+            t_i = st.number_input(
+                "Tykkelse (mm)",
+                min_value=MIN_LAGTYKKELSE_MM,
+                max_value=2000,
+                value=300,
+                step=50,
+                key=t_key,
             )
-            st.stop()
-        phi_weighted = (
-            sum(m["phi"] * m["tykkelse_mm"] for m in materialer) / total_t
-            if total_t > 0
-            else (sum(phi_vaerdier) / len(phi_vaerdier) if phi_vaerdier else 35.0)
-        )
-    else:
-        total_p = sum(m["pct"] for m in materialer if m["pct"] is not None)
-        phi_weighted = (
-            sum(m["phi"] * m["pct"] for m in materialer) / total_p
-            if total_p > 0
-            else (sum(phi_vaerdier) / len(phi_vaerdier) if phi_vaerdier else 35.0)
-        )
+            materialer.append({
+                "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
+                "lagtype": ltype_i, "tykkelse_mm": float(t_i),
+                "pct": None,
+                "krav_maskestoerrelse_mm": krav_maske_i,
+            })
+
+    total_t = sum(m["tykkelse_mm"] for m in materialer)
+    st.markdown(f"**Samlet tykkelse af opbygning:** {total_t:.0f} mm")
+
+    phi_weighted = (
+        sum(m["phi"] * m["tykkelse_mm"] for m in materialer) / total_t
+        if total_t > 0
+        else (sum(phi_vaerdier) / len(phi_vaerdier) if phi_vaerdier else 35.0)
+    )
 
     if st.checkbox("Overskriv φ manuelt", key="bd_phi_override"):
         phi = st.number_input(
@@ -3171,21 +3041,75 @@ def render_rapport() -> None:
     geonet = sd.get("geonet") or {}
     geonet_label = geonet.get("navn", "Geonet")
 
+    # Materialelag fra brugerens dimensionering — bruges til at vise
+    # underlag-opdeling i hver opbygning.
+    materialer_dim = sd.get("materialer") or []
+    in_mm_mode = any(m.get("tykkelse_mm") for m in materialer_dim)
+
+    def _sub_lag_skaleret(total_mm: float | None) -> list[dict]:
+        """Returnér brugerens materialer skaleret så summen = total_mm.
+        For mm-mode: forhold = tykkelse_mm / sum. For pct-mode: forhold = pct / sum.
+        """
+        if not materialer_dim or not total_mm:
+            return []
+        if in_mm_mode:
+            sum_t = sum((m.get("tykkelse_mm") or 0) for m in materialer_dim)
+            if sum_t <= 0:
+                return []
+            return [
+                {
+                    "navn": m.get("navn", "Lag"),
+                    "tykkelse_mm": (m.get("tykkelse_mm") or 0) * total_mm / sum_t,
+                }
+                for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
+            ]
+        # pct-mode
+        sum_p = sum((m.get("pct") or 0) for m in materialer_dim)
+        if sum_p <= 0:
+            return []
+        return [
+            {
+                "navn": m.get("navn", "Lag"),
+                "tykkelse_mm": (m.get("pct") or 0) / sum_p * total_mm,
+            }
+            for m in materialer_dim if (m.get("pct") or 0) > 0
+        ]
+
+    def _sub_lag_uarmeret() -> tuple[float | None, list[dict]]:
+        """For uarmeret-snittet: brug brugerens dimensionerede tykkelser
+        (mm-mode). I pct-mode falder vi tilbage på t_uarm-beregningen."""
+        if in_mm_mode and materialer_dim:
+            lag = [
+                {
+                    "navn": m.get("navn", "Lag"),
+                    "tykkelse_mm": float(m.get("tykkelse_mm") or 0),
+                }
+                for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
+            ]
+            total = sum(l["tykkelse_mm"] for l in lag)
+            return (total if total > 0 else None, lag)
+        # pct-mode fallback
+        return (t_uarm, _sub_lag_skaleret(t_uarm) if t_uarm else [])
+
     snit_liste: list[rapport_mod.Snit] = []
     if vis_uarm and uarm_muligt:
-        snit_liste.append(rapport_mod.Snit(
-            titel="Uarmeret", t_baerelag_mm=t_uarm,
-            geonet_y_fracs=[],
-        ))
+        uarm_total, uarm_sub = _sub_lag_uarmeret()
+        if uarm_total:
+            snit_liste.append(rapport_mod.Snit(
+                titel="Uarmeret", t_baerelag_mm=uarm_total,
+                geonet_y_fracs=[], sub_lag=uarm_sub,
+            ))
     if vis_1lag and t_1 is not None:
         snit_liste.append(rapport_mod.Snit(
             titel="1 lag geonet", t_baerelag_mm=t_1,
-            geonet_y_fracs=[0.99],
+            geonet_y_fracs=[0.99], sub_lag=_sub_lag_skaleret(t_1),
         ))
     if vis_2lag and t_2 is not None and to_lag_muligt:
+        sub_2 = _sub_lag_skaleret(t_2)
+        upper_frac = rapport_mod.upper_geonet_frac_for_sub_lag(sub_2)
         snit_liste.append(rapport_mod.Snit(
             titel="2 lag geonet", t_baerelag_mm=t_2,
-            geonet_y_fracs=[0.5, 0.99],
+            geonet_y_fracs=[upper_frac, 0.99], sub_lag=sub_2,
         ))
 
     if not snit_liste:

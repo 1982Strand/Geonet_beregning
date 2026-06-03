@@ -173,7 +173,28 @@ class Snit:
     titel: str
     t_baerelag_mm: float | None
     geonet_y_fracs: list[float]
+    sub_lag: list[dict] | None = None  # liste af {"navn": str, "tykkelse_mm": float}
     ikke_defineret_tekst: str | None = None
+    best_case_mm: float | None = None  # NX750/NX850-interval; kun vist i dim-preview
+
+
+def upper_geonet_frac_for_sub_lag(sub_lag: list[dict] | None) -> float:
+    """Y-frac (0=top, 1=bund af bærelag) for det øverste net ved 2-lag.
+
+    Hvis sub_lag indeholder 2 eller flere lag, placeres det øverste net ved
+    grænsen mellem lag 0 (øverst) og lag 1. Ellers returneres 0.5
+    (midt i bærelaget) — fald-tilbage når der kun er ét materialelag.
+    """
+    if not sub_lag:
+        return 0.5
+    sl = [l for l in sub_lag if (l.get("tykkelse_mm") or 0) > 0]
+    if len(sl) < 2:
+        return 0.5
+    total = sum(l["tykkelse_mm"] for l in sl)
+    if total <= 0:
+        return 0.5
+    frac = sl[0]["tykkelse_mm"] / total
+    return max(0.05, min(0.95, frac))
 
 
 def render_opbygning_png(
@@ -212,8 +233,8 @@ def render_opbygning_png(
     t_max = max(t_max, 300.0)  # mindst 300 mm-skala så små opbygninger ikke ser ekstremt små ud
 
     n = len(snit_liste)
-    fig_w = 3.6 * n
-    fig_h = 5.4
+    fig_w = 4.2 * n   # lidt bredere så total-label kan stå udenfor boksen
+    fig_h = 5.6
     fig, axes = plt.subplots(1, n, figsize=(fig_w, fig_h), dpi=dpi)
     if n == 1:
         axes = [axes]
@@ -224,6 +245,28 @@ def render_opbygning_png(
     top_y = t_max * 1.05
     bund_y = -underbund_h
 
+    # Koordinater i akse-data (x går fra 0 til 1)
+    BOX_X1, BOX_X2 = 0.26, 0.78
+    LABEL_X = 0.13            # total-label centreres her, OUTSIDE boksen
+    GEONET_LBL_X = 0.80       # geonet-navn til højre for boksen
+
+    def _draw_underbund(ax):
+        ub = Rectangle(
+            (BOX_X1, bund_y), BOX_X2 - BOX_X1, underbund_h,
+            facecolor="#A89377", edgecolor="#5C4A33", linewidth=1,
+            hatch="///",
+        )
+        ax.add_patch(ub)
+        ax.text(
+            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.45, "Underbund",
+            ha="center", va="center", fontsize=10,
+            fontweight="bold", color="white",
+        )
+        ax.text(
+            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.18, f"Eu = {eu:g} MPa",
+            ha="center", va="center", fontsize=9, color="white",
+        )
+
     for ax, s in zip(axes, snit_liste):
         ax.set_xlim(0, 1)
         ax.set_ylim(bund_y, top_y)
@@ -233,105 +276,133 @@ def render_opbygning_png(
         for spine in ax.spines.values():
             spine.set_visible(False)
 
-        # Titel
         ax.set_title(s.titel, fontsize=11, fontweight="bold", pad=8)
 
         if s.t_baerelag_mm is None:
             # Stiplet placeholder
             besked = s.ikke_defineret_tekst or "Ikke defineret"
             rect = Rectangle(
-                (0.15, 0), 0.7, t_max,
+                (BOX_X1, 0), BOX_X2 - BOX_X1, t_max,
                 facecolor="#F5F5F5", edgecolor="#BDBDBD",
                 linewidth=1, linestyle="--",
             )
             ax.add_patch(rect)
             ax.text(
-                0.5, t_max / 2, besked,
+                (BOX_X1 + BOX_X2) / 2, t_max / 2, besked,
                 ha="center", va="center",
                 fontsize=10, color="#888", style="italic",
             )
-            # Underbund
-            ub = Rectangle(
-                (0.15, bund_y), 0.7, underbund_h,
-                facecolor="#A89377", edgecolor="#5C4A33", linewidth=1,
-                hatch="///",
-            )
-            ax.add_patch(ub)
-            ax.text(
-                0.5, bund_y + underbund_h * 0.45, "Underbund",
-                ha="center", va="center", fontsize=10,
-                fontweight="bold", color="white",
-            )
-            ax.text(
-                0.5, bund_y + underbund_h * 0.18, f"Eu = {eu:g} MPa",
-                ha="center", va="center", fontsize=9, color="white",
-            )
+            _draw_underbund(ax)
             continue
 
         t = float(s.t_baerelag_mm)
 
-        # Bærelag
+        # Bærelagets ydre rektangel (ingen hatch — sub-lag tegnes ovenpå)
         baerelag = Rectangle(
-            (0.15, 0), 0.7, t,
+            (BOX_X1, 0), BOX_X2 - BOX_X1, t,
             facecolor="#E8E8E8", edgecolor="#666", linewidth=1,
-            hatch="..",
+            hatch=".." if not s.sub_lag else None,
         )
         ax.add_patch(baerelag)
 
-        # Geonet-linjer (rød, stiplet) — y_frac=0 = top af bærelag, y_frac=1 = bund
-        for frac in s.geonet_y_fracs:
-            y = t * (1.0 - frac)  # konverter fra "top-down" til "bund-up"
-            ax.hlines(
-                y, 0.13, 0.87,
-                colors="#D32F2F", linestyles=(0, (4, 2)), linewidth=1.8,
+        # Sub-lag: tegn separator-linjer og materialeetiketter inden i bærelaget
+        if s.sub_lag:
+            # Filtrér 0/None væk og normaliser
+            sl = [
+                {"navn": l.get("navn", "Lag"), "tykkelse_mm": float(l.get("tykkelse_mm") or 0)}
+                for l in s.sub_lag
+                if l.get("tykkelse_mm")
+            ]
+            sum_lag = sum(l["tykkelse_mm"] for l in sl)
+            if sum_lag > 0:
+                # Skift hatch-mønster pr. lag for visuel adskillelse.
+                hatches = [".", "..", "...", "x", "//"]
+                y_top = t
+                for idx, lag in enumerate(sl):
+                    h = lag["tykkelse_mm"]
+                    y_bot = max(0.0, y_top - h)
+                    # Fyld med subtil hatch — viser at det er sub-lag
+                    lag_rect = Rectangle(
+                        (BOX_X1, y_bot), BOX_X2 - BOX_X1, y_top - y_bot,
+                        facecolor="#EEEEEE", edgecolor="none",
+                        hatch=hatches[idx % len(hatches)],
+                        alpha=0.6,
+                    )
+                    ax.add_patch(lag_rect)
+                    # Separator-linje under (undtagen bunden af bærelaget)
+                    if idx < len(sl) - 1 and y_bot > 0.5:
+                        ax.hlines(y_bot, BOX_X1, BOX_X2,
+                                  colors="#555", linewidth=0.8)
+                    # Etiket centreret i lag — kun hvis der er plads
+                    label_h_mm = y_top - y_bot
+                    if label_h_mm >= 50:  # over ca. 50 mm har vi plads til 2-linjet label
+                        ax.text(
+                            (BOX_X1 + BOX_X2) / 2, (y_top + y_bot) / 2,
+                            f"{lag['navn']}\n{h:.0f} mm",
+                            ha="center", va="center",
+                            fontsize=8.5, color="#222",
+                        )
+                    else:  # ellers kun mm
+                        ax.text(
+                            (BOX_X1 + BOX_X2) / 2, (y_top + y_bot) / 2,
+                            f"{lag['navn']} · {h:.0f} mm",
+                            ha="center", va="center",
+                            fontsize=7.5, color="#222",
+                        )
+                    y_top = y_bot
+        else:
+            # Fald-tilbage: "Bærelag" centreret hvis ingen sub-lag oplyst
+            if s.geonet_y_fracs:
+                tekst_y = t * (1.0 - min(s.geonet_y_fracs) / 2)
+            else:
+                tekst_y = t * 0.5
+            ax.text(
+                (BOX_X1 + BOX_X2) / 2, tekst_y, "Bærelag",
+                ha="center", va="center",
+                fontsize=10, fontweight="bold", color="#333",
             )
 
-        # Bærelag-tekst placeret i øverste rene strækning
-        if s.geonet_y_fracs:
-            øverste_frac = min(s.geonet_y_fracs)
-            tekst_y = t * (1.0 - øverste_frac / 2)
-        else:
-            tekst_y = t * 0.5
-        ax.text(
-            0.5, tekst_y, "Bærelag",
-            ha="center", va="center",
-            fontsize=10, fontweight="bold", color="#333",
-        )
-
-        # mm-label i venstre side
-        ax.annotate(
-            f"↕ {t:.0f} mm",
-            xy=(0.06, t / 2),
-            ha="center", va="center",
-            fontsize=10, fontweight="bold", color="#333",
-        )
-
-        # Geonet-navn til højre ved hver geonet-linje
+        # Geonet-linjer ovenpå sub-lag
         for frac in s.geonet_y_fracs:
             y = t * (1.0 - frac)
+            ax.hlines(
+                y, BOX_X1 - 0.015, BOX_X2 + 0.015,
+                colors="#D32F2F", linestyles=(0, (4, 2)), linewidth=1.8,
+            )
             ax.annotate(
                 geonet_label,
-                xy=(0.88, y),
+                xy=(GEONET_LBL_X + 0.03, y),
                 ha="left", va="center",
                 fontsize=8, color="#D32F2F",
             )
 
-        # Underbund-blok
-        ub = Rectangle(
-            (0.15, bund_y), 0.7, underbund_h,
-            facecolor="#A89377", edgecolor="#5C4A33", linewidth=1,
-            hatch="///",
+        # Total-tykkelse label UDENFOR boksen, til venstre
+        ax.annotate(
+            f"↕ {t:.0f} mm",
+            xy=(LABEL_X, t / 2),
+            ha="center", va="center",
+            fontsize=10, fontweight="bold", color="#333",
         )
-        ax.add_patch(ub)
-        ax.text(
-            0.5, bund_y + underbund_h * 0.45, "Underbund",
-            ha="center", va="center", fontsize=10,
-            fontweight="bold", color="white",
-        )
-        ax.text(
-            0.5, bund_y + underbund_h * 0.18, f"Eu = {eu:g} MPa",
-            ha="center", va="center", fontsize=9, color="white",
-        )
+        # Interval-produkter (NX750/NX850): vis best-case under hovedtallet.
+        # Kun sat fra dim-preview — rapporten lader feltet være None.
+        if (s.best_case_mm is not None
+                and round(s.best_case_mm) < round(t)):
+            ax.annotate(
+                f"↓ {s.best_case_mm:.0f} mm",
+                xy=(LABEL_X, t / 2),
+                xytext=(0, -16), textcoords="offset points",
+                ha="center", va="center",
+                fontsize=8, color="#555",
+            )
+            ax.annotate(
+                "under optimale\nforhold",
+                xy=(LABEL_X, t / 2),
+                xytext=(0, -32), textcoords="offset points",
+                ha="center", va="center",
+                fontsize=7, color="#777", style="italic",
+            )
+
+        _draw_underbund(ax)
 
     fig.tight_layout()
     buf = io.BytesIO()
