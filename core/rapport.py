@@ -119,11 +119,11 @@ PROJEKTERINGSANSVAR_TEKST = (
 )
 
 OPLYSTE_FORUDSAETNINGER_TEKST = (
-    "    • Dimensionsgivende trafikbelastning: T6\n"
-    "    • Vingestyrke, Cv, skønnet i planum: > 100 kPa\n"
-    "    • Grundvandsspejl: ikke oplyst/ikke relevant\n"
-    "    • Bærelagsmaterialer:\n"
-    "            o Genbrugsstabil"
+    "   • Dimensionsgivende trafikbelastning: T6\n"
+    "   • Vingestyrke, Cv, skønnet i planum: > 100 kPa\n"
+    "   • Grundvandsspejl: ikke oplyst/ikke relevant\n"
+    "   • Bærelagsmaterialer:\n"
+    "           o Genbrugsstabil"
 )
 
 

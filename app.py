@@ -3095,21 +3095,29 @@ def render_rapport() -> None:
         "Du kan redigere dem pr. rapport — eller nulstille til standard."
     )
     tekster_state = st.session_state.setdefault("rapport_tekster", {})
+    # Versionsnummer pr. sektion — bumpes når Nulstil klikkes, så text_area
+    # får en ny widget-key og dermed glemmer det brugeren skrev.
+    reset_v = st.session_state.setdefault("rapport_reset_v", {})
 
     for nøgle in rapport_mod.SECTION_KEYS:
         titel = rapport_mod.SECTION_TITLER[nøgle]
         std = rapport_mod.STANDARD_TEKSTER[nøgle]
         nuvaerende = tekster_state.get(nøgle, std)
+        v = reset_v.get(nøgle, 0)
+        widget_key = f"rap_tekst_{nøgle}_v{v}"
         with st.expander(titel, expanded=False):
             kol_l, kol_r = st.columns([5, 1])
             with kol_r:
                 if st.button("🔄 Nulstil", key=f"rap_reset_{nøgle}",
                              width="stretch"):
                     tekster_state[nøgle] = std
+                    # Bump versionen — det giver text_area en ny key, så
+                    # Streamlit re-initialiserer widget'en med std-tekst.
+                    reset_v[nøgle] = v + 1
                     st.rerun()
             ny_tekst = st.text_area(
                 "Tekst", value=nuvaerende, height=220,
-                key=f"rap_tekst_{nøgle}", label_visibility="collapsed",
+                key=widget_key, label_visibility="collapsed",
             )
             tekster_state[nøgle] = ny_tekst
 
