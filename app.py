@@ -1442,6 +1442,7 @@ def _render_opbygningsvisualisering(
     prod_2lag: list[dict] | None = None,
     materialer: list[dict] | None = None,
     phi: float = 35.0,
+    tvunget_produkt: str | None = None,
 ) -> None:
     """Tre eller fire opbygnings-snit side om side (Koncept A).
 
@@ -1449,8 +1450,10 @@ def _render_opbygningsvisualisering(
     "Indtastet opbygning" + tre krav-søjler (Uarmeret/1 lag/2 lag).
     I Standard-tilstand vises de tre krav-søjler alene.
 
-    Hvis prod_1lag/prod_2lag er givet, vises en dropdown der lader brugeren
-    skifte til et hvilket som helst gyldigt produkt fra resultatlisten.
+    Hvis prod_1lag/prod_2lag er givet OG tvunget_produkt er None, vises en
+    dropdown der lader brugeren skifte til et hvilket som helst gyldigt
+    produkt fra resultatlisten. Hvis tvunget_produkt er sat (Brugerdefineret
+    → 'Vælg specifikt produkt'), bruges det navn direkte uden dropdown.
 
     Renderes via samme matplotlib-funktion (rapport.render_opbygning_png)
     som bruges i rapportgenereringen — så preview i dim. og rapport er ens.
@@ -1487,7 +1490,13 @@ def _render_opbygningsvisualisering(
         navne_sorteret = sorted(navne_set.keys(), key=lambda n: navne_set[n])
 
     valg = _REF_VALG
-    if navne_sorteret:
+    if tvunget_produkt is not None:
+        # Brugerdefineret 'Vælg specifikt produkt': dropdown skjules, det
+        # valgte produkt bruges direkte. Hvis produktet ikke er i listen
+        # (fx kun gyldigt i én lag-mode) bruges det alligevel.
+        valg = tvunget_produkt
+        st.caption(f"Viser opbygning for: **{tvunget_produkt}**")
+    elif navne_sorteret:
         def _format_valg(navn: str) -> str:
             if navn == _REF_VALG:
                 return navn
@@ -1695,6 +1704,7 @@ def _render_oversigt_expanders(
                 prod_1lag=prod_1lag, prod_2lag=prod_2lag,
                 materialer=materialer,
                 phi=phi,
+                tvunget_produkt=geonet_navn,
             )
 
     # --- Advarsler -------------------------------------------------------
