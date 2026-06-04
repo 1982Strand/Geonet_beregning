@@ -3371,7 +3371,24 @@ def render_rapport() -> None:
     uarm_muligt = t_uarm is not None
     to_lag_muligt = t_1 is not None and t_1 >= 500.0
 
-    kol_v1, kol_v2, kol_v3 = st.columns(3)
+    # Materialelag fra brugerens dimensionering — bruges til at vise
+    # 'Indtastet opbygning'-søjlen og sammenligningslinjen på krav-søjlerne.
+    materialer_dim = sd.get("materialer") or []
+    in_mm_mode = any(m.get("tykkelse_mm") for m in materialer_dim)
+    indtastet_muligt = in_mm_mode and bool(materialer_dim)
+
+    kol_v0, kol_v1, kol_v2, kol_v3 = st.columns(4)
+    with kol_v0:
+        vis_indtastet = st.checkbox(
+            "Indtastet opbygning",
+            value=indtastet_muligt,
+            disabled=not indtastet_muligt,
+            key="rap_vis_indtastet",
+            help=(
+                None if indtastet_muligt
+                else "Ingen brugerindtastede lagtykkelser at vise."
+            ),
+        )
     with kol_v1:
         vis_uarm = st.checkbox(
             "Uarmeret opbygning",
@@ -3407,10 +3424,22 @@ def render_rapport() -> None:
     geonet = sd.get("geonet") or {}
     geonet_label = geonet.get("navn", "Geonet")
 
-    # Materialelag fra brugerens dimensionering — bruges til at vise
-    # underlag-opdeling i hver opbygning.
-    materialer_dim = sd.get("materialer") or []
-    in_mm_mode = any(m.get("tykkelse_mm") for m in materialer_dim)
+    # --- Ekstra: Personligt designdiagram ---------------------------------
+    designdiagram_muligt = bool(geonet.get("navn"))
+    vis_designdiagram = st.checkbox(
+        "Personligt designdiagram",
+        value=designdiagram_muligt,
+        disabled=not designdiagram_muligt,
+        key="rap_vis_designdiagram",
+        help=(
+            "Tegner designkurverne (uarmeret, 1 lag, 2 lag) tilpasset dine "
+            "materialer og valgte geonet, med din opbygning og Eu som "
+            "referencer. Ligner de originale designdiagrammer."
+            if designdiagram_muligt
+            else "Vælg et specifikt geonet under Dimensionering for at få "
+                 "kurverne med produktets net-korrektion."
+        ),
+    )
 
     def _sub_lag_skaleret(total_mm: float | None) -> list[dict]:
         """Returnér brugerens materialer skaleret så summen = total_mm.
@@ -3471,21 +3500,32 @@ def render_rapport() -> None:
         round(t_uarm * (1 + phi_kor_dim)) if t_uarm is not None else None
     )
 
+    # Når 'Indtastet opbygning' er fravalgt, slukkes både søjlen OG
+    # sammenligningslinjen — t_indtastet_for_snit styrer linjen via Snit-feltet.
+    vis_indtastet_aktiv = (
+        vis_indtastet and har_indtastet_rap and bool(indtastet_total_rap)
+    )
+    t_indtastet_for_snit = indtastet_total_rap if vis_indtastet_aktiv else None
+    # Status-tekst (Mangler / Besparelse) giver kun mening sammen med linjen.
+    status_indtastet_ref = (
+        indtastet_total_rap if vis_indtastet_aktiv else None
+    )
+
     snit_liste: list[rapport_mod.Snit] = []
 
-    # Søjle 1: Indtastet opbygning (vises altid hvis materialer er angivet)
-    if har_indtastet_rap and indtastet_total_rap:
+    # Søjle 1: Indtastet opbygning (styres af checkbox)
+    if vis_indtastet_aktiv:
         _, indtastet_sub = _sub_lag_uarmeret()
         snit_liste.append(rapport_mod.Snit(
             titel="Indtastet opbygning",
             t_baerelag_mm=indtastet_total_rap,
             geonet_y_fracs=[], sub_lag=indtastet_sub,
-            t_indtastet_mm=indtastet_total_rap,
+            t_indtastet_mm=t_indtastet_for_snit,
         ))
 
     if vis_uarm and uarm_muligt and t_uarm_krav_rap is not None:
         status_tekst_u, status_farve_u = _status_for_krav(
-            indtastet_total_rap, t_uarm_krav_rap, None,
+            status_indtastet_ref, t_uarm_krav_rap, None,
         )
         snit_liste.append(rapport_mod.Snit(
             titel="Uarmeret basistykkelse (φ-korrigeret)"
@@ -3493,35 +3533,35 @@ def render_rapport() -> None:
             t_baerelag_mm=t_uarm_krav_rap,
             geonet_y_fracs=[], sub_lag=None,
             er_krav_soejle=True,
-            t_indtastet_mm=indtastet_total_rap,
+            t_indtastet_mm=t_indtastet_for_snit,
             status_tekst=status_tekst_u,
             status_farve=status_farve_u,
         ))
     if vis_1lag and t_1 is not None:
         fracs_1, placement_1 = _geonet_fracs_kravsoejle("1_lag", t_1, geonet)
         status_tekst_1, status_farve_1 = _status_for_krav(
-            indtastet_total_rap, t_1, None,
+            status_indtastet_ref, t_1, None,
         )
         snit_liste.append(rapport_mod.Snit(
             titel="1 lag geonet", t_baerelag_mm=t_1,
             geonet_y_fracs=fracs_1, sub_lag=None,
             placement=placement_1,
             er_krav_soejle=True,
-            t_indtastet_mm=indtastet_total_rap,
+            t_indtastet_mm=t_indtastet_for_snit,
             status_tekst=status_tekst_1,
             status_farve=status_farve_1,
         ))
     if vis_2lag and t_2 is not None and to_lag_muligt:
         fracs_2, placement_2 = _geonet_fracs_kravsoejle("2_lag", t_2, geonet)
         status_tekst_2, status_farve_2 = _status_for_krav(
-            indtastet_total_rap, t_2, None,
+            status_indtastet_ref, t_2, None,
         )
         snit_liste.append(rapport_mod.Snit(
             titel="2 lag geonet", t_baerelag_mm=t_2,
             geonet_y_fracs=fracs_2, sub_lag=None,
             placement=placement_2,
             er_krav_soejle=True,
-            t_indtastet_mm=indtastet_total_rap,
+            t_indtastet_mm=t_indtastet_for_snit,
             status_tekst=status_tekst_2,
             status_farve=status_farve_2,
         ))
@@ -3538,6 +3578,29 @@ def render_rapport() -> None:
         )
         st.image(visu_png, caption="Preview af opbygnings-visualisering")
 
+    # --- Personligt designdiagram (preview + rapport-PNG) ----------------
+    designdiagram_png: bytes | None = None
+    if vis_designdiagram and designdiagram_muligt:
+        try:
+            designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
+                eu=float(sd["eu"]),
+                eo=float(sd["eo"]),
+                klasse=sd.get("valgt_klasse"),
+                phi=float(sd.get("phi", 35.0)),
+                geonet=geonet,
+                t_indtastet_mm=(
+                    indtastet_total_rap if har_indtastet_rap else None
+                ),
+                t_basis_table=_aktiv_t_basis_table(),
+            )
+            st.image(
+                designdiagram_png,
+                caption="Preview af personligt designdiagram",
+            )
+        except Exception as e:
+            st.warning(f"Kunne ikke generere designdiagram: {e}")
+            designdiagram_png = None
+
     st.divider()
 
     # --- D. Generér rapport -----------------------------------------------
@@ -3548,6 +3611,7 @@ def render_rapport() -> None:
         "dim": sd,
         "tekster": dict(tekster_state),
         "visualisering_png": visu_png,
+        "designdiagram_png": designdiagram_png,
     }
 
     filnavn_base = (
@@ -3563,12 +3627,18 @@ def render_rapport() -> None:
         if isinstance(visu_png, bytes)
         else None
     )
+    designdiagram_hash = (
+        hashlib.sha256(designdiagram_png).hexdigest()
+        if isinstance(designdiagram_png, bytes)
+        else None
+    )
     rapport_fingerprint = hashlib.sha256(json.dumps(
         {
             "metadata": rapport_data["metadata"],
             "dim": rapport_data["dim"],
             "tekster": rapport_data["tekster"],
             "visualisering_sha256": visu_hash,
+            "designdiagram_sha256": designdiagram_hash,
             "filnavn_base": filnavn_base,
         },
         sort_keys=True,

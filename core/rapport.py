@@ -551,6 +551,166 @@ def render_opbygning_png(
     return buf.getvalue()
 
 
+def render_personligt_designdiagram_png(
+    *,
+    eu: float,
+    eo: float,
+    klasse: int | None,
+    phi: float,
+    geonet: dict | None,
+    t_indtastet_mm: float | None,
+    t_basis_table: dict,
+    dpi: int = 150,
+) -> bytes:
+    """Designdiagram tilpasset brugerens opbygning + geonet.
+
+    Tegner tre φ-(og evt. net-)korrigerede kurver (uarmeret, 1 lag, 2 lag)
+    for det valgte Eo, sammen med brugerens Eu og opbygning som referencer.
+    For interval-produkter (NX750/NX850) tegnes 1-lag og 2-lag som tonet
+    bånd mellem best-case og konservativ ende.
+
+    Stilen mimer de originale designdiagrammer (gul/blå/lilla farveskema,
+    Eu på y-akse, tykkelse i cm på x-akse).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # Lokal import for at undgå cirkulær afhængighed
+    from .data import K_PHI
+
+    phi_kor = K_PHI * (phi - 35.0)
+
+    # Net-korrektion: konservativ værdi + best-case for interval-produkter
+    net_kor_kons = float(geonet.get("korrektion", 0.0)) if geonet else 0.0
+    interval = geonet.get("korrektion_interval") if geonet else None
+    net_kor_best = float(interval[0]) if interval else None
+
+    eu_vals = sorted(t_basis_table.keys())
+
+    def _kurve(lag_mode: str, faktor: float) -> tuple[list[float], list[float]]:
+        xs: list[float] = []
+        ys: list[float] = []
+        for eu_v in eu_vals:
+            v = t_basis_table.get(eu_v, {}).get(eo, {}).get(lag_mode)
+            if v is not None:
+                xs.append(v * faktor)  # cm
+                ys.append(eu_v)
+        return xs, ys
+
+    fig, ax = plt.subplots(figsize=(9.0, 5.5), dpi=dpi)
+
+    # Farveskema matcher de originale diagrambilleder
+    farve_uarm = "#E0BB00"   # gul
+    farve_1lag = "#1F4E9C"   # blå
+    farve_2lag = "#7B1FA2"   # lilla
+
+    # Kurver — uarmeret (φ-korrigeret)
+    f_uarm = 1.0 + phi_kor
+    xs_u, ys_u = _kurve("uarmeret", f_uarm)
+    if xs_u:
+        ax.plot(
+            xs_u, ys_u, "-", color=farve_uarm, linewidth=2.2,
+            marker="^", markersize=5,
+            label="Uarmeret (φ-kor.)",
+        )
+
+    geonet_navn = (geonet or {}).get("navn", "Reference")
+
+    def _plot_armeret(lag_mode: str, color: str, marker: str, label_prefix: str):
+        # Konservativ kurve (altid)
+        f_kons = 1.0 + phi_kor + net_kor_kons
+        xs_k, ys_k = _kurve(lag_mode, f_kons)
+        if not xs_k:
+            return
+        if net_kor_best is not None:
+            f_best = 1.0 + phi_kor + net_kor_best
+            xs_b, ys_b = _kurve(lag_mode, f_best)
+            # Tonet bånd mellem best-case og konservativ. fill_betweenx
+            # kræver fælles y-koordinater — vi kører over fælles eu-rækker.
+            if xs_b and ys_b == ys_k:
+                ax.fill_betweenx(
+                    ys_k, xs_b, xs_k, color=color, alpha=0.15,
+                    label=None,
+                )
+            # Stiplet linje ved best-case-kanten
+            ax.plot(
+                xs_b, ys_b, ":", color=color, linewidth=1.3,
+                label=None,
+            )
+        # Heltrukken konservativ kurve med marker
+        ax.plot(
+            xs_k, ys_k, "-", color=color, linewidth=2.2,
+            marker=marker, markersize=5,
+            label=f"{label_prefix} {geonet_navn}",
+        )
+
+    _plot_armeret("1_lag", farve_1lag, "D", "1 lag")
+    _plot_armeret("2_lag", farve_2lag, "s", "2 lag")
+
+    # Brugerens build (lodret) — kun hvis sat
+    if t_indtastet_mm is not None and t_indtastet_mm > 0:
+        t_cm = t_indtastet_mm / 10.0
+        ax.axvline(
+            t_cm, color="#1565C0", linestyle=(0, (5, 3)), linewidth=1.6,
+            label=f"Indtastet opbygning: {t_cm:.0f} cm",
+            zorder=5,
+        )
+
+    # Brugerens Eu (vandret)
+    ax.axhline(
+        eu, color="#388E3C", linestyle=(0, (5, 3)), linewidth=1.6,
+        label=f"Eu = {eu:g} MPa",
+        zorder=5,
+    )
+
+    # Skæringspunkt — kun hvis begge referencer er sat
+    if t_indtastet_mm is not None and t_indtastet_mm > 0:
+        t_cm = t_indtastet_mm / 10.0
+        ax.plot(
+            [t_cm], [eu], "o", color="#D32F2F", markersize=10,
+            zorder=11, markeredgecolor="white", markeredgewidth=1.5,
+            label="Din opbygning",
+        )
+
+    # Akse-grænser: dækker hele datasættet plus lidt luft
+    alle_xs: list[float] = []
+    for mode, faktor in (
+        ("uarmeret", f_uarm),
+        ("1_lag", 1.0 + phi_kor + net_kor_kons),
+        ("2_lag", 1.0 + phi_kor + net_kor_kons),
+    ):
+        xs, _ = _kurve(mode, faktor)
+        alle_xs.extend(xs)
+    if t_indtastet_mm is not None:
+        alle_xs.append(t_indtastet_mm / 10.0)
+    if alle_xs:
+        x_max = max(alle_xs) * 1.08
+        ax.set_xlim(0, max(x_max, 80))
+    else:
+        ax.set_xlim(0, 160)
+    ax.set_ylim(0, max(max(eu_vals) * 1.05, eu * 1.2, 50))
+
+    ax.set_xlabel("Bærelagstykkelse [cm]", fontsize=11, fontweight="bold")
+    ax.set_ylabel(r"Bundmodul $E_u$ [MN/m²]", fontsize=11, fontweight="bold")
+
+    klasse_str = f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:g}"
+    phi_str = f"{phi:.1f}".replace(".", ",")
+    ax.set_title(
+        f"Designdiagram — Eo = {eo:g} MN/m² · {klasse_str}\n"
+        f"Materialer: φ = {phi_str}° · Geonet: {geonet_navn}",
+        fontsize=11,
+    )
+    ax.grid(True, alpha=0.4)
+    ax.legend(loc="upper right", fontsize=8.5, framealpha=0.92)
+
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=dpi)
+    plt.close(fig)
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
 # 3. Formatering — dimensioneringsgrundlag og resultat
 # ---------------------------------------------------------------------------
@@ -584,7 +744,6 @@ def formatér_dimensioneringsgrundlag(dim: dict) -> list[tuple[str, str]]:
     materialer = dim.get("materialer") or []
     return [
         ("Underbundens E-modul (Eu)", f"{dim.get('eu', 0):g} MPa"),
-        ("Forventet overflademodul (Eo)", f"{dim.get('eo', 0):g} MPa"),
         ("Belastningsklasse", str(dim.get("valgt_klasse", "—"))),
         ("Materialeopbygning", _materiale_resume(materialer)),
         ("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', 35):.1f}°"),
@@ -596,26 +755,31 @@ def formatér_dimensioneringsresultat(dim: dict) -> list[tuple[str, str]]:
     res_1 = dim.get("res_1") or {}
     res_2 = dim.get("res_2") or {}
     geonet = dim.get("geonet") or {}
+    materialer = dim.get("materialer") or []
 
     def _mm(v):
         return f"{v:.0f} mm" if isinstance(v, (int, float)) else "—"
 
-    def _placering(res: dict) -> str:
-        if not res or res.get("fejl") or res.get("t_armeret_mm") is None:
-            return "—"
-        status = "OK" if res.get("placering_ok", True) else "Kræver kontrol"
-        advarsler = res.get("placeringsadvarsler") or []
-        return status if not advarsler else f"{status}: {advarsler[0]}"
+    # Uarmeret reference vises som φ-korrigeret værdi (konsistent med
+    # resultat-bannerne og snittene i visualiseringen).
+    t_uarm_ref = (
+        res_1.get("t_uarmeret_phi_kor_mm")
+        or res_2.get("t_uarmeret_phi_kor_mm")
+        or res_1.get("t_uarmeret_mm")
+        or res_2.get("t_uarmeret_mm")
+    )
 
-    t_uarm = res_1.get("t_uarmeret_mm") or res_2.get("t_uarmeret_mm")
+    # Samlet tykkelse af brugerens indtastede opbygning (sum af lagene).
+    t_indtastet = sum(
+        float(m.get("tykkelse_mm") or 0) for m in materialer
+    ) or None
 
     return [
         ("Valgt geonet", geonet.get("navn", "—")),
-        ("Uarmeret reference", _mm(t_uarm)),
+        ("Uarmeret referenceopbygning", _mm(t_uarm_ref)),
+        ("Samlet tykkelse af valgt opbygning", _mm(t_indtastet)),
         ("Armeret tykkelse — 1 lag", _mm(res_1.get("t_armeret_mm"))),
-        ("Geonetplacering — 1 lag", _placering(res_1)),
         ("Armeret tykkelse — 2 lag", _mm(res_2.get("t_armeret_mm"))),
-        ("Geonetplacering — 2 lag", _placering(res_2)),
     ]
 
 
@@ -801,7 +965,8 @@ def byg_rapport_docx(data: dict) -> bytes:
       metadata: dict med projekt/beskrivelse/omfang/udfoeres_for/sagsbehandler/sagsbehandler_mail/dato
       dim:      dict fra st.session_state["sidste_dim"]
       tekster:  dict[str, str] — redigerede skabelon-tekster pr. SECTION_KEYS-nøgle
-      visualisering_png: bytes
+      visualisering_png: bytes  (opbygnings-snittene)
+      designdiagram_png: bytes | None  (personligt designdiagram, valgfrit)
     """
     from docxtpl import DocxTemplate, InlineImage
     from docx.shared import Cm
@@ -822,12 +987,21 @@ def byg_rapport_docx(data: dict) -> bytes:
     dim = data.get("dim", {})
     tekster = data.get("tekster", {})
     visu = data.get("visualisering_png")
+    designdiagram = data.get("designdiagram_png")
 
     # Visualiseringsbilledet pakkes som InlineImage så docxtpl kan
     # indsætte det hvor {{ visualisering }} står i skabelonen.
     visu_obj = None
     if visu:
         visu_obj = InlineImage(doc, io.BytesIO(visu), width=Cm(16))
+
+    # Personligt designdiagram (valgfrit). Indsættes hvor {{ designdiagram }}
+    # står i skabelonen. Hvis None bliver placeholderen til tom streng.
+    designdiagram_obj = None
+    if designdiagram:
+        designdiagram_obj = InlineImage(
+            doc, io.BytesIO(designdiagram), width=Cm(16),
+        )
 
     # Bring tabel-rækker på det format docxtpl forventer for {%tr ... %}-løkken.
     def _rows(par_funktion) -> list[dict]:
@@ -862,6 +1036,8 @@ def byg_rapport_docx(data: dict) -> bytes:
 
         # Visualisering — tom streng hvis ingen snit valgt
         "visualisering": visu_obj if visu_obj is not None else "",
+        # Personligt designdiagram — tom streng hvis ikke valgt
+        "designdiagram": designdiagram_obj if designdiagram_obj is not None else "",
     }
 
     doc.render(context)
