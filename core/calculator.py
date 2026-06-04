@@ -149,18 +149,25 @@ def beregn(
     samlet_faktor = 1.0 + phi_korrektion + net_korrektion
 
     t_armeret_mm = t_basis_arm_mm * samlet_faktor
-    # T_uarmeret er altid ren referencetabel — ingen φ/net-korrektion.
-    # For meget lave Eu-værdier kan uarmeret være uden for diagrammet,
-    # mens armerede resultater stadig er defineret.
+    # T_uarmeret_basis = ren tabelopslag uden korrektioner (referenceværdi).
+    # T_uarmeret_phi_kor = basis × (1 + φ-korrektion) — den uarmerede
+    # tykkelse korrigeret for materialevalg. Den er den korrekte reference
+    # for reduktion, fordi t_armeret også er φ-korrigeret. Reduktionen
+    # afspejler så net-effekten alene (diagram-forskel + net_korrektion).
     t_uarmeret_mm = t_basis_uarm_mm
+    t_uarmeret_phi_kor_mm = (
+        t_basis_uarm_mm * (1.0 + phi_korrektion)
+        if t_basis_uarm_mm is not None
+        else None
+    )
     reduktion_mm = (
-        t_uarmeret_mm - t_armeret_mm
-        if t_uarmeret_mm is not None
+        t_uarmeret_phi_kor_mm - t_armeret_mm
+        if t_uarmeret_phi_kor_mm is not None
         else None
     )
     reduktion_pct = (
-        reduktion_mm / t_uarmeret_mm
-        if reduktion_mm is not None and t_uarmeret_mm > 0
+        reduktion_mm / t_uarmeret_phi_kor_mm
+        if reduktion_mm is not None and t_uarmeret_phi_kor_mm > 0
         else None
     )
 
@@ -187,6 +194,10 @@ def beregn(
         # Slutresultater
         "t_armeret_mm": round(t_armeret_mm, 0),
         "t_uarmeret_mm": round(t_uarmeret_mm, 0) if t_uarmeret_mm is not None else None,
+        "t_uarmeret_phi_kor_mm": (
+            round(t_uarmeret_phi_kor_mm, 0)
+            if t_uarmeret_phi_kor_mm is not None else None
+        ),
         "reduktion_mm": round(reduktion_mm, 0) if reduktion_mm is not None else None,
         "reduktion_pct": round(reduktion_pct, 4) if reduktion_pct is not None else None,
         "uarmeret_mangler": uarmeret_mangler,
@@ -252,6 +263,7 @@ def beregn_alle_produkter(
             "korrektion": geonet["korrektion"],
             "t_armeret_mm": resultat.get("t_armeret_mm"),
             "t_uarmeret_mm": resultat.get("t_uarmeret_mm"),
+            "t_uarmeret_phi_kor_mm": resultat.get("t_uarmeret_phi_kor_mm"),
             "t_basis_arm_mm": resultat.get("t_basis_arm_mm"),
             "reduktion_mm": resultat.get("reduktion_mm"),
             "reduktion_pct": resultat.get("reduktion_pct"),
@@ -336,7 +348,12 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         # og må ikke sammenblandes med produkter uden interval.
         if produkt.get("t_armeret_mm_min") is not None:
             t = produkt["t_armeret_mm"]
-            t_uarm = produkt.get("t_uarmeret_mm")
+            # Reduktion sammenlignes mod φ-korrigeret reference, så net-effekten
+            # alene afspejles i procentdelen (se beregn() for begrundelse).
+            t_uarm = (
+                produkt.get("t_uarmeret_phi_kor_mm")
+                or produkt.get("t_uarmeret_mm")
+            )
             red_pct = (
                 (t_uarm - t) / t_uarm
                 if t_uarm is not None and t_uarm > 0
@@ -369,7 +386,11 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         # Gennemsnitlig tykkelse for gruppen — eksakt beregnede værdi uden afrunding.
         t_repræsentativ = sum(p["t_armeret_mm"] for p in gruppe_produkter) / len(gruppe_produkter)
 
-        t_uarm = produkt["t_uarmeret_mm"]
+        # Reduktion mod φ-korrigeret reference (se beregn()).
+        t_uarm = (
+            produkt.get("t_uarmeret_phi_kor_mm")
+            or produkt.get("t_uarmeret_mm")
+        )
         red_pct = (
             (t_uarm - t_repræsentativ) / t_uarm
             if t_uarm is not None and t_uarm > 0

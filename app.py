@@ -723,9 +723,12 @@ def _render_gruppe_kort(
     t_vis   = gruppe["t_armeret_mm"]
     red_pct = gruppe["reduktion_pct"]
 
-    # Hent t_uarmeret fra første produkt (alle i gruppen har samme uarmerede tykkelse)
+    # Hent t_uarmeret fra første produkt (alle i gruppen har samme uarmerede tykkelse).
+    # Reduktionen sammenlignes mod den φ-korrigerede reference, så
+    # procentdelen afspejler net-effekten alene (ikke φ-effekten oveni).
     t_uarm_prod = (
-        gruppe["produkter"][0].get("t_uarmeret_mm")
+        gruppe["produkter"][0].get("t_uarmeret_phi_kor_mm")
+        or gruppe["produkter"][0].get("t_uarmeret_mm")
         if gruppe.get("produkter") else None
     )
 
@@ -912,7 +915,10 @@ def _resultat_til_gruppe(
 
     t_eks = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
-    red_eks = (t_uarm - t_eks) / t_uarm if t_uarm else None
+    # Reduktion sammenlignes mod den φ-korrigerede uarmerede reference,
+    # så begge sider af regnestykket er konsistent korrigeret for materiale.
+    t_uarm_ref = res.get("t_uarmeret_phi_kor_mm") or t_uarm
+    red_eks = (t_uarm_ref - t_eks) / t_uarm_ref if t_uarm_ref else None
 
     produkt = {
         "navn":           geonet["navn"],
@@ -920,8 +926,9 @@ def _resultat_til_gruppe(
         "korrektion":     geonet["korrektion"],
         "t_armeret_mm":   t_eks,
         "t_uarmeret_mm":  t_uarm,
+        "t_uarmeret_phi_kor_mm": res.get("t_uarmeret_phi_kor_mm"),
         "t_basis_arm_mm": res.get("t_basis_arm_mm"),
-        "reduktion_mm":   t_uarm - t_eks if t_uarm is not None else None,
+        "reduktion_mm":   t_uarm_ref - t_eks if t_uarm_ref is not None else None,
         "reduktion_pct":  red_eks,
         "klasse_ok":      valgt_klasse in geonet["klasser"],
         "klasser":        geonet["klasser"],
@@ -966,15 +973,18 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
 
     t_ref = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
-    red_ref = (t_uarm - t_ref) / t_uarm if t_uarm else None
+    # Reduktion mod φ-korrigeret reference (se _resultat_til_gruppe).
+    t_uarm_ref = res.get("t_uarmeret_phi_kor_mm") or t_uarm
+    red_ref = (t_uarm_ref - t_ref) / t_uarm_ref if t_uarm_ref else None
     produkt = {
         "navn": REFERENCE_NAVN,
         "serie": "Reference",
         "korrektion": 0.0,
         "t_armeret_mm": t_ref,
         "t_uarmeret_mm": t_uarm,
+        "t_uarmeret_phi_kor_mm": res.get("t_uarmeret_phi_kor_mm"),
         "t_basis_arm_mm": res.get("t_basis_arm_mm"),
-        "reduktion_mm": t_uarm - t_ref if t_uarm is not None else None,
+        "reduktion_mm": t_uarm_ref - t_ref if t_uarm_ref is not None else None,
         "reduktion_pct": red_ref,
         "klasse_ok": valgt_klasse in REFERENCE_KLASSER,
         "klasser": REFERENCE_KLASSER,
@@ -1289,16 +1299,20 @@ def _berig_resultat_med_placering(
     geonet: dict | None,
     materialer: list[dict] | None,
 ) -> dict:
+    # Koncept A: placement evalueres i krav-tykkelsen (uden brugerens
+    # lagfordeling). sub_lag=None tvinger min_daklag-reglen — det er den
+    # korrekte fortolkning, da diagrammets krav ikke har en lagstruktur.
+    # `materialer` bevares som parameter for bagudkompatibilitet.
+    del materialer
     if res.get("fejl") or res.get("t_armeret_mm") is None:
         return res
-    sub_lag = _sub_lag_skaleret_fra_materialer(materialer, res.get("t_armeret_mm"))
     return {
         **res,
         **check_geonet_placement(
             lag_mode=res.get("lag_mode"),
             total_mm=res.get("t_armeret_mm"),
             geonet=geonet,
-            sub_lag=sub_lag,
+            sub_lag=None,
         ),
     }
 
@@ -1308,33 +1322,29 @@ def _berig_produkter_med_placering(
     lag_mode: str,
     materialer: list[dict] | None,
 ) -> list[dict]:
+    # Koncept A: se _berig_resultat_med_placering.
+    del materialer
     berigede: list[dict] = []
     for produkt in produkter:
         if produkt.get("fejl") or produkt.get("t_armeret_mm") is None:
             berigede.append(produkt)
             continue
         geonet = find_geonet(produkt["navn"])
-        sub_lag = _sub_lag_skaleret_fra_materialer(
-            materialer, produkt.get("t_armeret_mm")
-        )
         opdateret = {
             **produkt,
             **check_geonet_placement(
                 lag_mode=lag_mode,
                 total_mm=produkt.get("t_armeret_mm"),
                 geonet=geonet,
-                sub_lag=sub_lag,
+                sub_lag=None,
             ),
         }
         if produkt.get("t_armeret_mm_min") is not None:
-            best_sub_lag = _sub_lag_skaleret_fra_materialer(
-                materialer, produkt.get("t_armeret_mm_min")
-            )
             opdateret["placering_best"] = check_geonet_placement(
                 lag_mode=lag_mode,
                 total_mm=produkt.get("t_armeret_mm_min"),
                 geonet=geonet,
-                sub_lag=best_sub_lag,
+                sub_lag=None,
             )
         berigede.append(opdateret)
     return berigede
@@ -1357,6 +1367,73 @@ def _geonet_fracs_for_snit(
     return placement.get("geonet_y_fracs", []), placement
 
 
+def _geonet_fracs_kravsoejle(
+    lag_mode: str,
+    total_mm: float | None,
+    geonet: dict | None,
+) -> tuple[list[float], dict | None]:
+    """Geonet-placering i en krav-søjle (Koncept A).
+
+    Krav-søjlen har ingen materialefordeling, så øverste geonet placeres
+    ved produktets min_daklag under top — ikke ved et materialeskift.
+    Bunden af bærelaget får altid det nederste geonet.
+    """
+    if total_mm is None or total_mm <= 0:
+        return [], None
+    placement = check_geonet_placement(
+        lag_mode=lag_mode,
+        total_mm=total_mm,
+        geonet=geonet,
+        sub_lag=None,  # tving placement til min_daklag-regel, ikke materialeskift
+    )
+    return placement.get("geonet_y_fracs", []), placement
+
+
+def _status_for_krav(
+    t_indtastet: float | None,
+    t_krav: float | None,
+    t_krav_best: float | None = None,
+) -> tuple[str | None, str | None]:
+    """Returnér (status_tekst, status_farve) for sammenligning af indtastet vs krav.
+
+    t_krav_best (interval-produkter, fx NX750): hvis sat, vises bånd
+    "Mangler X-Y mm" / "Tilstrækkelig (besparelse X-Y mm)" hvor X er
+    den konservative ende og Y er best-case.
+    """
+    if t_indtastet is None or t_krav is None:
+        return None, None
+    diff_kons = t_indtastet - t_krav  # negativ = mangler, positiv = besparelse
+    diff_best = (
+        t_indtastet - t_krav_best
+        if t_krav_best is not None and t_krav_best < t_krav
+        else None
+    )
+
+    # Hvis konservativ er tilstrækkelig → grøn
+    if diff_kons >= 0:
+        if diff_best is not None and diff_best > diff_kons:
+            return (
+                f"✓ Besparelse {diff_kons:.0f}–{diff_best:.0f} mm",
+                "success",
+            )
+        return f"✓ Besparelse {diff_kons:.0f} mm", "success"
+
+    # Hvis best-case er tilstrækkelig men konservativ ikke → orange (interval)
+    if diff_best is not None and diff_best >= 0:
+        return (
+            f"Mangler {-diff_kons:.0f} mm (best: ✓ +{diff_best:.0f} mm)",
+            "warning",
+        )
+
+    # Begge mangler → rød
+    if diff_best is not None:
+        return (
+            f"Mangler {-diff_best:.0f}–{-diff_kons:.0f} mm",
+            "danger",
+        )
+    return f"Mangler {-diff_kons:.0f} mm", "danger"
+
+
 def _render_opbygningsvisualisering(
     eu: float,
     ref_1: dict | None,
@@ -1364,8 +1441,13 @@ def _render_opbygningsvisualisering(
     prod_1lag: list[dict] | None = None,
     prod_2lag: list[dict] | None = None,
     materialer: list[dict] | None = None,
+    phi: float = 35.0,
 ) -> None:
-    """Tre opbygnings-snit side om side. Default: referencenettet.
+    """Tre eller fire opbygnings-snit side om side (Koncept A).
+
+    I Brugerdefineret-tilstand (materialer != []) vises fire søjler:
+    "Indtastet opbygning" + tre krav-søjler (Uarmeret/1 lag/2 lag).
+    I Standard-tilstand vises de tre krav-søjler alene.
 
     Hvis prod_1lag/prod_2lag er givet, vises en dropdown der lader brugeren
     skifte til et hvilket som helst gyldigt produkt fra resultatlisten.
@@ -1460,51 +1542,114 @@ def _render_opbygningsvisualisering(
             f"Højderne er proportionale, så besparelsen ved armering er aflæselig."
         )
 
-    # ── Byg snit-listen (samme model som rapport-trinnet) ──────────────
+    # ── Byg snit-listen (Koncept A) ────────────────────────────────────
+    # I Brugerdefineret-tilstand (materialer != []): 4 søjler — Indtastet
+    # opbygning + 3 krav-søjler. I Standard-tilstand: 3 krav-søjler.
     snit_liste: list[rapport_mod.Snit] = []
 
-    uarm_total, uarm_sub = _sub_lag_uarmeret_fra_materialer(materialer, t_uarm)
-    snit_liste.append(rapport_mod.Snit(
-        titel="Uarmeret",
-        t_baerelag_mm=uarm_total,
-        geonet_y_fracs=[],
-        sub_lag=uarm_sub,
-        ikke_defineret_tekst=(
-            None if uarm_total is not None
-            else f"Uarmeret bærelag ikke defineret for Eu = {eu:g} MPa"
-        ),
-    ))
+    har_indtastet = bool(materialer) and any(
+        (m.get("tykkelse_mm") or 0) > 0 for m in materialer
+    )
 
-    sub_1 = _sub_lag_skaleret_fra_materialer(materialer, t_1)
-    fracs_1, placement_1 = _geonet_fracs_for_snit(
-        "1_lag", t_1, valgt_geonet, sub_1
+    # phi-korrigeret uarmeret-krav: t_uarm × (1 + K_PHI × (phi - 35))
+    t_uarm_krav: float | None = None
+    if t_uarm is not None:
+        phi_kor = K_PHI * (phi - 35.0) if har_indtastet else 0.0
+        t_uarm_krav = round(t_uarm * (1 + phi_kor))
+
+    # Indtastet opbygning som total (sum af brugerens lag)
+    indtastet_total, indtastet_sub = _sub_lag_uarmeret_fra_materialer(
+        materialer, t_uarm
+    )
+    # I Standard-tilstand giver _sub_lag_uarmeret_fra_materialer
+    # (None, []) tilbage hvis ingen materialer i mm-mode — så har_indtastet
+    # styrer om vi tegner søjle 1.
+    t_indtastet_for_linje = indtastet_total if har_indtastet else None
+
+    if har_indtastet:
+        snit_liste.append(rapport_mod.Snit(
+            titel="Indtastet opbygning",
+            t_baerelag_mm=indtastet_total,
+            geonet_y_fracs=[],
+            sub_lag=indtastet_sub,
+            ikke_defineret_tekst=None,
+            t_indtastet_mm=t_indtastet_for_linje,
+        ))
+
+    # Søjle 2: Uarmeret basistykkelse (φ-korrigeret)
+    if t_uarm_krav is not None:
+        status_tekst_uarm, status_farve_uarm = _status_for_krav(
+            t_indtastet_for_linje, t_uarm_krav, t_krav_best=None,
+        )
+        snit_liste.append(rapport_mod.Snit(
+            titel="Uarmeret basistykkelse (φ-korrigeret)" if har_indtastet
+                  else "Uarmeret basistykkelse",
+            t_baerelag_mm=t_uarm_krav,
+            geonet_y_fracs=[],
+            sub_lag=None,
+            ikke_defineret_tekst=None,
+            er_krav_soejle=True,
+            t_indtastet_mm=t_indtastet_for_linje,
+            status_tekst=status_tekst_uarm,
+            status_farve=status_farve_uarm,
+        ))
+    else:
+        snit_liste.append(rapport_mod.Snit(
+            titel="Uarmeret basistykkelse",
+            t_baerelag_mm=None,
+            geonet_y_fracs=[],
+            sub_lag=None,
+            ikke_defineret_tekst=(
+                f"Uarmeret bærelag ikke defineret for Eu = {eu:g} MPa"
+            ),
+            er_krav_soejle=True,
+            t_indtastet_mm=t_indtastet_for_linje,
+        ))
+
+    # Søjle 3: 1 lag geonet
+    fracs_1, placement_1 = _geonet_fracs_kravsoejle(
+        "1_lag", t_1, valgt_geonet
+    )
+    status_tekst_1, status_farve_1 = _status_for_krav(
+        t_indtastet_for_linje, t_1, t_krav_best=t_1_best,
     )
     snit_liste.append(rapport_mod.Snit(
         titel="1 lag geonet",
         t_baerelag_mm=t_1,
         geonet_y_fracs=fracs_1,
-        sub_lag=sub_1,
+        sub_lag=None,
         ikke_defineret_tekst=(
             None if t_1 is not None else "Ikke gyldigt for denne kombination"
         ),
         best_case_mm=t_1_best,
         placement=placement_1,
+        er_krav_soejle=True,
+        t_indtastet_mm=t_indtastet_for_linje,
+        status_tekst=status_tekst_1,
+        status_farve=status_farve_1,
     ))
 
-    sub_2 = _sub_lag_skaleret_fra_materialer(materialer, t_2)
-    fracs_2, placement_2 = _geonet_fracs_for_snit(
-        "2_lag", t_2, valgt_geonet, sub_2
+    # Søjle 4: 2 lag geonet
+    fracs_2, placement_2 = _geonet_fracs_kravsoejle(
+        "2_lag", t_2, valgt_geonet
+    )
+    status_tekst_2, status_farve_2 = _status_for_krav(
+        t_indtastet_for_linje, t_2, t_krav_best=t_2_best,
     )
     snit_liste.append(rapport_mod.Snit(
         titel="2 lag geonet",
         t_baerelag_mm=t_2,
         geonet_y_fracs=fracs_2,
-        sub_lag=sub_2,
+        sub_lag=None,
         ikke_defineret_tekst=(
             None if t_2 is not None else "Ikke gyldigt for denne kombination"
         ),
         best_case_mm=t_2_best,
         placement=placement_2,
+        er_krav_soejle=True,
+        t_indtastet_mm=t_indtastet_for_linje,
+        status_tekst=status_tekst_2,
+        status_farve=status_farve_2,
     ))
 
     png = rapport_mod.render_opbygning_png(
@@ -1549,6 +1694,7 @@ def _render_oversigt_expanders(
                 eu, ref_1, ref_2,
                 prod_1lag=prod_1lag, prod_2lag=prod_2lag,
                 materialer=materialer,
+                phi=phi,
             )
 
     # --- Advarsler -------------------------------------------------------
@@ -1565,17 +1711,19 @@ def _render_oversigt_expanders(
     valgt_opbygning = st.session_state.get("opbygning_geonet_valg", _REF_VALG)
 
     def _placeringsadvarsler_for_valgt_opbygning(lag_mode: str) -> list[tuple[str, str]]:
+        # Koncept A: placement evalueres i krav-tykkelsen uden brugerens
+        # lagfordeling (sub_lag=None → min_daklag-regel). Det fjerner falske
+        # advarsler der opstod fra proportional skalering.
         if valgt_opbygning == _REF_VALG:
             ref = ref_1 if lag_mode == "1_lag" else ref_2
             if ref is None or ref.get("t_armeret_mm") is None:
                 return []
             t_ref = ref["t_armeret_mm"]
-            sub_lag = _sub_lag_skaleret_fra_materialer(materialer, t_ref)
             placement = check_geonet_placement(
                 lag_mode=lag_mode,
                 total_mm=t_ref,
                 geonet=None,
-                sub_lag=sub_lag,
+                sub_lag=None,
             )
             return [
                 (f"{_REF_VALG}: {a}", lag_mode)
@@ -1592,12 +1740,11 @@ def _render_oversigt_expanders(
             if t is None:
                 return []
             valgt_geonet = find_geonet(valgt_opbygning)
-            sub_lag = _sub_lag_skaleret_fra_materialer(materialer, t)
             placement = check_geonet_placement(
                 lag_mode=lag_mode,
                 total_mm=t,
                 geonet=valgt_geonet,
-                sub_lag=sub_lag,
+                sub_lag=None,
             )
             return [
                 (f"{valgt_opbygning}: {a}", lag_mode)
@@ -1982,7 +2129,12 @@ def _vis_beregnings_breakdown(
         lag_mode="2_lag", t_basis_table=t_basis_table,
     )
 
-    t_uarm_final = ref_uarm.get("t_uarmeret_mm") if not ref_uarm.get("fejl") else None
+    # Reduktion sammenlignes mod φ-korrigeret uarmeret reference, så net-effekten
+    # alene afspejles i procentdelen (se calculator.beregn() for begrundelse).
+    t_uarm_final = (
+        ref_uarm.get("t_uarmeret_phi_kor_mm") or ref_uarm.get("t_uarmeret_mm")
+        if not ref_uarm.get("fejl") else None
+    )
 
     with st.container(border=True):
         st.markdown("**📊 Beregnings-breakdown**")
@@ -3295,33 +3447,73 @@ def render_rapport() -> None:
         # pct-mode fallback
         return (t_uarm, _sub_lag_skaleret(t_uarm) if t_uarm else [])
 
+    # Koncept A: Indtastet opbygning + neutrale krav-søjler. φ fra
+    # dimensioneringen (sd["phi"]) styrer φ-korrektionen på uarmeret-kravet.
+    phi_dim = float(sd.get("phi", 35.0))
+    phi_kor_dim = K_PHI * (phi_dim - 35.0)
+    har_indtastet_rap = in_mm_mode and bool(materialer_dim)
+    indtastet_total_rap: float | None = None
+    if har_indtastet_rap:
+        indtastet_total_rap = sum(
+            float(m.get("tykkelse_mm") or 0) for m in materialer_dim
+        ) or None
+    t_uarm_krav_rap = (
+        round(t_uarm * (1 + phi_kor_dim)) if t_uarm is not None else None
+    )
+
     snit_liste: list[rapport_mod.Snit] = []
-    if vis_uarm and uarm_muligt:
-        uarm_total, uarm_sub = _sub_lag_uarmeret()
-        if uarm_total:
-            snit_liste.append(rapport_mod.Snit(
-                titel="Uarmeret", t_baerelag_mm=uarm_total,
-                geonet_y_fracs=[], sub_lag=uarm_sub,
-            ))
+
+    # Søjle 1: Indtastet opbygning (vises altid hvis materialer er angivet)
+    if har_indtastet_rap and indtastet_total_rap:
+        _, indtastet_sub = _sub_lag_uarmeret()
+        snit_liste.append(rapport_mod.Snit(
+            titel="Indtastet opbygning",
+            t_baerelag_mm=indtastet_total_rap,
+            geonet_y_fracs=[], sub_lag=indtastet_sub,
+            t_indtastet_mm=indtastet_total_rap,
+        ))
+
+    if vis_uarm and uarm_muligt and t_uarm_krav_rap is not None:
+        status_tekst_u, status_farve_u = _status_for_krav(
+            indtastet_total_rap, t_uarm_krav_rap, None,
+        )
+        snit_liste.append(rapport_mod.Snit(
+            titel="Uarmeret basistykkelse (φ-korrigeret)"
+                  if har_indtastet_rap else "Uarmeret basistykkelse",
+            t_baerelag_mm=t_uarm_krav_rap,
+            geonet_y_fracs=[], sub_lag=None,
+            er_krav_soejle=True,
+            t_indtastet_mm=indtastet_total_rap,
+            status_tekst=status_tekst_u,
+            status_farve=status_farve_u,
+        ))
     if vis_1lag and t_1 is not None:
-        sub_1 = _sub_lag_skaleret(t_1)
-        fracs_1, placement_1 = _geonet_fracs_for_snit(
-            "1_lag", t_1, geonet, sub_1
+        fracs_1, placement_1 = _geonet_fracs_kravsoejle("1_lag", t_1, geonet)
+        status_tekst_1, status_farve_1 = _status_for_krav(
+            indtastet_total_rap, t_1, None,
         )
         snit_liste.append(rapport_mod.Snit(
             titel="1 lag geonet", t_baerelag_mm=t_1,
-            geonet_y_fracs=fracs_1, sub_lag=sub_1,
+            geonet_y_fracs=fracs_1, sub_lag=None,
             placement=placement_1,
+            er_krav_soejle=True,
+            t_indtastet_mm=indtastet_total_rap,
+            status_tekst=status_tekst_1,
+            status_farve=status_farve_1,
         ))
     if vis_2lag and t_2 is not None and to_lag_muligt:
-        sub_2 = _sub_lag_skaleret(t_2)
-        fracs_2, placement_2 = _geonet_fracs_for_snit(
-            "2_lag", t_2, geonet, sub_2
+        fracs_2, placement_2 = _geonet_fracs_kravsoejle("2_lag", t_2, geonet)
+        status_tekst_2, status_farve_2 = _status_for_krav(
+            indtastet_total_rap, t_2, None,
         )
         snit_liste.append(rapport_mod.Snit(
             titel="2 lag geonet", t_baerelag_mm=t_2,
-            geonet_y_fracs=fracs_2, sub_lag=sub_2,
+            geonet_y_fracs=fracs_2, sub_lag=None,
             placement=placement_2,
+            er_krav_soejle=True,
+            t_indtastet_mm=indtastet_total_rap,
+            status_tekst=status_tekst_2,
+            status_farve=status_farve_2,
         ))
 
     if not snit_liste:

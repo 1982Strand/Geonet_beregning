@@ -177,6 +177,13 @@ class Snit:
     ikke_defineret_tekst: str | None = None
     best_case_mm: float | None = None  # NX750/NX850-interval; kun vist i dim-preview
     placement: dict | None = None
+    # Koncept A: krav-søjle felter — når er_krav_soejle=True tegnes søjlen som
+    # neutral grå blok ("φ-vægtet bærelag") uden materialefordeling, og
+    # status_tekst vises under søjlen til sammenligning med indtastet opbygning.
+    er_krav_soejle: bool = False
+    t_indtastet_mm: float | None = None  # til sammenligningslinje på tværs af søjler
+    status_tekst: str | None = None      # fx "Mangler 77 mm" eller "✓ +6 mm besparelse"
+    status_farve: str | None = None      # "danger" | "warning" | "success" | None
 
 
 def upper_geonet_frac_for_sub_lag(sub_lag: list[dict] | None) -> float:
@@ -227,12 +234,17 @@ def render_opbygning_png(
         return buf.getvalue()
 
     # Beregn fælles skala på tværs af alle snit — det største bærelag
-    # afgør hvor mange mm pr. tegne-enhed.
+    # afgør hvor mange mm pr. tegne-enhed. Sammenligningslinjen (t_indtastet_mm)
+    # skal også passe ind i skalaen.
     t_max = max(
         (s.t_baerelag_mm for s in snit_liste if s.t_baerelag_mm is not None),
         default=500.0,
     )
-    t_max = max(t_max, 300.0)  # mindst 300 mm-skala så små opbygninger ikke ser ekstremt små ud
+    t_indtastet_max = max(
+        (s.t_indtastet_mm for s in snit_liste if s.t_indtastet_mm is not None),
+        default=0.0,
+    )
+    t_max = max(t_max, t_indtastet_max, 300.0)
 
     n = len(snit_liste)
     fig_w = 4.2 * n   # lidt bredere så total-label kan stå udenfor boksen
@@ -288,7 +300,7 @@ def render_opbygning_png(
         )
         ax.text(
             (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.18, f"Eu = {eu:g} MPa",
-            ha="center", va="center", fontsize=9, color="white",
+            ha="center", va="center", fontsize=9, fontweight="bold", color="white",
         )
 
     for ax, s in zip(axes, snit_liste):
@@ -320,6 +332,81 @@ def render_opbygning_png(
             continue
 
         t = float(s.t_baerelag_mm)
+
+        # Krav-søjle (Koncept A): neutral grå blok mærket "φ-vægtet bærelag".
+        # Materialer fordeles IKKE — diagrammet kender ikke til lagopdeling.
+        if s.er_krav_soejle:
+            baerelag = Rectangle(
+                (BOX_X1, 0), BOX_X2 - BOX_X1, t,
+                facecolor="#E0E0E0", edgecolor="#666", linewidth=1,
+                hatch=None,
+            )
+            ax.add_patch(baerelag)
+            # Interval-bånd: tegn best-case som ekstra horisontal markering
+            if s.best_case_mm is not None and 0 < s.best_case_mm < t:
+                # Tonet zone mellem best-case og konservativ (= t)
+                interval_zone = Rectangle(
+                    (BOX_X1, s.best_case_mm),
+                    BOX_X2 - BOX_X1, t - s.best_case_mm,
+                    facecolor="#FFE0B2", edgecolor="none", alpha=0.5,
+                )
+                ax.add_patch(interval_zone)
+                # Stiplet linje ved best-case
+                ax.hlines(
+                    s.best_case_mm, BOX_X1, BOX_X2,
+                    colors="#888", linestyles=(0, (3, 2)), linewidth=0.9,
+                )
+                ax.text(
+                    (BOX_X1 + BOX_X2) / 2, s.best_case_mm + (t - s.best_case_mm) / 2,
+                    "interval", ha="center", va="center",
+                    fontsize=6.5, color="#666", style="italic",
+                )
+            ax.text(
+                (BOX_X1 + BOX_X2) / 2, t * 0.5, "φ-vægtet\nbærelag",
+                ha="center", va="center",
+                fontsize=9, color="#444", linespacing=1.35,
+            )
+            # Geonet-linjer
+            placement = s.placement or {}
+            for frac in s.geonet_y_fracs:
+                y = t * (1.0 - frac)
+                ax.hlines(
+                    y, BOX_X1 - 0.015, BOX_X2 + 0.015,
+                    colors="#D32F2F", linestyles=(0, (4, 2)), linewidth=1.8,
+                )
+                ax.annotate(
+                    geonet_label,
+                    xy=(GEONET_LBL_X + 0.03, y),
+                    ha="left", va="center",
+                    fontsize=8, color="#D32F2F",
+                )
+            # Total-label
+            t_label_str = f"{t:.0f} mm"
+            if s.best_case_mm is not None and round(s.best_case_mm) < round(t):
+                t_label_str = f"{s.best_case_mm:.0f}–{t:.0f} mm"
+            ax.annotate(
+                f"↕ {t_label_str}",
+                xy=(LABEL_X, t / 2),
+                ha="right", va="center",
+                fontsize=9.5, fontweight="bold", color="#333",
+                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.5},
+            )
+            # Status-tekst under søjlen (bund af underbund-blokken)
+            if s.status_tekst:
+                farve_map = {
+                    "danger": "#C62828",
+                    "warning": "#EF6C00",
+                    "success": "#2E7D32",
+                }
+                farve = farve_map.get(s.status_farve or "", "#444")
+                ax.text(
+                    (BOX_X1 + BOX_X2) / 2, bund_y - underbund_h * 0.25,
+                    s.status_tekst,
+                    ha="center", va="top",
+                    fontsize=9, fontweight="bold", color=farve,
+                )
+            _draw_underbund(ax)
+            continue
 
         # Bærelagets ydre rektangel (ingen hatch — sub-lag tegnes ovenpå)
         baerelag = Rectangle(
@@ -367,7 +454,7 @@ def render_opbygning_png(
                         label_txt,
                         ha="center", va="center",
                         fontsize=label_fs, color="#222",
-                        linespacing=0.9,
+                        linespacing=1.35,
                     )
                     y_top = y_bot
         else:
@@ -424,7 +511,38 @@ def render_opbygning_png(
                 fontsize=7, color="#777", style="italic",
             )
 
+        # Status-tekst under "Indtastet opbygning" (kun hvis sat)
+        if s.status_tekst and not s.er_krav_soejle:
+            farve_map = {
+                "danger": "#C62828",
+                "warning": "#EF6C00",
+                "success": "#2E7D32",
+            }
+            farve = farve_map.get(s.status_farve or "", "#444")
+            ax.text(
+                (BOX_X1 + BOX_X2) / 2, bund_y - underbund_h * 0.25,
+                s.status_tekst,
+                ha="center", va="top",
+                fontsize=9, fontweight="bold", color=farve,
+            )
+
         _draw_underbund(ax)
+
+    # Sammenligningslinje: t_indtastet_mm trækkes som stiplet blå linje
+    # henover alle søjler (også 'Indtastet opbygning'-søjlen selv) som
+    # gennemgående reference. Det første søjle der har t_indtastet_mm sat
+    # definerer linjens niveau.
+    t_indtastet = next(
+        (s.t_indtastet_mm for s in snit_liste if s.t_indtastet_mm is not None),
+        None,
+    )
+    if t_indtastet is not None and t_indtastet > 0:
+        for ax in axes:
+            ax.hlines(
+                t_indtastet, 0.02, 0.98,
+                colors="#1565C0", linestyles=(0, (5, 3)), linewidth=1.4,
+                zorder=10,
+            )
 
     fig.tight_layout()
     buf = io.BytesIO()
