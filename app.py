@@ -44,6 +44,7 @@ from core.calculator import (
     grupper_produkter,
 )
 from core.validators import valider_input
+from core.placement import check_geonet_placement, placement_requirements
 
 # ---------------------------------------------------------------------------
 # Redigerbare materialer
@@ -928,6 +929,14 @@ def _resultat_til_gruppe(
         "max_korn":       geonet["max_korn"],
         "fejl":           None,
     }
+    for key in (
+        "placering_ok", "geonet_placeringer_mm_fra_top", "geonet_y_fracs",
+        "topdaeklag_mm", "afstande_mellem_geonet_mm", "placeringsadvarsler",
+        "t_min_placering_mm", "t_dimensionerende_mm", "min_top_cover_mm",
+        "min_spacing_mm", "max_spacing_mm", "placeringsbasis",
+    ):
+        if key in res:
+            produkt[key] = res[key]
     return {
         "t_armeret_mm":         round(t_eks, 0),
         "t_armeret_eksakt_mm":  round(t_eks, 0),
@@ -935,6 +944,7 @@ def _resultat_til_gruppe(
         "reduktion_pct_eksakt": round(red_eks, 4) if red_eks is not None else None,
         "t_basis_arm_mm":       res.get("t_basis_arm_mm"),
         "produkter":            [produkt],
+        "placering_ok":         produkt.get("placering_ok", True),
         "har_fejl":             False,
         "fejl_besked":          None,
     }
@@ -944,6 +954,15 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
     """Pak neutral referenceberegning som en gruppe til referencevisning."""
     if res.get("fejl") or res.get("t_armeret_mm") is None:
         return None
+    if "placering_ok" not in res:
+        res = {
+            **res,
+            **check_geonet_placement(
+                lag_mode=res.get("lag_mode"),
+                total_mm=res.get("t_armeret_mm"),
+                geonet=None,
+            ),
+        }
 
     t_ref = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
@@ -963,6 +982,14 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
         "max_korn": None,
         "fejl": None,
     }
+    for key in (
+        "placering_ok", "geonet_placeringer_mm_fra_top", "geonet_y_fracs",
+        "topdaeklag_mm", "afstande_mellem_geonet_mm", "placeringsadvarsler",
+        "t_min_placering_mm", "t_dimensionerende_mm", "min_top_cover_mm",
+        "min_spacing_mm", "max_spacing_mm", "placeringsbasis",
+    ):
+        if key in res:
+            produkt[key] = res[key]
     return {
         "t_armeret_mm": round(t_ref, 0),
         "t_armeret_eksakt_mm": round(t_ref, 0),
@@ -970,6 +997,7 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
         "reduktion_pct_eksakt": round(red_ref, 4) if red_ref is not None else None,
         "t_basis_arm_mm": res.get("t_basis_arm_mm"),
         "produkter": [produkt],
+        "placering_ok": produkt.get("placering_ok", True),
         "har_fejl": False,
         "fejl_besked": None,
     }
@@ -1099,6 +1127,12 @@ def _advarsel_med_lagtekst(advarsel: str, lag_mode: str) -> str:
     lagtekst = "ved 1 lag geonet" if lag_mode == "1_lag" else "ved 2 lag geonet"
     if lagtekst in advarsel or "1 lag geonet" in advarsel or "2 lag geonet" in advarsel:
         return advarsel
+    if (
+        "dæklag" in advarsel
+        or "minimumsdæklag" in advarsel
+        or "under oversiden" in advarsel
+    ):
+        return advarsel
     if "minimumtykkelse" in advarsel and " mm). " in advarsel:
         return advarsel.replace(" mm). ", f" mm) {lagtekst}. ", 1)
     if advarsel.endswith("."):
@@ -1115,7 +1149,7 @@ def _samme_produkter(g1: dict | None, g2: dict | None) -> bool:
     return n1 == n2
 
 
-def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str]:
+def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str, str]:
     """
     Returner (navne, min_dæklag_str, max_korn_str) for visning af
     udførelseskrav for produkterne i en bedste-gruppe.
@@ -1127,11 +1161,16 @@ def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str]:
     navne = ", ".join(p["navn"] for p in produkter)
 
     # min_daklag er i cm i GEONET_DB → konvertér til mm
-    dk_unik = sorted({p["min_daklag"] * 10 for p in produkter})
+    dk_unik = sorted({
+        p.get("min_top_cover_mm")
+        if p.get("min_top_cover_mm") is not None
+        else max(200, p["min_daklag"] * 10)
+        for p in produkter
+    })
     if len(dk_unik) == 1:
-        dk_str = f"{dk_unik[0]} mm"
+        dk_str = f"{dk_unik[0]:.0f} mm"
     else:
-        dk_str = f"{dk_unik[0]}–{dk_unik[-1]} mm (varierer pr. produkt)"
+        dk_str = f"{dk_unik[0]:.0f}–{dk_unik[-1]:.0f} mm (varierer pr. produkt)"
 
     korn_alle = [p["max_korn"] for p in produkter]
     korn_unik = sorted({k for k in korn_alle if k is not None})
@@ -1151,7 +1190,17 @@ def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str]:
         else:
             korn_str = f"{rng} mm (varierer pr. produkt)"
 
-    return navne, dk_str, korn_str
+    min_afst = sorted({p.get("min_spacing_mm", 200) for p in produkter})
+    max_afst = sorted({p.get("max_spacing_mm", 400) for p in produkter})
+    if len(min_afst) == 1 and len(max_afst) == 1:
+        afstand_str = f"{min_afst[0]:.0f}–{max_afst[0]:.0f} mm"
+    else:
+        afstand_str = (
+            f"{min(min_afst):.0f}–{max(max_afst):.0f} mm "
+            "(varierer pr. produkt)"
+        )
+
+    return navne, dk_str, korn_str, afstand_str
 
 
 _REF_VALG = "Referencenet (TX160 / SX160 / T6)"
@@ -1235,6 +1284,79 @@ def _sub_lag_uarmeret_fra_materialer(
     )
 
 
+def _berig_resultat_med_placering(
+    res: dict,
+    geonet: dict | None,
+    materialer: list[dict] | None,
+) -> dict:
+    if res.get("fejl") or res.get("t_armeret_mm") is None:
+        return res
+    sub_lag = _sub_lag_skaleret_fra_materialer(materialer, res.get("t_armeret_mm"))
+    return {
+        **res,
+        **check_geonet_placement(
+            lag_mode=res.get("lag_mode"),
+            total_mm=res.get("t_armeret_mm"),
+            geonet=geonet,
+            sub_lag=sub_lag,
+        ),
+    }
+
+
+def _berig_produkter_med_placering(
+    produkter: list[dict],
+    lag_mode: str,
+    materialer: list[dict] | None,
+) -> list[dict]:
+    berigede: list[dict] = []
+    for produkt in produkter:
+        if produkt.get("fejl") or produkt.get("t_armeret_mm") is None:
+            berigede.append(produkt)
+            continue
+        geonet = find_geonet(produkt["navn"])
+        sub_lag = _sub_lag_skaleret_fra_materialer(
+            materialer, produkt.get("t_armeret_mm")
+        )
+        opdateret = {
+            **produkt,
+            **check_geonet_placement(
+                lag_mode=lag_mode,
+                total_mm=produkt.get("t_armeret_mm"),
+                geonet=geonet,
+                sub_lag=sub_lag,
+            ),
+        }
+        if produkt.get("t_armeret_mm_min") is not None:
+            best_sub_lag = _sub_lag_skaleret_fra_materialer(
+                materialer, produkt.get("t_armeret_mm_min")
+            )
+            opdateret["placering_best"] = check_geonet_placement(
+                lag_mode=lag_mode,
+                total_mm=produkt.get("t_armeret_mm_min"),
+                geonet=geonet,
+                sub_lag=best_sub_lag,
+            )
+        berigede.append(opdateret)
+    return berigede
+
+
+def _geonet_fracs_for_snit(
+    lag_mode: str,
+    total_mm: float | None,
+    geonet: dict | None,
+    sub_lag: list[dict] | None,
+) -> tuple[list[float], dict | None]:
+    if total_mm is None:
+        return [], None
+    placement = check_geonet_placement(
+        lag_mode=lag_mode,
+        total_mm=total_mm,
+        geonet=geonet,
+        sub_lag=sub_lag,
+    )
+    return placement.get("geonet_y_fracs", []), placement
+
+
 def _render_opbygningsvisualisering(
     eu: float,
     ref_1: dict | None,
@@ -1308,6 +1430,7 @@ def _render_opbygningsvisualisering(
         t_1_best = None
         t_2_best = None
         produkt_navn_vis = None
+        valgt_geonet = None
         geonet_label = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6"
     else:
         t_1 = _produkt_t(prod_1lag, valg)
@@ -1315,6 +1438,7 @@ def _render_opbygningsvisualisering(
         t_1_best = _produkt_t_best(prod_1lag, valg)
         t_2_best = _produkt_t_best(prod_2lag, valg)
         produkt_navn_vis = valg
+        valgt_geonet = find_geonet(valg)
         geonet_label = valg
 
     # ── Skalering: brug t_uarm hvis defineret, ellers største armerede ─
@@ -1351,28 +1475,36 @@ def _render_opbygningsvisualisering(
         ),
     ))
 
+    sub_1 = _sub_lag_skaleret_fra_materialer(materialer, t_1)
+    fracs_1, placement_1 = _geonet_fracs_for_snit(
+        "1_lag", t_1, valgt_geonet, sub_1
+    )
     snit_liste.append(rapport_mod.Snit(
         titel="1 lag geonet",
         t_baerelag_mm=t_1,
-        geonet_y_fracs=[0.99] if t_1 is not None else [],
-        sub_lag=_sub_lag_skaleret_fra_materialer(materialer, t_1),
+        geonet_y_fracs=fracs_1,
+        sub_lag=sub_1,
         ikke_defineret_tekst=(
             None if t_1 is not None else "Ikke gyldigt for denne kombination"
         ),
         best_case_mm=t_1_best,
+        placement=placement_1,
     ))
 
     sub_2 = _sub_lag_skaleret_fra_materialer(materialer, t_2)
-    upper_frac = rapport_mod.upper_geonet_frac_for_sub_lag(sub_2)
+    fracs_2, placement_2 = _geonet_fracs_for_snit(
+        "2_lag", t_2, valgt_geonet, sub_2
+    )
     snit_liste.append(rapport_mod.Snit(
         titel="2 lag geonet",
         t_baerelag_mm=t_2,
-        geonet_y_fracs=[upper_frac, 0.99] if t_2 is not None else [],
+        geonet_y_fracs=fracs_2,
         sub_lag=sub_2,
         ikke_defineret_tekst=(
             None if t_2 is not None else "Ikke gyldigt for denne kombination"
         ),
         best_case_mm=t_2_best,
+        placement=placement_2,
     ))
 
     png = rapport_mod.render_opbygning_png(
@@ -1430,6 +1562,49 @@ def _render_oversigt_expanders(
     lag_by_advarsel: dict[str, set[str]] = {}
     advarsler_unik: list[str] = []
     seen_a: set[str] = set()
+    valgt_opbygning = st.session_state.get("opbygning_geonet_valg", _REF_VALG)
+
+    def _placeringsadvarsler_for_valgt_opbygning(lag_mode: str) -> list[tuple[str, str]]:
+        if valgt_opbygning == _REF_VALG:
+            ref = ref_1 if lag_mode == "1_lag" else ref_2
+            if ref is None or ref.get("t_armeret_mm") is None:
+                return []
+            t_ref = ref["t_armeret_mm"]
+            sub_lag = _sub_lag_skaleret_fra_materialer(materialer, t_ref)
+            placement = check_geonet_placement(
+                lag_mode=lag_mode,
+                total_mm=t_ref,
+                geonet=None,
+                sub_lag=sub_lag,
+            )
+            return [
+                (f"{_REF_VALG}: {a}", lag_mode)
+                for a in placement.get("placeringsadvarsler", [])
+            ]
+
+        produkter = prod_1lag if lag_mode == "1_lag" else prod_2lag
+        if not produkter:
+            return []
+        for produkt in produkter:
+            if produkt.get("navn") != valgt_opbygning or produkt.get("fejl"):
+                continue
+            t = produkt.get("t_armeret_mm")
+            if t is None:
+                return []
+            valgt_geonet = find_geonet(valgt_opbygning)
+            sub_lag = _sub_lag_skaleret_fra_materialer(materialer, t)
+            placement = check_geonet_placement(
+                lag_mode=lag_mode,
+                total_mm=t,
+                geonet=valgt_geonet,
+                sub_lag=sub_lag,
+            )
+            return [
+                (f"{valgt_opbygning}: {a}", lag_mode)
+                for a in placement.get("placeringsadvarsler", [])
+            ]
+        return []
+
     for lm in ("1_lag", "2_lag"):
         bedste = bedste_1 if lm == "1_lag" else bedste_2
         t_armeret_mm = bedste["t_armeret_mm"] if bedste is not None else None
@@ -1442,6 +1617,9 @@ def _render_oversigt_expanders(
         for a in val.get("advarsler", []):
             advarsler_pr_lag.append((a, lm))
             lag_by_advarsel.setdefault(a, set()).add(lm)
+        for a, a_lm in _placeringsadvarsler_for_valgt_opbygning(lm):
+            advarsler_pr_lag.append((a, a_lm))
+            lag_by_advarsel.setdefault(a, set()).add(a_lm)
 
     for a, lm in advarsler_pr_lag:
         if len(lag_by_advarsel[a]) == 1:
@@ -1535,7 +1713,12 @@ def _render_oversigt_expanders(
         if geonet is not None:
             # Specifikt produkt: vis konkrete værdier
             navn_vis = geonet_navn or geonet["navn"]
-            min_dk_mm = geonet["min_daklag"] * 10
+            krav = placement_requirements(geonet)
+            min_dk_mm = krav["min_top_cover_mm"]
+            afstand_str = (
+                f"{krav['min_spacing_mm']:.0f}–"
+                f"{krav['max_spacing_mm']:.0f} mm"
+            )
             if geonet["max_korn"] is not None:
                 korn_str = f"**{geonet['max_korn']} mm**"
             else:
@@ -1543,6 +1726,7 @@ def _render_oversigt_expanders(
             st.markdown(
                 f"**Krav for {navn_vis}:**\n"
                 f"- Minimum dæklag over geonet: **{min_dk_mm} mm**\n"
+                f"- Afstand mellem geonetlag: **{afstand_str}**\n"
                 f"- Max kornstørrelse i kontakt med geonet: {korn_str}"
             )
         else:
@@ -1550,10 +1734,11 @@ def _render_oversigt_expanders(
             # Hvis samme sæt produkter er bedste i begge lag-modes,
             # vises kravene kun én gang.
             def _vis_krav_blok(overskrift: str, gruppe: dict) -> None:
-                navne, dk_str, korn_str = _krav_for_gruppe(gruppe)
+                navne, dk_str, korn_str, afstand_str = _krav_for_gruppe(gruppe)
                 st.markdown(
                     f"**{overskrift}** ({navne})\n"
                     f"- Minimum dæklag over geonet: **{dk_str}**\n"
+                    f"- Afstand mellem geonetlag: **{afstand_str}**\n"
                     f"- Max kornstørrelse i kontakt med geonet: **{korn_str}**"
                 )
 
@@ -2378,6 +2563,8 @@ def render_brugerdefineret() -> None:
     prod_2lag = beregn_alle_produkter(
         eu, eo, "2_lag", phi=phi, t_basis_table=t_basis_table
     )
+    prod_1lag = _berig_produkter_med_placering(prod_1lag, "1_lag", materialer)
+    prod_2lag = _berig_produkter_med_placering(prod_2lag, "2_lag", materialer)
 
     if not specifikt_mode:
         # OVERSIGT-MODE — som Standard, men med custom phi
@@ -2440,6 +2627,8 @@ def render_brugerdefineret() -> None:
             eu=eu, eo=eo, phi=phi, net_korrektion=net_kor,
             lag_mode="2_lag", t_basis_table=t_basis_table,
         )
+        res_1 = _berig_resultat_med_placering(res_1, geonet, materialer)
+        res_2 = _berig_resultat_med_placering(res_2, geonet, materialer)
 
         bedste_1 = _resultat_til_gruppe(res_1, geonet, valgt_klasse)
         bedste_2 = _resultat_til_gruppe(res_2, geonet, valgt_klasse)
@@ -2456,6 +2645,9 @@ def render_brugerdefineret() -> None:
                     eu=eu, eo=eo, phi=phi, net_korrektion=kor_best,
                     lag_mode=lag_mode, t_basis_table=t_basis_table,
                 )
+                res_best = _berig_resultat_med_placering(
+                    res_best, geonet, materialer
+                )
                 if res_best.get("fejl") is not None:
                     continue
                 produkt = gruppe["produkter"][0]
@@ -2467,6 +2659,18 @@ def render_brugerdefineret() -> None:
                 produkt["reduktion_mm_max"] = res_best.get("reduktion_mm")
                 produkt["reduktion_pct_min"] = produkt.get("reduktion_pct")
                 produkt["reduktion_pct_max"] = res_best.get("reduktion_pct")
+                produkt["placering_best"] = {
+                    k: res_best.get(k)
+                    for k in (
+                        "placering_ok", "geonet_placeringer_mm_fra_top",
+                        "geonet_y_fracs", "topdaeklag_mm",
+                        "afstande_mellem_geonet_mm", "placeringsadvarsler",
+                        "t_min_placering_mm", "t_dimensionerende_mm",
+                        "min_top_cover_mm", "min_spacing_mm", "max_spacing_mm",
+                        "placeringsbasis",
+                    )
+                    if k in res_best
+                }
 
         t_uarm = None
         for r in (res_1, res_2):
@@ -3100,16 +3304,24 @@ def render_rapport() -> None:
                 geonet_y_fracs=[], sub_lag=uarm_sub,
             ))
     if vis_1lag and t_1 is not None:
+        sub_1 = _sub_lag_skaleret(t_1)
+        fracs_1, placement_1 = _geonet_fracs_for_snit(
+            "1_lag", t_1, geonet, sub_1
+        )
         snit_liste.append(rapport_mod.Snit(
             titel="1 lag geonet", t_baerelag_mm=t_1,
-            geonet_y_fracs=[0.99], sub_lag=_sub_lag_skaleret(t_1),
+            geonet_y_fracs=fracs_1, sub_lag=sub_1,
+            placement=placement_1,
         ))
     if vis_2lag and t_2 is not None and to_lag_muligt:
         sub_2 = _sub_lag_skaleret(t_2)
-        upper_frac = rapport_mod.upper_geonet_frac_for_sub_lag(sub_2)
+        fracs_2, placement_2 = _geonet_fracs_for_snit(
+            "2_lag", t_2, geonet, sub_2
+        )
         snit_liste.append(rapport_mod.Snit(
             titel="2 lag geonet", t_baerelag_mm=t_2,
-            geonet_y_fracs=[upper_frac, 0.99], sub_lag=sub_2,
+            geonet_y_fracs=fracs_2, sub_lag=sub_2,
+            placement=placement_2,
         ))
 
     if not snit_liste:

@@ -16,6 +16,7 @@ from .data import (
     GEONET_DB,
     K_PHI,
 )
+from .placement import check_geonet_placement
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +261,12 @@ def beregn_alle_produkter(
             "max_korn": geonet["max_korn"],
             "fejl": resultat.get("fejl"),
         }
+        if resultat.get("fejl") is None and resultat.get("t_armeret_mm") is not None:
+            række.update(check_geonet_placement(
+                lag_mode=lag_mode,
+                total_mm=resultat.get("t_armeret_mm"),
+                geonet=geonet,
+            ))
 
         # Interval-produkter (fx Tensar InterAx NX750/NX850): kør beregn()
         # to gange — én pr. ende af korrektionsintervallet. Den konservative
@@ -283,6 +290,11 @@ def beregn_alle_produkter(
                 række["reduktion_mm_max"] = res_best.get("reduktion_mm")
                 række["reduktion_pct_min"] = resultat.get("reduktion_pct")
                 række["reduktion_pct_max"] = res_best.get("reduktion_pct")
+                række["placering_best"] = check_geonet_placement(
+                    lag_mode=lag_mode,
+                    total_mm=res_best.get("t_armeret_mm"),
+                    geonet=geonet,
+                )
 
         resultater.append(række)
 
@@ -337,6 +349,7 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
                 "reduktion_pct_eksakt": round(red_pct, 4) if red_pct is not None else None,
                 "t_basis_arm_mm": produkt.get("t_basis_arm_mm"),
                 "produkter": [produkt],
+                "placering_ok": produkt.get("placering_ok", True),
                 "har_fejl": False,
                 "fejl_besked": None,
             })
@@ -374,6 +387,7 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
             "reduktion_pct_eksakt": round(red_pct, 4) if red_pct is not None else None,
             "t_basis_arm_mm": t_basis_arm,
             "produkter": gruppe_produkter,
+            "placering_ok": all(p.get("placering_ok", True) for p in gruppe_produkter),
             "har_fejl": False,
             "fejl_besked": None,
         })

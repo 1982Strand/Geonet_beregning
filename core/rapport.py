@@ -176,6 +176,7 @@ class Snit:
     sub_lag: list[dict] | None = None  # liste af {"navn": str, "tykkelse_mm": float}
     ikke_defineret_tekst: str | None = None
     best_case_mm: float | None = None  # NX750/NX850-interval; kun vist i dim-preview
+    placement: dict | None = None
 
 
 def upper_geonet_frac_for_sub_lag(sub_lag: list[dict] | None) -> float:
@@ -213,6 +214,7 @@ def render_opbygning_png(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
+    import textwrap
 
     if not snit_liste:
         # Tom figur — bør ikke ske fra UI'en (mindst ét snit kræves), men
@@ -247,8 +249,30 @@ def render_opbygning_png(
 
     # Koordinater i akse-data (x går fra 0 til 1)
     BOX_X1, BOX_X2 = 0.26, 0.78
-    LABEL_X = 0.13            # total-label centreres her, OUTSIDE boksen
+    LABEL_X = BOX_X1 - 0.035  # total-label højrestilles lige udenfor boksen
     GEONET_LBL_X = 0.80       # geonet-navn til højre for boksen
+
+    def _wrap_material_label(navn: str, tykkelse_mm: float, label_h_mm: float) -> tuple[str, float]:
+        navn = str(navn or "Lag").strip()
+        navn = navn.replace("Bundsikringssand", "Bundsikrings-\nsand")
+        linjer: list[str] = []
+        for deltekst in navn.splitlines():
+            linjer.extend(textwrap.wrap(
+                deltekst,
+                width=13,
+                break_long_words=True,
+                break_on_hyphens=True,
+            ) or [deltekst])
+
+        max_name_lines = 3 if label_h_mm >= 130 else 2
+        linjer = linjer[:max_name_lines]
+        linjer.append(f"{tykkelse_mm:.0f} mm")
+
+        if label_h_mm < 55:
+            return f"{tykkelse_mm:.0f} mm", 7.0
+        if label_h_mm < 90:
+            return "\n".join(linjer[-2:]), 7.2
+        return "\n".join(linjer), 7.8
 
     def _draw_underbund(ax):
         ub = Rectangle(
@@ -335,20 +359,16 @@ def render_opbygning_png(
                                   colors="#555", linewidth=0.8)
                     # Etiket centreret i lag — kun hvis der er plads
                     label_h_mm = y_top - y_bot
-                    if label_h_mm >= 50:  # over ca. 50 mm har vi plads til 2-linjet label
-                        ax.text(
-                            (BOX_X1 + BOX_X2) / 2, (y_top + y_bot) / 2,
-                            f"{lag['navn']}\n{h:.0f} mm",
-                            ha="center", va="center",
-                            fontsize=8.5, color="#222",
-                        )
-                    else:  # ellers kun mm
-                        ax.text(
-                            (BOX_X1 + BOX_X2) / 2, (y_top + y_bot) / 2,
-                            f"{lag['navn']} · {h:.0f} mm",
-                            ha="center", va="center",
-                            fontsize=7.5, color="#222",
-                        )
+                    label_txt, label_fs = _wrap_material_label(
+                        lag["navn"], h, label_h_mm
+                    )
+                    ax.text(
+                        (BOX_X1 + BOX_X2) / 2, (y_top + y_bot) / 2,
+                        label_txt,
+                        ha="center", va="center",
+                        fontsize=label_fs, color="#222",
+                        linespacing=0.9,
+                    )
                     y_top = y_bot
         else:
             # Fald-tilbage: "Bærelag" centreret hvis ingen sub-lag oplyst
@@ -363,6 +383,7 @@ def render_opbygning_png(
             )
 
         # Geonet-linjer ovenpå sub-lag
+        placement = s.placement or {}
         for frac in s.geonet_y_fracs:
             y = t * (1.0 - frac)
             ax.hlines(
@@ -380,8 +401,9 @@ def render_opbygning_png(
         ax.annotate(
             f"↕ {t:.0f} mm",
             xy=(LABEL_X, t / 2),
-            ha="center", va="center",
-            fontsize=10, fontweight="bold", color="#333",
+            ha="right", va="center",
+            fontsize=9.5, fontweight="bold", color="#333",
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.5},
         )
         # Interval-produkter (NX750/NX850): vis best-case under hovedtallet.
         # Kun sat fra dim-preview — rapporten lader feltet være None.
@@ -391,14 +413,14 @@ def render_opbygning_png(
                 f"↓ {s.best_case_mm:.0f} mm",
                 xy=(LABEL_X, t / 2),
                 xytext=(0, -16), textcoords="offset points",
-                ha="center", va="center",
+                ha="right", va="center",
                 fontsize=8, color="#555",
             )
             ax.annotate(
                 "under optimale\nforhold",
                 xy=(LABEL_X, t / 2),
                 xytext=(0, -32), textcoords="offset points",
-                ha="center", va="center",
+                ha="right", va="center",
                 fontsize=7, color="#777", style="italic",
             )
 
@@ -460,13 +482,22 @@ def formatér_dimensioneringsresultat(dim: dict) -> list[tuple[str, str]]:
     def _mm(v):
         return f"{v:.0f} mm" if isinstance(v, (int, float)) else "—"
 
+    def _placering(res: dict) -> str:
+        if not res or res.get("fejl") or res.get("t_armeret_mm") is None:
+            return "—"
+        status = "OK" if res.get("placering_ok", True) else "Kræver kontrol"
+        advarsler = res.get("placeringsadvarsler") or []
+        return status if not advarsler else f"{status}: {advarsler[0]}"
+
     t_uarm = res_1.get("t_uarmeret_mm") or res_2.get("t_uarmeret_mm")
 
     return [
         ("Valgt geonet", geonet.get("navn", "—")),
         ("Uarmeret reference", _mm(t_uarm)),
         ("Armeret tykkelse — 1 lag", _mm(res_1.get("t_armeret_mm"))),
+        ("Geonetplacering — 1 lag", _placering(res_1)),
         ("Armeret tykkelse — 2 lag", _mm(res_2.get("t_armeret_mm"))),
+        ("Geonetplacering — 2 lag", _placering(res_2)),
     ]
 
 
