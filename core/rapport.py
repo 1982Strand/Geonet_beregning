@@ -342,23 +342,19 @@ def render_opbygning_png(
                 hatch=None,
             )
             ax.add_patch(baerelag)
-            # Interval-bånd: tegn best-case som ekstra horisontal markering
+            # Interval-markering: stiplet linje ved best-case + "optimal"
+            # label lige under linjen. Selve zonen tegnes IKKE — bærelaget
+            # er ensartet grå hele vejen.
             if s.best_case_mm is not None and 0 < s.best_case_mm < t:
-                # Tonet zone mellem best-case og konservativ (= t)
-                interval_zone = Rectangle(
-                    (BOX_X1, s.best_case_mm),
-                    BOX_X2 - BOX_X1, t - s.best_case_mm,
-                    facecolor="#FFE0B2", edgecolor="none", alpha=0.5,
-                )
-                ax.add_patch(interval_zone)
-                # Stiplet linje ved best-case
+                # Stiplet linje ved best-case (= optimal grænse)
                 ax.hlines(
                     s.best_case_mm, BOX_X1, BOX_X2,
                     colors="#888", linestyles=(0, (3, 2)), linewidth=0.9,
                 )
+                # "optimal"-label lige under linjen (lille offset)
                 ax.text(
-                    (BOX_X1 + BOX_X2) / 2, s.best_case_mm + (t - s.best_case_mm) / 2,
-                    "interval", ha="center", va="center",
+                    (BOX_X1 + BOX_X2) / 2, s.best_case_mm - 0.025 * t,
+                    "optimal", ha="center", va="top",
                     fontsize=6.5, color="#666", style="italic",
                 )
             ax.text(
@@ -380,18 +376,26 @@ def render_opbygning_png(
                     ha="left", va="center",
                     fontsize=8, color="#D32F2F",
                 )
-            # Total-label
-            t_label_str = f"{t:.0f} mm"
-            if s.best_case_mm is not None and round(s.best_case_mm) < round(t):
-                t_label_str = f"{s.best_case_mm:.0f}–{t:.0f} mm"
+            # Total-label: konservativ stor + (optimal) parentes nedenunder
             ax.annotate(
-                f"↕ {t_label_str}",
+                f"↕ {t:.0f} mm",
                 xy=(LABEL_X, t / 2),
                 ha="right", va="center",
                 fontsize=9.5, fontweight="bold", color="#333",
                 bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.5},
             )
-            # Status-tekst under søjlen (bund af underbund-blokken)
+            if s.best_case_mm is not None and round(s.best_case_mm) < round(t):
+                ax.annotate(
+                    f"({s.best_case_mm:.0f} mm)",
+                    xy=(LABEL_X, t / 2),
+                    xytext=(0, -14), textcoords="offset points",
+                    ha="right", va="center",
+                    fontsize=8, color="#666",
+                    bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
+                )
+            # Status-tekst under søjlen (bund af underbund-blokken).
+            # Hvis teksten indeholder linjeskift, vises 1. linje fed/farvet
+            # og 2. linje mindre/gråtone (= parentes-stilen).
             if s.status_tekst:
                 farve_map = {
                     "danger": "#C62828",
@@ -399,12 +403,21 @@ def render_opbygning_png(
                     "success": "#2E7D32",
                 }
                 farve = farve_map.get(s.status_farve or "", "#444")
+                linjer = s.status_tekst.split("\n", 1)
                 ax.text(
                     (BOX_X1 + BOX_X2) / 2, bund_y - underbund_h * 0.25,
-                    s.status_tekst,
+                    linjer[0],
                     ha="center", va="top",
                     fontsize=9, fontweight="bold", color=farve,
                 )
+                if len(linjer) > 1:
+                    ax.text(
+                        (BOX_X1 + BOX_X2) / 2,
+                        bund_y - underbund_h * 0.55,
+                        linjer[1],
+                        ha="center", va="top",
+                        fontsize=7.5, color="#666",
+                    )
             _draw_underbund(ax)
             continue
 
@@ -623,12 +636,14 @@ def render_personligt_designdiagram_png(
         xs_k, ys_k = _kurve(lag_mode, f_kons)
         if not xs_k:
             return
+        har_interval = False
         if net_kor_best is not None:
             f_best = 1.0 + phi_kor + net_kor_best
             xs_b, ys_b = _kurve(lag_mode, f_best)
             # Tonet bånd mellem best-case og konservativ. fill_betweenx
             # kræver fælles y-koordinater — vi kører over fælles eu-rækker.
             if xs_b and ys_b == ys_k:
+                har_interval = True
                 ax.fill_betweenx(
                     ys_k, xs_b, xs_k, color=color, alpha=0.15,
                     label=None,
@@ -636,13 +651,14 @@ def render_personligt_designdiagram_png(
             # Stiplet linje ved best-case-kanten
             ax.plot(
                 xs_b, ys_b, ":", color=color, linewidth=1.3,
-                label=None,
+                label=f"{label_prefix} {geonet_navn} (optimal)",
             )
-        # Heltrukken konservativ kurve med marker
+        # Heltrukken kurve med marker
+        kons_suffix = " (konservativ)" if har_interval else ""
         ax.plot(
             xs_k, ys_k, "-", color=color, linewidth=2.2,
             marker=marker, markersize=5,
-            label=f"{label_prefix} {geonet_navn}",
+            label=f"{label_prefix} {geonet_navn}{kons_suffix}",
         )
 
     _plot_armeret("1_lag", farve_1lag, "D", "1 lag")
