@@ -3,7 +3,7 @@ Datatabeller til Geonet Dimensioneringsværktøj.
 
 Kilde: geonet_dimensionering_v1_3.xlsx, fane "7. Opslagstabeller"
 Alle værdier er aflæst direkte fra Excel-arkets tabel 7.1 (den beregnede
-opslagstabel, ikke rådata). None svarer til "—" i Excel (uden for
+opslagstabel, ikke rådata). None svarer til "-" i Excel (uden for
 diagrammets gyldighedsområde).
 
 Ingen imports herfra må være UI-relaterede (Streamlit, Flask, osv.).
@@ -13,7 +13,7 @@ Ingen imports herfra må være UI-relaterede (Streamlit, Flask, osv.).
 # 1. T_BASIS_TABLE
 #    Struktur: T_BASIS_TABLE[eu_mpa][eo_mpa][lag_type] → tykkelse i cm
 #    lag_type: "uarmeret" | "1_lag" | "2_lag"
-#    None = "—" = uden for diagrammets gyldighedsområde
+#    None = "-" = uden for diagrammets gyldighedsområde
 #
 #    Eu-rækker (MPa): 2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 18, 20, 25, 30,
 #                    35, 40, 45, 50
@@ -496,37 +496,37 @@ EU_RAEKKER = sorted(T_BASIS_TABLE.keys())
 BELASTNINGSKLASSER = {
     1: {
         "eo": 30,
-        "navn": "Klasse 1 — Begrænset belastning",
+        "navn": "Klasse 1 - Begrænset belastning",
         "belastning": "Begrænset belastning",
         "anvendelse": "Cykelstier, midlertidige byggeveje",
     },
     2: {
         "eo": 45,
-        "navn": "Klasse 2 — Større belastning",
+        "navn": "Klasse 2 - Større belastning",
         "belastning": "Større belastning",
         "anvendelse": "Markveje, midlertidige byggeveje med større belastning",
     },
     3: {
         "eo": 60,
-        "navn": "Klasse 3 — Let trafik",
+        "navn": "Klasse 3 - Let trafik",
         "belastning": "Let trafik (akseltryk ≤ 6 t)",
         "anvendelse": "Villaveje, p-pladser for personbiler",
     },
     4: {
         "eo": 80,
-        "navn": "Klasse 4 — Middel trafik",
+        "navn": "Klasse 4 - Middel trafik",
         "belastning": "Middel trafik (akseltryk ≤ 8 t)",
         "anvendelse": "Middel trafikerede veje, p-arealer, flydende gulve i lagerhaller",
     },
     5: {
         "eo": 120,
-        "navn": "Klasse 5 — Tung trafik",
+        "navn": "Klasse 5 - Tung trafik",
         "belastning": "Tung trafik (akseltryk ≤ 12 t)",
         "anvendelse": "Hovedveje, amtsveje, containerpladser",
     },
     6: {
         "eo": 150,
-        "navn": "Klasse 6 — Meget tung trafik",
+        "navn": "Klasse 6 - Meget tung trafik",
         "belastning": "Meget tung trafik (akseltryk ≤ 15 t)",
         "anvendelse": "Landingsbaner, p-arealer for meget tunge køretøjer",
     },
@@ -540,7 +540,7 @@ BELASTNINGSKLASSER = {
 #    og forstærkningsbelægninger" (jan. 2022, rev. aug. 2025), figur 4.1.
 #
 #    Tensar/GS-GRID-designmanualerne knytter ikke klasserne formelt til
-#    VD-systemet — denne mapping bygger på anvendelsesbeskrivelsen
+#    VD-systemet - denne mapping bygger på anvendelsesbeskrivelsen
 #    (cykelsti / villavej / hovedvej / landingsbane) og er en
 #    ekspertvurdering, ikke en normfastlagt konvertering.
 #
@@ -559,17 +559,15 @@ TRAFIKKOBLING = {
 }
 
 TRAFIKKOBLING_NOTE = (
-    "Vejledende mapping mellem Tensar/GS-GRID belastningsklasse og "
+    "Med udgangspunkt i designmanualernes belastningsklasser, sammenlignes med "
     "Vejdirektoratets trafikklassificering (T-klasse / Æ10 / ÅDT). "
-    "Designmanualerne knytter ikke klasserne formelt til VD-systemet — "
-    "mappingen bygger på anvendelsesbeskrivelsen og er en ekspertvurdering, "
-    "ikke en normfastlagt konvertering."
+    "Sammenhængen bygger på anvendelsesbeskrivelsen og er en vurdering."
 )
 
 
 def _format_naae10(naae10: tuple | None) -> str:
     if naae10 is None:
-        return "—"
+        return "-"
     lo, hi = naae10
     if lo in (None, 0) and hi is not None:
         return f"NÆ10 ≤ {hi:,}/år".replace(",", ".")
@@ -585,10 +583,10 @@ def format_trafikkobling(klasse: int) -> str:
     """
     data = TRAFIKKOBLING.get(klasse)
     if not data:
-        return "—"
+        return "-"
     dele = [data["t_klasse"]]
     naae10_str = _format_naae10(data["naae10_aar"])
-    if naae10_str != "—":
+    if naae10_str != "-":
         dele.append(naae10_str)
     tunge = data["tunge_doegn"]
     if tunge.lower().startswith("ingen"):
@@ -601,7 +599,7 @@ def format_trafikkobling(klasse: int) -> str:
 # ---------------------------------------------------------------------------
 # 3. CV_TIL_EU
 #    Kilde: Excel fane 7.4 (GS-GRID Designmanual fig. 3)
-#    Liste af (cv_min, cv_max, eu) — begge grænser er inklusive øvre,
+#    Liste af (cv_min, cv_max, eu) - begge grænser er inklusive øvre,
 #    eksklusive nedre (dvs. Cv=30 hører til intervallet 30–60 → Eu=10).
 # ---------------------------------------------------------------------------
 
@@ -725,7 +723,7 @@ MATERIAL_DB = [
     },
 ]
 
-# Hjælpeliste — kun navne, bruges til dropdowns
+# Hjælpeliste - kun navne, bruges til dropdowns
 MATERIAL_NAVNE = [m["navn"] for m in MATERIAL_DB] + ["Manuel indtastning"]
 
 
@@ -818,7 +816,7 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "REFERENCE (Tensar-design) — effektindeks 100. Maks. tid uden afdækning: < 2 uger.",
+        "bemærkning": "REFERENCE (Tensar-design) - effektindeks 100. Maks. tid uden afdækning: < 2 uger.",
     },
     {
         "navn": "Tensar HX165",
@@ -963,7 +961,7 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "Effektindeks 90. Stor rudeåbning — egnet til groft tilslag.",
+        "bemærkning": "Effektindeks 90. Stor rudeåbning - egnet til groft tilslag.",
     },
     {
         "navn": "GS-GRID B30/30XL",
@@ -982,7 +980,7 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "Effektindeks 90. Meget stor rudeåbning — til meget groft tilslag.",
+        "bemærkning": "Effektindeks 90. Meget stor rudeåbning - til meget groft tilslag.",
     },
     {
         "navn": "GS-GRID B40/40",
@@ -1020,7 +1018,7 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "Effektindeks 100. Stor rudeåbning — egnet til groft tilslag.",
+        "bemærkning": "Effektindeks 100. Stor rudeåbning - egnet til groft tilslag.",
     },
     {
         "navn": "GS-GRID SX160",
@@ -1038,7 +1036,7 @@ GEONET_DB = [
         "min_levetid": ">25 år",
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "REFERENCE (GS/E'GRID-design) — effektindeks 100. Maks. tid uden afdækning: < 2 uger.",
+        "bemærkning": "REFERENCE (GS/E'GRID-design) - effektindeks 100. Maks. tid uden afdækning: < 2 uger.",
     },
     {
         "navn": "GS-GRID SX170",
@@ -1080,7 +1078,7 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "Alternativ til GS-GRID SX160 — REFERENCE (GS/E'GRID-design), effektindeks 100.",
+        "bemærkning": "Alternativ til GS-GRID SX160 - REFERENCE (GS/E'GRID-design), effektindeks 100.",
     },
     {
         "navn": "E'GRID T7",
@@ -1098,7 +1096,7 @@ GEONET_DB = [
         "min_levetid": None,
         "overlap_eu_ge5_cm": 30,
         "overlap_eu_lt5_cm": 40,
-        "bemærkning": "Alternativ til GS-GRID SX170 — effektindeks 110.",
+        "bemærkning": "Alternativ til GS-GRID SX170 - effektindeks 110.",
     },
     {
         "navn": "E'GRID T9L",
@@ -1126,8 +1124,8 @@ GEONET_DB = [
     {
         "navn": "Anden armering (manuel)",
         "serie": "Manuel",
-        "type": "—",
-        "effektindeks": "—",
+        "type": "-",
+        "effektindeks": "-",
         "korrektion": 0.00,
         "max_korn": None,
         "anbefalet_tilslag": None,
@@ -1143,12 +1141,12 @@ GEONET_DB = [
     },
 ]
 
-# Hjælpeliste — kun navne, bruges til dropdowns
+# Hjælpeliste - kun navne, bruges til dropdowns
 GEONET_NAVNE = [g["navn"] for g in GEONET_DB]
 
 # ---------------------------------------------------------------------------
 # 5b. GEONET_NOTER
-#     Kilde: geonet_database_komplet.xlsx — "DB Geonet v2"
+#     Kilde: geonet_database_komplet.xlsx - "DB Geonet v2"
 #     Vigtige noter og kildehenvisninger fra den komplette produktdatabase.
 # ---------------------------------------------------------------------------
 
@@ -1229,13 +1227,13 @@ GEONET_NOTER = [
 K_PHI = -0.02
 
 # Gyldighedsgrænser
-EU_MIN = 1.0    # MPa — hård fejl under denne grænse
-EU_MAX = 45.0   # MPa — hård fejl over denne grænse
+EU_MIN = 1.0    # MPa - hård fejl under denne grænse
+EU_MAX = 45.0   # MPa - hård fejl over denne grænse
 EO_MIN = 30.0   # MPa
 EO_MAX = 150.0  # MPa
-PHI_MIN = 35.0  # grader — advarsel under denne
-PHI_MAX = 50.0  # grader — advarsel over denne
-MIN_DAKLAG_STANDARD = 200  # mm — minimum dæklag over geonet i opbygning
+PHI_MIN = 35.0  # grader - advarsel under denne
+PHI_MAX = 50.0  # grader - advarsel over denne
+MIN_DAKLAG_STANDARD = 200  # mm - minimum dæklag over geonet i opbygning
 
 
 # ---------------------------------------------------------------------------

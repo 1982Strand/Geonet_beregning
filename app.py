@@ -615,8 +615,8 @@ KLASSE_IKON = {1: "🚲", 2: "🚜", 3: "🚗", 4: "🚛", 5: "🏗️", 6: "✈
 # ===========================================================================
 
 def input_underbund(key_prefix: str) -> float:
-    """Render A. Underbund (Eu eller Cv → Eu). Returnerer Eu i MPa."""
-    st.subheader("A. Underbund")
+    """Render Underbund (Eu eller Cv → Eu). Returnerer Eu i MPa."""
+    st.subheader("Underbund")
 
     eu_mode = st.radio(
         "Input-form",
@@ -630,7 +630,7 @@ def input_underbund(key_prefix: str) -> float:
         eu = float(st.slider(
             "Eu (MPa)", min_value=int(EU_MIN), max_value=int(EU_MAX),
             value=10, step=1, key=f"{key_prefix}_eu_slider",
-            help="Underbundens E-modul. Lavere Eu = blødere bund = tykkere bærelag.",
+            help="Angiv E-modul for underbunden. Ofte målt ved belastningsforsøg i forvejen, evt. ved vingeforsøg i lerjord.",
         ))
         st.caption(f"Valgt **Eu = {eu:.0f} MPa**")
         return eu
@@ -649,8 +649,8 @@ def input_underbund(key_prefix: str) -> float:
 
 
 def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
-    """Render B. Belastningsklasse som 6 klasse-knapper. Returnerer (klasse, info, eo)."""
-    st.subheader("B. Belastningsklasse")
+    """Render Belastningsklasse som 6 klasse-knapper. Returnerer (klasse, info, eo)."""
+    st.subheader("Belastningsklasse")
 
     state_key = f"{key_prefix}_valgt_klasse"
     if state_key not in st.session_state:
@@ -681,9 +681,9 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
             f"Eo = {eo:.0f} MPa · _{info['anvendelse']}_"
         )
         st.caption(
-            f"VD-trafikkobling (vejledende): {format_trafikkobling(valgt)}"
+            f"VD's trafikklassificering (vejledende): {format_trafikkobling(valgt)}"
         )
-        with st.expander("Hvad er VD-trafikkoblingen?"):
+        with st.expander("Vejdirektoratets trafikklassificering"):
             st.write(TRAFIKKOBLING_NOTE)
     with kol_diagram:
         diagram = next(
@@ -2316,11 +2316,11 @@ def _vis_beregnings_breakdown(
 def render_standard() -> None:
     """Standard-tilstand: produktoversigt for alle geonet på én gang.
 
-    Lodret stablet layout: A. Underbund → B. Belastningsklasse →
+    Lodret stablet layout: Underbund → Belastningsklasse →
     Resultater (uarmeret + 1/2-lag-kolonner) → informations-expandere.
     """
 
-    # --- A. Underbund + B. Belastningsklasse ----------------------------
+    # --- Underbund + Belastningsklasse ----------------------------
     eu = input_underbund(key_prefix="std")
     valgt_klasse, _kl_info, eo = input_belastning(key_prefix="std")
     st.caption(
@@ -2522,7 +2522,7 @@ def _vis_phi_opsummeringsboks(
 
 
 def _lag_label(idx: int, antal_lag: int) -> str:
-    """UI-navn på lag-expanderen i C. Materialelag.
+    """UI-navn på lag-expanderen i Materialelag.
 
     2 lag → Øverste/Nederste. 3 lag → Øverste/Midterste/Nederste.
     1 lag har ingen indbyrdes position, så vi falder tilbage på 'Lag 1'.
@@ -2536,10 +2536,10 @@ def _lag_label(idx: int, antal_lag: int) -> str:
 
 def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     """
-    C. Materialelag — render input-sektionen og returnér
+    Materialelag — render input-sektionen og returnér
     (materialer-liste, beregnet/overskrevet φ).
     """
-    st.subheader("C. Materialelag")
+    st.subheader("Materialelag")
 
     antal_lag = st.number_input(
         "Antal lag", min_value=1, max_value=3, value=2, step=1,
@@ -2716,22 +2716,22 @@ def _render_uarm_banner_bd(t_uarm: float, phi: float) -> None:
 
 
 def render_brugerdefineret() -> None:
-    """Brugerdefineret-tilstand: A–D input + resultater + expandere.
+    """Brugerdefineret-tilstand: input + resultater + expandere.
 
-    Lodret stablet layout som i Standard-tilstand. Sektion D lader brugeren
+    Lodret stablet layout som i Standard-tilstand. Sektion Geonet lader brugeren
     vælge mellem 'Vis alle produkter' (oversigt med custom φ) og 'Vælg
     specifikt produkt' (detaljeret resultat for ét produkt). Begge modes
     viser 1-lag og 2-lag side om side — ingen separat lag-mode-radio.
     """
 
-    # --- A + B + C --------------------------------------------------------
+    # --- Underbund + Belastningsklasse + Materialelag --------------------------------------------------------
     t_basis_table = _aktiv_t_basis_table()
     eu = input_underbund(key_prefix="bd")
     valgt_klasse, _kl_info, eo = input_belastning(key_prefix="bd")
     materialer, phi = _input_materialelag(eu, eo)
 
-    # --- D. Geonet --------------------------------------------------------
-    st.subheader("D. Geonet")
+    # --- Geonet --------------------------------------------------------
+    st.subheader("Geonet")
 
     visning = st.radio(
         "Visning",
@@ -2739,8 +2739,8 @@ def render_brugerdefineret() -> None:
         horizontal=True,
         key="bd_visning",
         help=(
-            "**Vis alle produkter:** samme oversigt som Standard, men med "
-            "din custom φ fra materialelagene.  \n"
+            "**Vis alle produkter:** samme oversigt som Standard-beregningen, men med "
+            "din vægtede friktionsvinkel φ fra materialelagene.  \n"
             "**Vælg specifikt produkt:** detaljeret resultat for ét valgt "
             "produkt, herunder dets specifikke udførelseskrav."
         ),
@@ -2958,6 +2958,29 @@ def render_brugerdefineret() -> None:
                     "2 LAG GEONET", grupper_2, valgt_klasse, "2_lag",
                     tom_besked=tom_2, phi=phi,
                 )
+
+            if geonet and geonet.get("navn"):
+                from core import rapport as rapport_mod
+                t_indtastet_total = sum(
+                    float(m.get("tykkelse_mm") or 0) for m in materialer
+                ) or None
+                try:
+                    designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
+                        eu=float(eu),
+                        eo=float(eo),
+                        klasse=valgt_klasse,
+                        phi=float(phi),
+                        geonet=geonet,
+                        t_indtastet_mm=t_indtastet_total,
+                        t_basis_table=t_basis_table,
+                    )
+                    st.markdown("")
+                    st.image(
+                        designdiagram_png,
+                        caption=f"Personligt designdiagram — {geonet_navn}",
+                    )
+                except Exception as e:
+                    st.warning(f"Kunne ikke generere designdiagram: {e}")
 
     # --- Informations-expandere ------------------------------------------
     st.divider()
