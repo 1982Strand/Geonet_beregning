@@ -573,6 +573,10 @@ def render_personligt_designdiagram_png(
     geonet: dict | None,
     t_indtastet_mm: float | None,
     t_basis_table: dict,
+    t_1_lag_mm: float | None = None,
+    t_2_lag_mm: float | None = None,
+    t_1_lag_best_mm: float | None = None,
+    t_2_lag_best_mm: float | None = None,
     dpi: int = 150,
 ) -> bytes:
     """Designdiagram tilpasset brugerens opbygning + geonet.
@@ -664,30 +668,44 @@ def render_personligt_designdiagram_png(
     _plot_armeret("1_lag", farve_1lag, "D", "1 lag")
     _plot_armeret("2_lag", farve_2lag, "s", "2 lag")
 
-    # Brugerens build (lodret) — kun hvis sat
-    if t_indtastet_mm is not None and t_indtastet_mm > 0:
-        t_cm = t_indtastet_mm / 10.0
-        ax.axvline(
-            t_cm, color="#1565C0", linestyle=(0, (5, 3)), linewidth=1.6,
-            label=f"Indtastet opbygning: {t_cm:.0f} cm",
-            zorder=5,
-        )
-
-    # Brugerens Eu (vandret)
-    ax.axhline(
-        eu, color="#388E3C", linestyle=(0, (5, 3)), linewidth=1.6,
-        label=f"Eu = {eu:g} MPa",
-        zorder=5,
-    )
-
-    # Skæringspunkt — kun hvis begge referencer er sat
+    # "Intastet opbygning"-prik — placering ved (indtastet tykkelse, Eu).
+    # Værdierne flyttet ind i label, så der ikke skal stiplede hjælpelinjer til.
     if t_indtastet_mm is not None and t_indtastet_mm > 0:
         t_cm = t_indtastet_mm / 10.0
         ax.plot(
             [t_cm], [eu], "o", color="#D32F2F", markersize=10,
             zorder=11, markeredgecolor="white", markeredgewidth=1.5,
-            label="Din opbygning",
+            label=f"Indtastet opbygning ({t_cm:.0f} cm, Eu = {eu:g} MPa)",
         )
+
+    # Endepunkts-prikker — viser krævet tykkelse ved bruger-Eu for hver lag-mode.
+    # Interval-produkter (NX750/NX850) får to prikker pr. lag-mode:
+    # fyldt for konservativ, hul cirkel i samme farve for optimal.
+    def _slut_prik(
+        t_mm: float | None, color: str, marker: str,
+        label_prefix: str, optimal: bool = False,
+    ) -> None:
+        if t_mm is None or t_mm <= 0:
+            return
+        suffix = " (optimal)" if optimal else ""
+        label = f"Opbygning med {label_prefix}: {t_mm / 10:.0f} cm{suffix}"
+        if optimal:
+            ax.plot(
+                [t_mm / 10.0], [eu], marker, color=color, markersize=10,
+                markerfacecolor="none", markeredgewidth=2.0,
+                zorder=10, label=label,
+            )
+        else:
+            ax.plot(
+                [t_mm / 10.0], [eu], marker, color=color, markersize=9,
+                markeredgecolor="white", markeredgewidth=1.2,
+                zorder=10, label=label,
+            )
+
+    _slut_prik(t_1_lag_mm, farve_1lag, "D", "1 lag geonet")
+    _slut_prik(t_1_lag_best_mm, farve_1lag, "D", "1 lag geonet", optimal=True)
+    _slut_prik(t_2_lag_mm, farve_2lag, "s", "2 lag geonet")
+    _slut_prik(t_2_lag_best_mm, farve_2lag, "s", "2 lag geonet", optimal=True)
 
     # Akse-grænser: dækker hele datasættet plus lidt luft
     alle_xs: list[float] = []
@@ -700,6 +718,9 @@ def render_personligt_designdiagram_png(
         alle_xs.extend(xs)
     if t_indtastet_mm is not None:
         alle_xs.append(t_indtastet_mm / 10.0)
+    for t in (t_1_lag_mm, t_2_lag_mm, t_1_lag_best_mm, t_2_lag_best_mm):
+        if t is not None:
+            alle_xs.append(t / 10.0)
     if alle_xs:
         x_max = max(alle_xs) * 1.08
         ax.set_xlim(0, max(x_max, 80))
@@ -713,7 +734,7 @@ def render_personligt_designdiagram_png(
     klasse_str = f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:g}"
     phi_str = f"{phi:.1f}".replace(".", ",")
     ax.set_title(
-        f"Designdiagram — Eo = {eo:g} MN/m² · {klasse_str}\n"
+        f"Designdiagram for Eo = {eo:g} MN/m² · {klasse_str}\n"
         f"Materialer: φ = {phi_str}° · Geonet: {geonet_navn}",
         fontsize=11,
     )

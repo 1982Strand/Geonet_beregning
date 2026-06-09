@@ -2927,6 +2927,14 @@ def render_brugerdefineret() -> None:
                 "geonet": geonet, "geonet_navn": geonet_navn,
                 "res_1": res_1, "res_2": res_2,
                 "t_uarmeret_mm": t_uarm,
+                "t_1_lag_best_mm": (
+                    bedste_1["produkter"][0].get("t_armeret_mm_min")
+                    if bedste_1 and bedste_1.get("produkter") else None
+                ),
+                "t_2_lag_best_mm": (
+                    bedste_2["produkter"][0].get("t_armeret_mm_min")
+                    if bedste_2 and bedste_2.get("produkter") else None
+                ),
             }
             if t_uarm is not None:
                 _render_uarm_banner_bd(t_uarm, phi)
@@ -2964,6 +2972,31 @@ def render_brugerdefineret() -> None:
                 t_indtastet_total = sum(
                     float(m.get("tykkelse_mm") or 0) for m in materialer
                 ) or None
+                produkt_1 = (
+                    bedste_1["produkter"][0]
+                    if bedste_1 and bedste_1.get("produkter") else None
+                )
+                produkt_2 = (
+                    bedste_2["produkter"][0]
+                    if bedste_2 and bedste_2.get("produkter") else None
+                )
+
+                st.markdown("")
+                kol_chk1, kol_chk2 = st.columns(2)
+                with kol_chk1:
+                    vis_din_prik = st.checkbox(
+                        "Vis 'Indtastet opbygning'",
+                        value=True,
+                        key="bd_dd_vis_din_prik",
+                        disabled=t_indtastet_total is None,
+                    )
+                with kol_chk2:
+                    vis_lag_prikker = st.checkbox(
+                        "Vis endepunkter for 1/2 lag geonet",
+                        value=True,
+                        key="bd_dd_vis_lag_prikker",
+                    )
+
                 try:
                     designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
                         eu=float(eu),
@@ -2971,10 +3004,25 @@ def render_brugerdefineret() -> None:
                         klasse=valgt_klasse,
                         phi=float(phi),
                         geonet=geonet,
-                        t_indtastet_mm=t_indtastet_total,
+                        t_indtastet_mm=t_indtastet_total if vis_din_prik else None,
                         t_basis_table=t_basis_table,
+                        t_1_lag_mm=(
+                            produkt_1.get("t_armeret_mm")
+                            if produkt_1 and vis_lag_prikker else None
+                        ),
+                        t_2_lag_mm=(
+                            produkt_2.get("t_armeret_mm")
+                            if produkt_2 and vis_lag_prikker else None
+                        ),
+                        t_1_lag_best_mm=(
+                            produkt_1.get("t_armeret_mm_min")
+                            if produkt_1 and vis_lag_prikker else None
+                        ),
+                        t_2_lag_best_mm=(
+                            produkt_2.get("t_armeret_mm_min")
+                            if produkt_2 and vis_lag_prikker else None
+                        ),
                     )
-                    st.markdown("")
                     st.image(
                         designdiagram_png,
                         caption=f"Personligt designdiagram — {geonet_navn}",
@@ -3535,6 +3583,21 @@ def render_rapport() -> None:
                  "kurverne med produktets net-korrektion."
         ),
     )
+    kol_dd1, kol_dd2 = st.columns(2)
+    with kol_dd1:
+        vis_dd_din_prik = st.checkbox(
+            "Vis 'Din opbygning'-prik i designdiagram",
+            value=True,
+            key="rap_dd_vis_din_prik",
+            disabled=not (vis_designdiagram and designdiagram_muligt),
+        )
+    with kol_dd2:
+        vis_dd_lag_prikker = st.checkbox(
+            "Vis endepunkter for 1/2 lag i designdiagram",
+            value=True,
+            key="rap_dd_vis_lag_prikker",
+            disabled=not (vis_designdiagram and designdiagram_muligt),
+        )
 
     # --- Ekstra: VD-trafikkobling i grundlagstabellen --------------------
     vis_trafikkobling = st.checkbox(
@@ -3716,9 +3779,18 @@ def render_rapport() -> None:
                 phi=float(sd.get("phi", 35.0)),
                 geonet=geonet,
                 t_indtastet_mm=(
-                    indtastet_total_rap if har_indtastet_rap else None
+                    indtastet_total_rap
+                    if har_indtastet_rap and vis_dd_din_prik else None
                 ),
                 t_basis_table=_aktiv_t_basis_table(),
+                t_1_lag_mm=t_1 if vis_dd_lag_prikker else None,
+                t_2_lag_mm=t_2 if vis_dd_lag_prikker else None,
+                t_1_lag_best_mm=(
+                    sd.get("t_1_lag_best_mm") if vis_dd_lag_prikker else None
+                ),
+                t_2_lag_best_mm=(
+                    sd.get("t_2_lag_best_mm") if vis_dd_lag_prikker else None
+                ),
             )
             st.image(
                 designdiagram_png,
