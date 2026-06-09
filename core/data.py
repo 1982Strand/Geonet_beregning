@@ -534,6 +534,71 @@ BELASTNINGSKLASSER = {
 
 
 # ---------------------------------------------------------------------------
+# 2b. TRAFIKKOBLING
+#    Vejledende kobling mellem Tensar/GS-GRID belastningsklasse (1–6) og
+#    Vejdirektoratets trafikklassificering fra "Dimensionering – befæstelser
+#    og forstærkningsbelægninger" (jan. 2022, rev. aug. 2025), figur 4.1.
+#
+#    Tensar/GS-GRID-designmanualerne knytter ikke klasserne formelt til
+#    VD-systemet — denne mapping bygger på anvendelsesbeskrivelsen
+#    (cykelsti / villavej / hovedvej / landingsbane) og er en
+#    ekspertvurdering, ikke en normfastlagt konvertering.
+#
+#    naae10_aar: tuple (min, max) for NÆ10/år pr. vognbane.
+#                None = ingen tung trafik. max = None = ingen øvre grænse.
+#    tunge_doegn: friformuleret string ("≤ 65", "560–1.500", "Ingen ...").
+# ---------------------------------------------------------------------------
+
+TRAFIKKOBLING = {
+    1: {"t_klasse": "T0",    "naae10_aar": None,                  "tunge_doegn": "Ingen tung trafik"},
+    2: {"t_klasse": "T1",    "naae10_aar": (0, 75),               "tunge_doegn": "≤ 1"},
+    3: {"t_klasse": "T2",    "naae10_aar": (0, 7_300),            "tunge_doegn": "≤ 65"},
+    4: {"t_klasse": "T3–T4", "naae10_aar": (18_300, 73_000),      "tunge_doegn": "65–560"},
+    5: {"t_klasse": "T5–T6", "naae10_aar": (180_000, 300_000),    "tunge_doegn": "560–1.500"},
+    6: {"t_klasse": "T7",    "naae10_aar": (300_000, None),       "tunge_doegn": "> 1.500"},
+}
+
+TRAFIKKOBLING_NOTE = (
+    "Vejledende mapping mellem Tensar/GS-GRID belastningsklasse og "
+    "Vejdirektoratets trafikklassificering (T-klasse / Æ10 / ÅDT). "
+    "Designmanualerne knytter ikke klasserne formelt til VD-systemet — "
+    "mappingen bygger på anvendelsesbeskrivelsen og er en ekspertvurdering, "
+    "ikke en normfastlagt konvertering."
+)
+
+
+def _format_naae10(naae10: tuple | None) -> str:
+    if naae10 is None:
+        return "—"
+    lo, hi = naae10
+    if lo in (None, 0) and hi is not None:
+        return f"NÆ10 ≤ {hi:,}/år".replace(",", ".")
+    if hi is None and lo is not None:
+        return f"NÆ10 > {lo:,}/år".replace(",", ".")
+    return f"NÆ10 {lo:,}–{hi:,}/år".replace(",", ".")
+
+
+def format_trafikkobling(klasse: int) -> str:
+    """
+    Returnér én-linjes streng med VD-trafikkoblingen for en belastningsklasse,
+    fx 'T2 · NÆ10 ≤ 7.300/år · ≤ 65 tunge køretøjer/døgn'.
+    """
+    data = TRAFIKKOBLING.get(klasse)
+    if not data:
+        return "—"
+    dele = [data["t_klasse"]]
+    naae10_str = _format_naae10(data["naae10_aar"])
+    if naae10_str != "—":
+        dele.append(naae10_str)
+    tunge = data["tunge_doegn"]
+    if tunge.lower().startswith("ingen"):
+        dele.append(tunge)
+    else:
+        dele.append(f"{tunge} tunge køretøjer/døgn")
+    return " · ".join(dele)
+
+
+# ---------------------------------------------------------------------------
 # 3. CV_TIL_EU
 #    Kilde: Excel fane 7.4 (GS-GRID Designmanual fig. 3)
 #    Liste af (cv_min, cv_max, eu) — begge grænser er inklusive øvre,

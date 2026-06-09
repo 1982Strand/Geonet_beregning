@@ -37,6 +37,8 @@ from core.data import (
     T_BASIS_TABLE,
     DESIGNDIAGRAM_RAW_TABLES,
     EO_KOLONNER,
+    TRAFIKKOBLING_NOTE,
+    format_trafikkobling,
 )
 from core.calculator import (
     beregn,
@@ -678,6 +680,11 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
             f"**Klasse {valgt}** · {info['belastning']} · "
             f"Eo = {eo:.0f} MPa · _{info['anvendelse']}_"
         )
+        st.caption(
+            f"VD-trafikkobling (vejledende): {format_trafikkobling(valgt)}"
+        )
+        with st.expander("Hvad er VD-trafikkoblingen?"):
+            st.write(TRAFIKKOBLING_NOTE)
     with kol_diagram:
         diagram = next(
             (
@@ -3506,6 +3513,19 @@ def render_rapport() -> None:
         ),
     )
 
+    # --- Ekstra: VD-trafikkobling i grundlagstabellen --------------------
+    vis_trafikkobling = st.checkbox(
+        "VD-trafikkobling i grundlagstabellen",
+        value=False,
+        key="rap_vis_trafikkobling",
+        help=(
+            "Tilføjer en linje i Dimensioneringsgrundlag med vejledende "
+            "T-klasse, NÆ10/år og tunge køretøjer/døgn for den valgte "
+            "belastningsklasse. Bygger på anvendelsesbeskrivelsen — ikke en "
+            "normfastlagt konvertering."
+        ),
+    )
+
     def _sub_lag_skaleret(total_mm: float | None) -> list[dict]:
         """Returnér brugerens materialer skaleret så summen = total_mm.
         For mm-mode: forhold = tykkelse_mm / sum. For pct-mode: forhold = pct / sum.
@@ -3696,6 +3716,9 @@ def render_rapport() -> None:
         "tekster": dict(tekster_state),
         "visualisering_png": visu_png,
         "designdiagram_png": designdiagram_png,
+        "valg": {
+            "trafikkobling": vis_trafikkobling,
+        },
     }
 
     filnavn_base = (
@@ -3721,6 +3744,7 @@ def render_rapport() -> None:
             "metadata": rapport_data["metadata"],
             "dim": rapport_data["dim"],
             "tekster": rapport_data["tekster"],
+            "valg": rapport_data["valg"],
             "visualisering_sha256": visu_hash,
             "designdiagram_sha256": designdiagram_hash,
             "filnavn_base": filnavn_base,

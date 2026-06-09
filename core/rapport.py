@@ -755,15 +755,32 @@ def _materiale_resume(materialer: list[dict]) -> str:
     return "\n".join(linjer)
 
 
-def formatér_dimensioneringsgrundlag(dim: dict) -> list[tuple[str, str]]:
-    """Returnér nøgle/værdi-rækker til Dimensioneringsgrundlag-tabellen."""
+def formatér_dimensioneringsgrundlag(
+    dim: dict, valg: dict | None = None
+) -> list[tuple[str, str]]:
+    """Returnér nøgle/værdi-rækker til Dimensioneringsgrundlag-tabellen.
+
+    valg: dict med brugerens rapport-valg fra UI'en. Pt. understøttes:
+        - "trafikkobling" (bool): hvis sand, tilføjes en linje med VD-
+          trafikkoblingen (vejledende T-klasse / NÆ10 / tunge køretøjer/døgn)
+          for den valgte belastningsklasse.
+    """
+    valg = valg or {}
     materialer = dim.get("materialer") or []
-    return [
+    rows: list[tuple[str, str]] = [
         ("Underbundens E-modul (Eu)", f"{dim.get('eu', 0):g} MPa"),
         ("Belastningsklasse", str(dim.get("valgt_klasse", "—"))),
         ("Materialeopbygning", _materiale_resume(materialer)),
         ("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', 35):.1f}°"),
     ]
+    if valg.get("trafikkobling"):
+        klasse = dim.get("valgt_klasse")
+        if klasse:
+            from .data import format_trafikkobling
+            rows.append(
+                ("VD-trafikkobling (vejl.)", format_trafikkobling(klasse))
+            )
+    return rows
 
 
 def formatér_dimensioneringsresultat(dim: dict) -> list[tuple[str, str]]:
@@ -1002,6 +1019,7 @@ def byg_rapport_docx(data: dict) -> bytes:
     md = data.get("metadata", {})
     dim = data.get("dim", {})
     tekster = data.get("tekster", {})
+    valg = data.get("valg", {}) or {}
     visu = data.get("visualisering_png")
     designdiagram = data.get("designdiagram_png")
 
@@ -1021,7 +1039,11 @@ def byg_rapport_docx(data: dict) -> bytes:
 
     # Bring tabel-rækker på det format docxtpl forventer for {%tr ... %}-løkken.
     def _rows(par_funktion) -> list[dict]:
-        return [{"label": k, "vaerdi": v} for k, v in par_funktion(dim)]
+        try:
+            par = par_funktion(dim, valg)
+        except TypeError:
+            par = par_funktion(dim)
+        return [{"label": k, "vaerdi": v} for k, v in par]
 
     # Hjælper: returner brugerredigeret tekst, eller standardtekst hvis ingen.
     def _tekst(nøgle: str) -> str:
