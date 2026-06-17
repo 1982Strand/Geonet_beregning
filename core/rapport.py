@@ -184,6 +184,7 @@ class Snit:
     t_indtastet_mm: float | None = None  # til sammenligningslinje på tværs af søjler
     status_tekst: str | None = None      # fx "Mangler 77 mm" eller "✓ +6 mm besparelse"
     status_farve: str | None = None      # "danger" | "warning" | "success" | None
+    phi_vaegtet: bool = True             # False → label er "Bærelag" i stedet for "φ-vægtet bærelag"
 
 
 def upper_geonet_frac_for_sub_lag(sub_lag: list[dict] | None) -> float:
@@ -358,7 +359,8 @@ def render_opbygning_png(
                     fontsize=6.5, color="#666", style="italic",
                 )
             ax.text(
-                (BOX_X1 + BOX_X2) / 2, t * 0.5, "φ-vægtet\nbærelag",
+                (BOX_X1 + BOX_X2) / 2, t * 0.5,
+                "φ-vægtet\nbærelag" if s.phi_vaegtet else "Bærelag",
                 ha="center", va="center",
                 fontsize=9, color="#444", linespacing=1.35,
             )

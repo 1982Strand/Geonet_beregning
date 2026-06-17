@@ -634,11 +634,11 @@ MATERIAL_DB = [
         "krav_maskestoerrelse_mm": 35,
     },
     {
-        "navn": "Bundgrus 0-8",
+        "navn": "Bundgrus 0-80",
         "phi": 38,
-        "max_korn": 8,
+        "max_korn": 80,
         "lagtype": "Bundsikring",
-        "anvendelse": "Frostsikring og drænlag",
+        "anvendelse": "Frostsikring, dræning, bærelag",
         "krav_maskestoerrelse_mm": 65,
     },
     {

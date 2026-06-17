@@ -79,26 +79,76 @@ materialegrænse.
 """
 
 
-def _vis_opbygning_med_info(png: bytes, *, caption: str | None = None) -> None:
-    """Vis opbygnings-PNG med et ℹ️-popover ved siden af.
+INFO_DESIGNDIAGRAM_MD = """**Sådan dannes diagrammet**
+
+Kurverne kommer fra designdiagram-tabellen for det valgte **Eo**: tabellen
+giver basis-bærelagstykkelsen (cm) for hver Eu-række og lag-mode
+(uarmeret / 1 lag / 2 lag).
+
+Basis-tykkelsen ganges med en samlet faktor:
+
+*T = T_basis × (1 + φ-korrektion + net-korrektion)*
+
+- **φ-korrektion** = −0,02 × (φ − 35°) — fra dine materialelag.
+- **net-korrektion** — fra det valgte geonet (0 % for reference,
+  negativt for stærkere net).
+
+For interval-produkter (fx NX750/NX850) tegnes både den konservative og
+optimale kurve med et tonet bånd imellem.
+
+**Prikker på diagrammet**:
+
+- Rød "Din opbygning"-prik sidder ved (indtastet bærelagstykkelse, dit Eu).
+- 1-/2-lag-prikkerne viser krævet tykkelse ved netop dit Eu for det valgte
+  geonet — fyldt = konservativ, hul cirkel = optimal (kun interval-produkter).
+"""
+
+
+def _vis_billede_med_info(
+    png: bytes,
+    info_md: str,
+    *,
+    caption: str | None = None,
+    use_container_width: bool = False,
+) -> None:
+    """Vis PNG med et ℹ️-popover ved siden af.
 
     Falder tilbage til st.expander hvis st.popover ikke er tilgængelig i
     den installerede Streamlit-version.
     """
     col_img, col_info = st.columns([0.95, 0.05])
     with col_img:
+        kwargs = {"use_container_width": use_container_width}
         if caption:
-            st.image(png, caption=caption)
+            st.image(png, caption=caption, **kwargs)
         else:
-            st.image(png)
+            st.image(png, **kwargs)
     with col_info:
         popover = getattr(st, "popover", None)
         if callable(popover):
             with popover("ℹ️", use_container_width=True):
-                st.markdown(INFO_VISUALISERING_MD)
+                st.markdown(info_md)
         else:
             with st.expander("ℹ️", expanded=False):
-                st.markdown(INFO_VISUALISERING_MD)
+                st.markdown(info_md)
+
+
+def _vis_opbygning_med_info(png: bytes, *, caption: str | None = None) -> None:
+    """Vis opbygnings-PNG med et ℹ️-popover (INFO_VISUALISERING_MD)."""
+    _vis_billede_med_info(png, INFO_VISUALISERING_MD, caption=caption)
+
+
+def _vis_designdiagram_med_info(
+    png: bytes,
+    *,
+    caption: str | None = None,
+    use_container_width: bool = False,
+) -> None:
+    """Vis designdiagram-PNG med et ℹ️-popover (INFO_DESIGNDIAGRAM_MD)."""
+    _vis_billede_med_info(
+        png, INFO_DESIGNDIAGRAM_MD,
+        caption=caption, use_container_width=use_container_width,
+    )
 
 
 def _standard_materialer() -> list[dict]:
@@ -1663,6 +1713,7 @@ def _render_opbygningsvisualisering(
             t_indtastet_mm=t_indtastet_for_linje,
             status_tekst=status_tekst_uarm,
             status_farve=status_farve_uarm,
+            phi_vaegtet=har_indtastet,
         ))
     else:
         snit_liste.append(rapport_mod.Snit(
@@ -1675,6 +1726,7 @@ def _render_opbygningsvisualisering(
             ),
             er_krav_soejle=True,
             t_indtastet_mm=t_indtastet_for_linje,
+            phi_vaegtet=har_indtastet,
         ))
 
     # Søjle 3+4: byg reducerede sub_lag når brugeren har angivet ≥2 materialer.
@@ -1708,6 +1760,7 @@ def _render_opbygningsvisualisering(
         t_indtastet_mm=t_indtastet_for_linje,
         status_tekst=status_tekst_1,
         status_farve=status_farve_1,
+        phi_vaegtet=har_indtastet,
     ))
 
     # Søjle 4: 2 lag geonet
@@ -1732,6 +1785,7 @@ def _render_opbygningsvisualisering(
         t_indtastet_mm=t_indtastet_for_linje,
         status_tekst=status_tekst_2,
         status_farve=status_farve_2,
+        phi_vaegtet=har_indtastet,
     ))
 
     png = rapport_mod.render_opbygning_png(
@@ -1771,14 +1825,14 @@ def _render_oversigt_expanders(
 
     # --- Opbygningsvisualisering (referencenet eller valgt produkt) -----
     if ref_1 is not None or ref_2 is not None:
-        with st.expander("🧱 Opbygning", expanded=False):
-            _render_opbygningsvisualisering(
-                eu, ref_1, ref_2,
-                prod_1lag=prod_1lag, prod_2lag=prod_2lag,
-                materialer=materialer,
-                phi=phi,
-                tvunget_produkt=geonet_navn,
-            )
+        st.markdown("#### 🧱 Opbygning")
+        _render_opbygningsvisualisering(
+            eu, ref_1, ref_2,
+            prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+            materialer=materialer,
+            phi=phi,
+            tvunget_produkt=geonet_navn,
+        )
 
     # --- Advarsler -------------------------------------------------------
     # Validator-kørslen bruger den valgte phi/geonet/materialer-kontekst.
@@ -2982,53 +3036,55 @@ def render_brugerdefineret() -> None:
                 )
 
                 st.markdown("")
-                kol_chk1, kol_chk2 = st.columns(2)
-                with kol_chk1:
+                kol_chk, _kol_gap, kol_dd, _kol_spacer = st.columns(
+                    [2, 0.5, 4, 1], gap="small", vertical_alignment="center",
+                )
+                with kol_chk:
                     vis_din_prik = st.checkbox(
                         "Vis 'Indtastet opbygning'",
                         value=True,
                         key="bd_dd_vis_din_prik",
                         disabled=t_indtastet_total is None,
                     )
-                with kol_chk2:
                     vis_lag_prikker = st.checkbox(
                         "Vis endepunkter for 1/2 lag geonet",
                         value=True,
                         key="bd_dd_vis_lag_prikker",
                     )
 
-                try:
-                    designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
-                        eu=float(eu),
-                        eo=float(eo),
-                        klasse=valgt_klasse,
-                        phi=float(phi),
-                        geonet=geonet,
-                        t_indtastet_mm=t_indtastet_total if vis_din_prik else None,
-                        t_basis_table=t_basis_table,
-                        t_1_lag_mm=(
-                            produkt_1.get("t_armeret_mm")
-                            if produkt_1 and vis_lag_prikker else None
-                        ),
-                        t_2_lag_mm=(
-                            produkt_2.get("t_armeret_mm")
-                            if produkt_2 and vis_lag_prikker else None
-                        ),
-                        t_1_lag_best_mm=(
-                            produkt_1.get("t_armeret_mm_min")
-                            if produkt_1 and vis_lag_prikker else None
-                        ),
-                        t_2_lag_best_mm=(
-                            produkt_2.get("t_armeret_mm_min")
-                            if produkt_2 and vis_lag_prikker else None
-                        ),
-                    )
-                    st.image(
-                        designdiagram_png,
-                        caption=f"Personligt designdiagram — {geonet_navn}",
-                    )
-                except Exception as e:
-                    st.warning(f"Kunne ikke generere designdiagram: {e}")
+                with kol_dd:
+                    try:
+                        designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
+                            eu=float(eu),
+                            eo=float(eo),
+                            klasse=valgt_klasse,
+                            phi=float(phi),
+                            geonet=geonet,
+                            t_indtastet_mm=t_indtastet_total if vis_din_prik else None,
+                            t_basis_table=t_basis_table,
+                            t_1_lag_mm=(
+                                produkt_1.get("t_armeret_mm")
+                                if produkt_1 and vis_lag_prikker else None
+                            ),
+                            t_2_lag_mm=(
+                                produkt_2.get("t_armeret_mm")
+                                if produkt_2 and vis_lag_prikker else None
+                            ),
+                            t_1_lag_best_mm=(
+                                produkt_1.get("t_armeret_mm_min")
+                                if produkt_1 and vis_lag_prikker else None
+                            ),
+                            t_2_lag_best_mm=(
+                                produkt_2.get("t_armeret_mm_min")
+                                if produkt_2 and vis_lag_prikker else None
+                            ),
+                        )
+                        _vis_designdiagram_med_info(
+                            designdiagram_png,
+                            use_container_width=True,
+                        )
+                    except Exception as e:
+                        st.warning(f"Kunne ikke generere designdiagram: {e}")
 
     # --- Informations-expandere ------------------------------------------
     st.divider()
@@ -3712,6 +3768,7 @@ def render_rapport() -> None:
             t_indtastet_mm=t_indtastet_for_snit,
             status_tekst=status_tekst_u,
             status_farve=status_farve_u,
+            phi_vaegtet=har_indtastet_rap,
         ))
     if vis_1lag and t_1 is not None:
         sub_red_1 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_1)
@@ -3732,6 +3789,7 @@ def render_rapport() -> None:
             t_indtastet_mm=t_indtastet_for_snit,
             status_tekst=status_tekst_1,
             status_farve=status_farve_1,
+            phi_vaegtet=har_indtastet_rap,
         ))
     if vis_2lag and t_2 is not None and to_lag_muligt:
         sub_red_2 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_2)
@@ -3752,6 +3810,7 @@ def render_rapport() -> None:
             t_indtastet_mm=t_indtastet_for_snit,
             status_tekst=status_tekst_2,
             status_farve=status_farve_2,
+            phi_vaegtet=har_indtastet_rap,
         ))
 
     if not snit_liste:
@@ -3792,7 +3851,7 @@ def render_rapport() -> None:
                     sd.get("t_2_lag_best_mm") if vis_dd_lag_prikker else None
                 ),
             )
-            st.image(
+            _vis_designdiagram_med_info(
                 designdiagram_png,
                 caption="Preview af personligt designdiagram",
             )
