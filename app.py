@@ -2945,6 +2945,9 @@ def render_brugerdefineret() -> None:
             kl_txt = _format_klasse_liste(geonet["klasser"])
             kor_txt = f"{geonet['korrektion']:+.0%}"
             rude_txt = geonet.get("rudeaabning") or "—"
+            db_maske = geonet.get("maskestoerrelse_datablad_mm")
+            if db_maske:
+                rude_txt += f" (datablad: {db_maske} mm)"
             st.caption(
                 f"Serie: **{geonet['serie']}** · Korrektion: {kor_txt} · "
                 f"Max korn: {korn_txt} · Rudeåbning/maskestørrelse: {rude_txt} · "
@@ -3314,10 +3317,23 @@ def render_geonet_database() -> None:
             "Min. dæklag\n(cm)":     g["min_daklag"],
             "Maks. korn\n(datablad mm)": f"{g['max_korn']}" if g["max_korn"] else "—",
             "Anb. tilslag\n(designmanual)": g.get("anbefalet_tilslag") or "—",
-            "Rudeåbning/maskestørrelse":            g.get("rudeaabning") or "—",
+            "Maskestørrelse\n(datablad mm)":        f"{g['maskestoerrelse_datablad_mm']} mm" if g.get("maskestoerrelse_datablad_mm") else "—",
+            "Rudeåbning/maskestørrelse\n(designmanual)": g.get("rudeaabning") or "—",
             "Radial stivhed\n(kN/m @ 0,5%)": f"{g['radial_stivhed']}" if g.get("radial_stivhed") else "—",
-            "GWP A1–A3\n(kg CO₂/m²)": f"{g['gwp']:.2f}" if g.get("gwp") else "—",
+            "GWP A1–A3\n(kg CO₂/m²)": (
+                " / ".join(f"{v:.2f} ({b:g}m)" for b, v in g["gwp_bredder"].items())
+                if g.get("gwp_bredder")
+                else (f"{g['gwp']:.2f}" if g.get("gwp") else "—")
+            ),
             "Min. levetid":          g.get("min_levetid") or "—",
+            "Min. trækstyrke\n(kN/m)":      g.get("min_traekstyrke") or "—",
+            "Trækstyrke 2%\n(kN/m)":       g.get("traekstyrke_2pct") or "—",
+            "Trækstyrke 5%\n(kN/m)":       g.get("traekstyrke_5pct") or "—",
+            "Maks. def.\n(%)":              f"≤{g['max_deformation_pct']}" if g.get("max_deformation_pct") else "—",
+            "Knudepunkt\neffektivitet":     g.get("knudepunkt_effektivitet") or "—",
+            "Maskestabilitet\n(N.mm/grad)": f"{g['maskestabilitet_Nmm_grad']}" if g.get("maskestabilitet_Nmm_grad") else "—",
+            "Ribbetykkelse\n(mm)":          g.get("ribbetykkelse") or "—",
+            "Stivhedsforhold":              f"{g['stivhedsforhold']}" if g.get("stivhedsforhold") is not None else "—",
             "Overlæg Eu ≥ 5\n(cm)": g.get("overlap_eu_ge5_cm", 30),
             "Overlæg Eu < 5\n(cm)": g.get("overlap_eu_lt5_cm", 40),
             "Bemærkning":            g.get("bemærkning", ""),

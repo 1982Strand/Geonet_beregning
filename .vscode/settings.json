@@ -1,0 +1,7 @@
+{
+    "claudeCodeChat.permissions.yoloMode": true,
+    "claudeCodeChat.wsl.enabled": false,
+    "claudeCodeChat.thinking.intensity": "think-harder",
+    "claudeCodeChat.wsl.nodePath": "/usr/bin/node",
+    "claudeCodeChat.wsl.claudePath": "/usr/bin/claude"
+}
