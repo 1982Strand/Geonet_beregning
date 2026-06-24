@@ -596,9 +596,9 @@ def render_personligt_designdiagram_png(
     import matplotlib.pyplot as plt
 
     # Lokal import for at undgå cirkulær afhængighed
-    from .data import K_PHI, PHI_BASIS
+    from .data import K_PHI
 
-    phi_kor = K_PHI * (phi - PHI_BASIS)
+    phi_kor = K_PHI * (phi - 35.0)
 
     # Net-korrektion: konservativ værdi + best-case for interval-produkter
     net_kor_kons = float(geonet.get("korrektion", 0.0)) if geonet else 0.0
@@ -631,7 +631,7 @@ def render_personligt_designdiagram_png(
         ax.plot(
             xs_u, ys_u, "-", color=farve_uarm, linewidth=2.2,
             marker="^", markersize=5,
-            label="Ustabiliseret (φ-kor.)",
+            label="Uarmeret (φ-kor.)",
         )
 
     geonet_navn = (geonet or {}).get("navn", "Reference")
@@ -789,13 +789,12 @@ def formatér_dimensioneringsgrundlag(
           for den valgte belastningsklasse.
     """
     valg = valg or {}
-    from .data import PHI_BASIS
     materialer = dim.get("materialer") or []
     rows: list[tuple[str, str]] = [
         ("Underbundens E-modul (Eu)", f"{dim.get('eu', 0):g} MPa"),
         ("Belastningsklasse", str(dim.get("valgt_klasse", "—"))),
         ("Materialeopbygning", _materiale_resume(materialer)),
-        ("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', PHI_BASIS):.1f}°"),
+        ("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', 35):.1f}°"),
     ]
     if valg.get("trafikkobling"):
         klasse = dim.get("valgt_klasse")
@@ -833,10 +832,10 @@ def formatér_dimensioneringsresultat(dim: dict) -> list[tuple[str, str]]:
 
     return [
         ("Valgt geonet", geonet.get("navn", "—")),
-        ("Ustabiliseret referenceopbygning", _mm(t_uarm_ref)),
+        ("Uarmeret referenceopbygning", _mm(t_uarm_ref)),
         ("Samlet tykkelse af valgt opbygning", _mm(t_indtastet)),
-        ("Stabiliseret tykkelse — 1 lag", _mm(res_1.get("t_armeret_mm"))),
-        ("Stabiliseret tykkelse — 2 lag", _mm(res_2.get("t_armeret_mm"))),
+        ("Armeret tykkelse — 1 lag", _mm(res_1.get("t_armeret_mm"))),
+        ("Armeret tykkelse — 2 lag", _mm(res_2.get("t_armeret_mm"))),
     ]
 
 
@@ -1070,13 +1069,8 @@ def byg_rapport_docx(data: dict) -> bytes:
         return [{"label": k, "vaerdi": v} for k, v in par]
 
     # Hjælper: returner brugerredigeret tekst, eller standardtekst hvis ingen.
-    # En tom streng ("") betyder at brugeren bevidst har ryddet feltet — den
-    # respekteres, så afsnittet bliver tomt. Kun en helt manglende nøgle
-    # (eller None) falder tilbage til standardteksten.
     def _tekst(nøgle: str) -> str:
-        if nøgle in tekster and tekster[nøgle] is not None:
-            return tekster[nøgle]
-        return STANDARD_TEKSTER.get(nøgle, "")
+        return tekster.get(nøgle) or STANDARD_TEKSTER.get(nøgle, "")
 
     context = {
         # Header / projekt-metadata

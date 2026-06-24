@@ -40,7 +40,6 @@ from core.data import (
     EO_KOLONNER,
     TRAFIKKOBLING_NOTE,
     format_trafikkobling,
-    format_klasse_interval,
 )
 from core.calculator import (
     beregn,
@@ -67,7 +66,7 @@ INFO_VISUALISERING_MD = """**Sådan læses søjlerne**
 
 **Indtastet opbygning** viser brugerens egne tykkelser.
 
-**Ustabiliseret basistykkelse (φ-korrigeret)** er den ustabiliserede *kravtykkelse* fra
+**Uarmeret basistykkelse (φ-korrigeret)** er den uarmerede *kravtykkelse* fra
 designdiagrammet — bestemt af Eu og Eo og korrigeret for den vægtede
 friktionsvinkel via formlen
 *T_krav = T_basis × (1 + K_PHI·(φ−37))*.
@@ -75,7 +74,7 @@ Materialeforholdet fra det indtastede bevares, og krav-tykkelsen fordeles
 proportionalt på lagene. Tallene kan derfor være større end de indtastede
 — differencen svarer til "Mangler X mm" der vises under søjlen.
 
-**1 lag / 2 lag geonet** viser det stabiliserede krav med samme proportionale
+**1 lag / 2 lag geonet** viser det armerede krav med samme proportionale
 lagfordeling. Det øverste geonet ved 2 lag placeres ved den reducerede
 materialegrænse.
 """
@@ -85,7 +84,7 @@ INFO_DESIGNDIAGRAM_MD = """**Sådan dannes diagrammet**
 
 Kurverne kommer fra designdiagram-tabellen for det valgte **Eo**: tabellen
 giver basis-bærelagstykkelsen (cm) for hver Eu-række og lag-mode
-(ustabiliseret / 1 lag / 2 lag).
+(uarmeret / 1 lag / 2 lag).
 
 Basis-tykkelsen ganges med en samlet faktor:
 
@@ -199,7 +198,7 @@ def _normaliser_materiale(raw: dict) -> dict | None:
     try:
         phi = int(round(float(raw.get("phi"))))
     except (TypeError, ValueError):
-        phi = int(PHI_BASIS)
+        phi = 35
     phi = min(max(phi, 20), 60)
 
     max_korn_raw = raw.get("max_korn")
@@ -317,7 +316,7 @@ def _normaliser_diagram_rows(rows: list[dict]) -> tuple[list[dict], list[str]]:
 
     for idx, row in enumerate(rows, start=1):
         eu = _diagramtal(row.get("eu", row.get("Eu (MPa)")))
-        t_uarmeret = _diagramtal(row.get("t_uarmeret_cm", row.get("Ustabiliseret tykkelse (cm)")))
+        t_uarmeret = _diagramtal(row.get("t_uarmeret_cm", row.get("Uarmeret tykkelse (cm)")))
         t_1_lag = _diagramtal(row.get("t_1_lag_cm", row.get("1 lag tykkelse (cm)")))
         t_2_lag = _diagramtal(row.get("t_2_lag_cm", row.get("2 lag tykkelse (cm)")))
 
@@ -538,10 +537,6 @@ st.markdown(f"""
   }}
   .net-kor-ref {{
     font-size:0.80rem; color:{GRÅ}; font-style:italic;
-    margin:0.1rem 0 0.05rem;
-  }}
-  .bd-basis {{
-    font-size:0.82rem; font-weight:500; color:#555;
     margin:0.1rem 0 0.05rem;
   }}
   .klasse-ok {{
@@ -796,23 +791,7 @@ def _gyldige_grupper(grupper: list[dict]) -> list[dict]:
 
 
 def _format_klasse_liste(klasser: list[int]) -> str:
-    """Komprimér klasseliste til intervaller (delt helper i core.data)."""
-    return format_klasse_interval(klasser)
-
-
-def _produkt_label(navn: str) -> str:
-    """Dropdown-label: produktnavn + anbefalede klasser, fx
-    'GS-GRID SX170 (Klasse 4-6)'.
-
-    Bemærk: Streamlit-dropdownen kan ikke farve en del af teksten, så
-    klasse-delen vises i samme farve som navnet (kun captionen nedenunder
-    kan vises nedtonet).
-    """
-    g = find_geonet(navn)
-    kl = g.get("klasser") if g else None
-    if kl:
-        return f"{navn} (Klasse {_format_klasse_liste(kl)})"
-    return navn
+    return ", ".join(str(k) for k in sorted(klasser))
 
 
 def _klasse_linjer_html(produkter: list[dict], valgt_klasse: int | None) -> str:
@@ -831,102 +810,25 @@ def _klasse_linjer_html(produkter: list[dict], valgt_klasse: int | None) -> str:
     return "".join(linjer)
 
 
-def _bd_reduktion_opdeling_html(
-    basis_uarm: float | None,
-    t_basis: float | None,
-    phi: float,
-    produkter: list[dict],
-    interval_p: dict | None,
-) -> str:
-    """Brugerdefineret: opdel reduktionen i basis-, φ- og net-bidrag.
-
-    Returnerer HTML med op til tre linjer:
-      Basisreduktion: xx mm
-      φ-korrektion for φ = xx,x°: xx mm (xx %)
-      Net-korrektion (xx %): xx mm ift reference
-    Net-linjen vises som interval (xx %/xx % opt.) for interax-produkter.
-    Retning angives via farve (blå = reduktion, rød = forøgelse).
-    """
-    if not t_basis or t_basis <= 0:
-        return ""
-    linjer: list[str] = []
-
-    # Basisreduktion — ren diagram-forskel uden korrektioner.
-    if basis_uarm:
-        basis_red = round(basis_uarm - t_basis)
-        linjer.append(
-            f'<div class="bd-basis">Basisreduktion: {basis_red} mm</div>'
-        )
-
-    # φ-korrektion — kun hvis φ afviger fra basis.
-    if abs(phi - PHI_BASIS) > 0.05:
-        phi_kor = K_PHI * (phi - PHI_BASIS)
-        phi_mm = round(t_basis * phi_kor)
-        phi_pct = round(phi_kor * 100)
-        phi_str = f"{phi:.1f}".replace(".", ",")
-        css = "net-kor-spar" if phi_mm <= 0 else "net-kor-pen"
-        linjer.append(
-            f'<div class="{css}">'
-            f'φ-korrektion for φ = {phi_str}°: '
-            f'{phi_mm:+d} mm ({phi_pct:+d}%)'
-            f'</div>'
-        )
-
-    # Net-korrektion — interval (interax) eller enkelt værdi.
-    if interval_p is not None and interval_p.get("korrektion_min") is not None:
-        kor_opt = interval_p["korrektion_min"]    # største reduktion (optimal)
-        kor_kons = interval_p["korrektion_max"]   # mindste reduktion (konservativ)
-        mm_kons = round(t_basis * kor_kons)
-        mm_opt = round(t_basis * kor_opt)
-        pct_kons = round(kor_kons * 100)
-        pct_opt = round(kor_opt * 100)
-        linjer.append(
-            f'<div class="net-kor-spar">'
-            f'Net-korrektion ({pct_kons:+d}%/{pct_opt:+d}% opt.) ift. reference: '
-            f'{mm_kons:+d} mm /{mm_opt:+d} mm (opt.)'
-            f'</div>'
-        )
-    else:
-        kor = produkter[0].get("korrektion", 0.0) if produkter else 0.0
-        if abs(kor) < 0.005:
-            linjer.append(
-                '<div class="net-kor-ref">referenceprodukt (0 % korrektion)</div>'
-            )
-        else:
-            net_mm = round(t_basis * kor)
-            net_pct = round(kor * 100)
-            css = "net-kor-spar" if net_mm <= 0 else "net-kor-pen"
-            linjer.append(
-                f'<div class="{css}">'
-                f'Net-korrektion ({net_pct:+d}%) ift. reference: '
-                f'{net_mm:+d} mm'
-                f'</div>'
-            )
-
-    return "".join(linjer)
-
-
 def _render_gruppe_kort(
     gruppe: dict,
     primaer: bool,
     phi: float = PHI_BASIS,
     valgt_klasse: int | None = None,
-    brugerdefineret: bool = False,
 ) -> None:
     """
     Render én tykkelses-gruppe som kort.
     primaer=True ⇒ fremhævet grønt kort (bedste). False ⇒ dæmpet grå variant.
-    brugerdefineret=True ⇒ vis 3-linje reduktionsopdeling (basis/φ/net) i
-    stedet for de simple φ-/net-korrektionslinjer.
     """
     t_vis   = gruppe["t_armeret_mm"]
     red_pct = gruppe["reduktion_pct"]
 
-    # Basis-ustabiliseret tykkelse (rå tabelopslag uden korrektioner). Alle
-    # produkter i gruppen deler samme eu/eo/lag_mode og dermed samme basis.
-    # Reduktionen i headline vises ift. denne basistykkelse i begge tilstande.
+    # Hent t_uarmeret fra første produkt (alle i gruppen har samme uarmerede tykkelse).
+    # Reduktionen sammenlignes mod den φ-korrigerede reference, så
+    # procentdelen afspejler net-effekten alene (ikke φ-effekten oveni).
     t_uarm_prod = (
-        gruppe["produkter"][0].get("t_uarmeret_mm")
+        gruppe["produkter"][0].get("t_uarmeret_phi_kor_mm")
+        or gruppe["produkter"][0].get("t_uarmeret_mm")
         if gruppe.get("produkter") else None
     )
 
@@ -966,37 +868,28 @@ def _render_gruppe_kort(
         if t_low_vis == t_high_vis:
             red_linje = (
                 f'<div class="gruppe-red-linje">'
-                f'Reduceret i alt {red_mm_best} mm → {red_pct_best:.0%}'
+                f'Reduceres ↓ {red_mm_best} mm → {red_pct_best:.0%}'
                 f'</div>'
             )
         else:
             red_linje = (
                 f'<div class="gruppe-red-linje">'
-                f'Reduceret i alt {red_mm_kons} mm → {red_pct_kons:.0%} '
+                f'Reduceres ↓ {red_mm_kons} mm → {red_pct_kons:.0%} '
                 f'<span class="parentes">'
-                f'({red_mm_best} mm → {red_pct_best:.0%})'
+                f'(↓ {red_mm_best} mm → {red_pct_best:.0%})'
                 f'</span>'
                 f'</div>'
             )
-    elif t_uarm_prod:
+    elif t_uarm_prod is not None and red_pct is not None:
         red_mm = round(t_uarm_prod - t_vis)
-        red_pct_val = red_mm / t_uarm_prod if t_uarm_prod > 0 else 0
+        red_pct_str = f"{red_pct:.0%}"
         red_linje = (
-            f'<div class="gruppe-red-linje">Reduceret i alt {red_mm} mm → {red_pct_val:.0%}</div>'
+            f'<div class="gruppe-red-linje">Reduceres ↓ {red_mm} mm → {red_pct_str}</div>'
         )
     else:
         red_linje = ""
 
-    # Brugerdefineret: opdel reduktionen i basis-, φ- og net-bidrag.
-    breakdown_html = (
-        _bd_reduktion_opdeling_html(
-            t_uarm_prod, gruppe.get("t_basis_arm_mm"), phi,
-            gruppe.get("produkter") or [], interval_p,
-        )
-        if brugerdefineret else ""
-    )
-
-    # φ-korrektionslinje — vises kun hvis phi ≠ 37°
+    # φ-korrektionslinje — vises kun hvis phi ≠ 35°
     phi_kor_html = ""
     t_basis = gruppe.get("t_basis_arm_mm")
     if t_basis and t_basis > 0 and abs(phi - PHI_BASIS) > 0.05:
@@ -1107,7 +1000,8 @@ def _render_gruppe_kort(
         f'<div class="{kort_css}">'
         f'<span class="{tal_css}">{tal_html}</span>'
         f'{red_linje}'
-        f'{breakdown_html if brugerdefineret else phi_kor_html + net_kor_html}'
+        f'{phi_kor_html}'
+        f'{net_kor_html}'
         f'{"".join(serie_linjer)}'
         f'{klasse_linjer}'
         f'</div>',
@@ -1257,7 +1151,6 @@ def _render_referenceblok(
     fejl_2: str | None,
     valgt_klasse: int,
     phi: float = PHI_BASIS,
-    brugerdefineret: bool = False,
 ) -> None:
     st.markdown("**Referencenet (SX160 / T6 / TX160)**")
     if valgt_klasse not in REFERENCE_KLASSER:
@@ -1270,24 +1163,22 @@ def _render_referenceblok(
     with col_1:
         st.markdown('<div class="kol-titel">1 LAG REFERENCENET</div>', unsafe_allow_html=True)
         if ref_1 is not None:
-            _render_gruppe_kort(ref_1, primaer=True, phi=phi, valgt_klasse=valgt_klasse,
-                                brugerdefineret=brugerdefineret)
+            _render_gruppe_kort(ref_1, primaer=True, phi=phi, valgt_klasse=valgt_klasse)
         else:
             st.info(fejl_1 or "Ingen gyldigt 1-lag-resultat for referencenettet.")
     with col_2:
         st.markdown('<div class="kol-titel">2 LAG REFERENCENET</div>', unsafe_allow_html=True)
         if ref_2 is not None:
-            _render_gruppe_kort(ref_2, primaer=True, phi=phi, valgt_klasse=valgt_klasse,
-                                brugerdefineret=brugerdefineret)
+            _render_gruppe_kort(ref_2, primaer=True, phi=phi, valgt_klasse=valgt_klasse)
         else:
             st.info(fejl_2 or "Ingen gyldigt 2-lag-resultat for referencenettet.")
 
 
 def _render_uarmeret_mangler_besked(eu: float, eo: float) -> None:
     st.warning(
-        "Der er ikke defineret nogen ustabiliseret bærelagstykkelse for "
+        "Der er ikke defineret nogen uarmeret bærelagstykkelse for "
         f"det valgte Eu/Eo ({eu:.0f} MPa / {eo:.0f} MPa). "
-        "Stabiliserede resultater vises stadig, hvor designdiagrammet har data."
+        "Armerede resultater vises stadig, hvor designdiagrammet har data."
     )
 
 
@@ -1298,7 +1189,6 @@ def _render_lag_kolonne(
     lag_mode: str,
     tom_besked: str | None = None,
     phi: float = PHI_BASIS,
-    brugerdefineret: bool = False,
 ) -> None:
     """
     Render én kolonne (1-lag eller 2-lag): bedste gruppe øverst,
@@ -1328,10 +1218,9 @@ def _render_lag_kolonne(
     bedste = grupper_sorteret[0]
     rest   = grupper_sorteret[1:]
 
-    st.markdown('<div class="bedste-label">Stabiliseret bærelagstykkelse</div>',
+    st.markdown('<div class="bedste-label">Armeret bærelagstykkelse</div>',
                 unsafe_allow_html=True)
-    _render_gruppe_kort(bedste, primaer=True, phi=phi, valgt_klasse=valgt_klasse,
-                        brugerdefineret=brugerdefineret)
+    _render_gruppe_kort(bedste, primaer=True, phi=phi, valgt_klasse=valgt_klasse)
 
     if rest:
         label = (
@@ -1340,8 +1229,7 @@ def _render_lag_kolonne(
         )
         with st.expander(label, expanded=False):
             for g in rest:
-                _render_gruppe_kort(g, primaer=False, phi=phi, valgt_klasse=valgt_klasse,
-                                    brugerdefineret=brugerdefineret)
+                _render_gruppe_kort(g, primaer=False, phi=phi, valgt_klasse=valgt_klasse)
 
 
 def _navne_kort(gruppe: dict) -> str:
@@ -1783,7 +1671,7 @@ def _render_opbygningsvisualisering(
         (m.get("tykkelse_mm") or 0) > 0 for m in materialer
     )
 
-    # phi-korrigeret uarmeret-krav: t_uarm × (1 + K_PHI × (phi - 37))
+    # phi-korrigeret uarmeret-krav: t_uarm × (1 + K_PHI × (phi - 35))
     t_uarm_krav: float | None = None
     if t_uarm is not None:
         phi_kor = K_PHI * (phi - PHI_BASIS) if har_indtastet else 0.0
@@ -1816,8 +1704,8 @@ def _render_opbygningsvisualisering(
         sub_red_u = _sub_lag_skaleret_fra_materialer(materialer, t_uarm_krav)
         brug_sub_u = len(sub_red_u) >= 2
         snit_liste.append(rapport_mod.Snit(
-            titel="Ustabiliseret basistykkelse (φ-korrigeret)" if har_indtastet
-                  else "Ustabiliseret basistykkelse",
+            titel="Uarmeret basistykkelse (φ-korrigeret)" if har_indtastet
+                  else "Uarmeret basistykkelse",
             t_baerelag_mm=t_uarm_krav,
             geonet_y_fracs=[],
             sub_lag=sub_red_u if brug_sub_u else None,
@@ -1830,12 +1718,12 @@ def _render_opbygningsvisualisering(
         ))
     else:
         snit_liste.append(rapport_mod.Snit(
-            titel="Ustabiliseret basistykkelse",
+            titel="Uarmeret basistykkelse",
             t_baerelag_mm=None,
             geonet_y_fracs=[],
             sub_lag=None,
             ikke_defineret_tekst=(
-                f"Ustabiliseret bærelag ikke defineret for Eu = {eu:g} MPa"
+                f"Uarmeret bærelag ikke defineret for Eu = {eu:g} MPa"
             ),
             er_krav_soejle=True,
             t_indtastet_mm=t_indtastet_for_linje,
@@ -1926,7 +1814,7 @@ def _render_oversigt_expanders(
 ) -> None:
     """De 3 informations-expandere under resultaterne.
 
-    Bruges af både Standard (phi=37, geonet=None, materialer=None)
+    Bruges af både Standard (phi=35, geonet=None, materialer=None)
     og Brugerdefineret (egne phi/geonet/materialer-værdier).
 
     bedste_1 / bedste_2: bedste (mindste t_armeret) gruppe i hver lag-mode,
@@ -2024,50 +1912,6 @@ def _render_oversigt_expanders(
         if a not in seen_a:
             seen_a.add(a)
             advarsler_unik.append(a)
-
-    # --- Samlet opbygning vs. minimumtykkelse (1 lag / 2 lag) -----------
-    # Én samlet advarsel der sammenligner brugerens samlede materialetykkelse
-    # mod den mindst mulige krævede tykkelse i hver lag-mode (erstatter den
-    # tidligere per-lag-advarsel, så 1-lag- og 2-lag-tilfældet samles).
-    total_opbygning = sum(
-        m["tykkelse_mm"] for m in materialer
-        if m.get("tykkelse_mm") is not None
-    )
-    t_min_1 = bedste_1["t_armeret_mm"] if bedste_1 is not None else None
-    t_min_2 = bedste_2["t_armeret_mm"] if bedste_2 is not None else None
-    under_1 = t_min_1 is not None and total_opbygning < t_min_1
-    under_2 = t_min_2 is not None and total_opbygning < t_min_2
-    if materialer and total_opbygning > 0 and (under_1 or under_2):
-        if t_min_2 is not None and under_1 and not under_2:
-            # 1 lag utilstrækkeligt, men 2 lag er nok → foreslå 2 lag
-            opbyg_adv = (
-                f"Den samlede foreslåede opbygning ({total_opbygning:.0f} mm) er "
-                f"mindre end minimumtykkelsen ved 1 lag geonet ({t_min_1:.0f} mm), "
-                f"men tilstrækkelig ved 2 lag geonet ({t_min_2:.0f} mm). "
-                f"Anvend 2 lag geonet for denne opbygning."
-            )
-        elif t_min_1 is not None and t_min_2 is not None:
-            # Utilstrækkelig ved både 1 og 2 lag
-            opbyg_adv = (
-                f"Den samlede foreslåede opbygning ({total_opbygning:.0f} mm) er "
-                f"mindre end den beregnede minimumtykkelse ved både 1 lag "
-                f"({t_min_1:.0f} mm) og 2 lag geonet ({t_min_2:.0f} mm). "
-                f"Øg den samlede materialetykkelse, eller anvend materialer med "
-                f"højere friktionsvinkel."
-            )
-        else:
-            # Kun ét lag-mode er gyldigt for kombinationen
-            t_kendt = t_min_1 if t_min_1 is not None else t_min_2
-            lag_txt = "1 lag" if t_min_1 is not None else "2 lag"
-            opbyg_adv = (
-                f"Den samlede foreslåede opbygning ({total_opbygning:.0f} mm) er "
-                f"mindre end minimumtykkelsen ved {lag_txt} geonet "
-                f"({t_kendt:.0f} mm). Øg den samlede materialetykkelse, eller "
-                f"anvend materialer med højere friktionsvinkel."
-            )
-        if opbyg_adv not in seen_a:
-            seen_a.add(opbyg_adv)
-            advarsler_unik.insert(0, opbyg_adv)
 
     # --- Tilpassede anbefalinger baseret på bedste produkt --------------
     anbefalinger: list[str] = []
@@ -2216,10 +2060,10 @@ Den beregnede bærelagstykkelse korrigeres for friktionsvinkler forskellig fra �
 
 1. **Bundmodulet Eu** vælges eller beregnes via sammenhæng med Cv
 2. **Krav til overflademodulet Eo** vælges alt efter belastningsklasse
-3. **Opslag i designdiagrammerne** foretages på baggrund af valg af bund- og overflademodul, hvor bærelagstykkelsen bestemmes - ustabiliseret og stabiliseret med 1–2 lag geonet.
+3. **Opslag i designdiagrammerne** foretages på baggrund af valg af bund- og overflademodul, hvor bærelagstykkelsen bestemmes - uarmeret og armeret med 1–2 lag geonet.
    Der er lavet forudgående interpolation imellem designdiagrammerns tabelværdier, for at danne en komplet tabel for hvert designdiagram. 
 4. **På baggrund af opslaget bestemmes basistykkelsen T_basis:**
-   - Ustabiliseret: *xx mm*
+   - Uarmeret: *xx mm*
    - 1 lag armering (referencenet): *xx mm*
    - 2 lag armering (referencenet): *xx mm*
 5. **Korrektionsfaktorer for friktionsvinkel og effektivitet af geonet**
@@ -2249,7 +2093,7 @@ Den beregnede bærelagstykkelse korrigeres for friktionsvinkler forskellig fra �
 
 6. **Den endelige bærelagstykkelse beregnes som:**
 
-   **T_stabiliseret = T_basis × (1 + φ-kor + net-kor)**
+   **T_armeret = T_basis × (1 + φ-kor + net-kor)**
 
         """)
 
@@ -2296,7 +2140,7 @@ def _render_breakdown_tabel(
             pct_str = f"{red_pct:.0%}"
             red_html = (
                 f'<span style="color:{GRØN};font-size:0.85em;margin-left:10px">'
-                f'Reduceres ↓ {red_mm:.0f} mm fra ustabiliseret ({pct_str})'
+                f'Reduceres ↓ {red_mm:.0f} mm fra uarmeret ({pct_str})'
                 f'</span>'
             )
         result_html = (
@@ -2348,7 +2192,7 @@ def _render_breakdown_best_case(
     if t_uarm and t_uarm > 0:
         red_mm = round(t_uarm - t_best)
         red_pct = (t_uarm - t_best) / t_uarm
-        reduktion_txt = f" (Reduceres ↓ {red_mm} mm fra ustabiliseret, {red_pct:.0%})"
+        reduktion_txt = f" (Reduceres ↓ {red_mm} mm fra uarmeret, {red_pct:.0%})"
     else:
         reduktion_txt = ""
     st.markdown(
@@ -2434,7 +2278,7 @@ def _vis_beregnings_breakdown(
         st.markdown("**📊 Beregnings-breakdown**")
 
         # ── Uarmeret ──────────────────────────────────────────────────
-        st.markdown("**Ustabiliseret bærelagstykkelse**")
+        st.markdown("**Uarmeret bærelagstykkelse**")
         if not ref_uarm.get("fejl") and ref_uarm.get("t_basis_uarm_mm") is not None:
             t_b_u = ref_uarm["t_basis_uarm_mm"]
             phi_kor_mm_u = t_b_u * phi_kor
@@ -2464,7 +2308,7 @@ def _vis_beregnings_breakdown(
                 phi_kor_mm_1 = t_b_1 * phi_kor
                 net_kor_mm_1 = t_b_1 * net_kor_1
                 rows_1: list[tuple[str, str, str]] = [
-                    ("T_basis_stabiliseret (opslag)", f"{t_b_1:.0f} mm", ""),
+                    ("T_basis_armeret (opslag)", f"{t_b_1:.0f} mm", ""),
                     (
                         "φ-korrektion",
                         f"{_dk_num(phi_kor_mm_1, '+.0f')} mm",
@@ -2497,7 +2341,7 @@ def _vis_beregnings_breakdown(
                 phi_kor_mm_2 = t_b_2 * phi_kor
                 net_kor_mm_2 = t_b_2 * net_kor_2
                 rows_2: list[tuple[str, str, str]] = [
-                    ("T_basis_stabiliseret (opslag)", f"{t_b_2:.0f} mm", ""),
+                    ("T_basis_armeret (opslag)", f"{t_b_2:.0f} mm", ""),
                     (
                         "φ-korrektion",
                         f"{_dk_num(phi_kor_mm_2, '+.0f')} mm",
@@ -2583,7 +2427,7 @@ def render_standard() -> None:
         if t_uarm is not None:
             st.markdown(
                 f'<div class="uarm-banner">'
-                f'<div class="uarm-banner-label">Ustabiliseret bærelagstykkelse</div>'
+                f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse</div>'
                 f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
                 f'</div>',
                 unsafe_allow_html=True,
@@ -2880,20 +2724,50 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     return materialer, phi
 
 
-def _render_uarm_banner_bd(t_uarm: float, phi: float = PHI_BASIS) -> None:
-    """Render ustabiliseret-banner i brugerdefineret tilstand (én basis-boks).
-
-    phi bevares i signaturen for kald-kompatibilitet, men bruges ikke længere —
-    den φ-korrigerede boks er fjernet, og reduktionen (incl. φ-bidraget) vises
-    nu i de enkelte resultatkort.
+def _render_uarm_banner_bd(t_uarm: float, phi: float) -> None:
     """
-    st.markdown(
-        f'<div class="uarm-banner">'
-        f'<div class="uarm-banner-label">Ustabiliseret bærelagstykkelse</div>'
-        f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    Render uarmeret-banner i brugerdefineret tilstand.
+
+    Hvis phi == 37° (standard): én kolonne som i Standard-tilstanden.
+    Hvis phi ≠ 37°: to kolonner — basis (ingen korrektioner) til venstre
+    og φ-korrigeret tykkelse til højre med Δ-linje.
+    """
+    if abs(phi - PHI_BASIS) <= 0.05:
+        st.markdown(
+            f'<div class="uarm-banner">'
+            f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse</div>'
+            f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    phi_kor = K_PHI * (phi - PHI_BASIS)
+    t_uarm_phi = round(t_uarm * (1 + phi_kor))
+    delta_mm = abs(round(t_uarm - t_uarm_phi))
+    phi_str = _dk_num(phi, ".1f")
+    pil = "↓" if t_uarm_phi < t_uarm else "↑"
+
+    col_l, col_r = st.columns(2, gap="large")
+    with col_l:
+        st.markdown(
+            f'<div class="uarm-banner">'
+            f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse (basis)</div>'
+            f'<div class="uarm-banner-tal">{t_uarm:.0f} mm</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with col_r:
+        st.markdown(
+            f'<div class="uarm-banner">'
+            f'<div class="uarm-banner-label">Uarmeret bærelagstykkelse (φ-korrigeret)</div>'
+            f'<div class="uarm-banner-tal">{t_uarm_phi:.0f} mm</div>'
+            f'<div style="font-size:0.9rem;color:#555;margin-top:0.1rem">'
+            f'{pil} {delta_mm} mm &nbsp;(φ = {phi_str}°)'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def render_brugerdefineret() -> None:
@@ -2936,13 +2810,12 @@ def render_brugerdefineret() -> None:
             GEONET_NAVNE,
             index=GEONET_NAVNE.index("GS-GRID SX160"),
             key="bd_geonet",
-            format_func=_produkt_label,
         )
         geonet = find_geonet(geonet_navn)
 
         if geonet:
             korn_txt = f"{geonet['max_korn']} mm" if geonet["max_korn"] else "—"
-            kl_txt = _format_klasse_liste(geonet["klasser"])
+            kl_txt = ", ".join(str(k) for k in geonet["klasser"])
             kor_txt = f"{geonet['korrektion']:+.0%}"
             rude_txt = geonet.get("rudeaabning") or "—"
             st.caption(
@@ -3024,16 +2897,13 @@ def render_brugerdefineret() -> None:
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
                 valgt_klasse=valgt_klasse,
                 phi=phi,
-                brugerdefineret=True,
             )
             st.markdown("")
             kol_1, kol_2 = st.columns(2, gap="large")
             with kol_1:
-                _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag",
-                                    phi=phi, brugerdefineret=True)
+                _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag", phi=phi)
             with kol_2:
-                _render_lag_kolonne("2 LAG GEONET", grupper_2, valgt_klasse, "2_lag",
-                                    phi=phi, brugerdefineret=True)
+                _render_lag_kolonne("2 LAG GEONET", grupper_2, valgt_klasse, "2_lag", phi=phi)
 
     else:
         # SPECIFIKT PRODUKT-MODE
@@ -3144,12 +3014,12 @@ def render_brugerdefineret() -> None:
             with kol_1:
                 _render_lag_kolonne(
                     "1 LAG GEONET", grupper_1, valgt_klasse, "1_lag",
-                    tom_besked=tom_1, phi=phi, brugerdefineret=True,
+                    tom_besked=tom_1, phi=phi,
                 )
             with kol_2:
                 _render_lag_kolonne(
                     "2 LAG GEONET", grupper_2, valgt_klasse, "2_lag",
-                    tom_besked=tom_2, phi=phi, brugerdefineret=True,
+                    tom_besked=tom_2, phi=phi,
                 )
 
             if geonet and geonet.get("navn"):
@@ -3255,6 +3125,7 @@ def render_sidebar() -> str:
             '<div class="sb-logo">🏗️</div>'
             '<div class="sb-title">Beregningsværktøj</div>'
             '<div class="sb-sub">BG Byggros · v0.3</div>'
+            '<div class="sb-sub">Udviklet af DST</div>'
             "</div>",
             unsafe_allow_html=True,
         )
@@ -3310,7 +3181,7 @@ def render_geonet_database() -> None:
                 if g.get("korrektion_interval") is not None
                 else f"{g['korrektion']:+.0%}"
             ),
-            "BK":                    _format_klasse_liste(g["klasser"]),
+            "BK":                    ", ".join(str(k) for k in g["klasser"]),
             "Min. dæklag\n(cm)":     g["min_daklag"],
             "Maks. korn\n(datablad mm)": f"{g['max_korn']}" if g["max_korn"] else "—",
             "Anb. tilslag\n(designmanual)": g.get("anbefalet_tilslag") or "—",
@@ -3382,7 +3253,7 @@ def render_designdiagrammer() -> None:
         return pd.DataFrame([
             {
                 "Eu (MPa)": row["eu"],
-                "Ustabiliseret tykkelse (cm)": row["t_uarmeret_cm"],
+                "Uarmeret tykkelse (cm)": row["t_uarmeret_cm"],
                 "1 lag tykkelse (cm)": row["t_1_lag_cm"],
                 "2 lag tykkelse (cm)": row["t_2_lag_cm"],
             }
@@ -3416,8 +3287,8 @@ def render_designdiagrammer() -> None:
                         step=1.0,
                         format="%.0f",
                     ),
-                    "Ustabiliseret tykkelse (cm)": st.column_config.NumberColumn(
-                        "Ustabiliseret tykkelse (cm)",
+                    "Uarmeret tykkelse (cm)": st.column_config.NumberColumn(
+                        "Uarmeret tykkelse (cm)",
                         min_value=0.0,
                         step=0.1,
                         format="%.1f",
@@ -3482,7 +3353,7 @@ def render_materialer() -> None:
             st.session_state["materialer"].append({
                 "navn": navn,
                 "lagtype": "Bærelag",
-                "phi": int(PHI_BASIS),
+                "phi": 35,
                 "max_korn": 32,
                 "krav_maskestoerrelse_mm": None,
                 "anvendelse": "",
@@ -3720,13 +3591,13 @@ def render_rapport() -> None:
         )
     with kol_v1:
         vis_uarm = st.checkbox(
-            "Ustabiliseret opbygning",
+            "Uarmeret opbygning",
             value=uarm_muligt,
             disabled=not uarm_muligt,
             key="rap_vis_uarm",
             help=(
                 None if uarm_muligt
-                else "Ustabiliseret tykkelse er ikke defineret for denne "
+                else "Uarmeret tykkelse er ikke defineret for denne "
                      "Eu/Eo-kombination."
             ),
         )
@@ -3761,7 +3632,7 @@ def render_rapport() -> None:
         disabled=not designdiagram_muligt,
         key="rap_vis_designdiagram",
         help=(
-            "Tegner designkurverne (ustabiliseret, 1 lag, 2 lag) tilpasset dine "
+            "Tegner designkurverne (uarmeret, 1 lag, 2 lag) tilpasset dine "
             "materialer og valgte geonet, med din opbygning og Eu som "
             "referencer. Ligner de originale designdiagrammer."
             if designdiagram_muligt
@@ -3889,8 +3760,8 @@ def render_rapport() -> None:
         )
         brug_sub_u = len(sub_red_u) >= 2
         snit_liste.append(rapport_mod.Snit(
-            titel="Ustabiliseret basistykkelse (φ-korrigeret)"
-                  if har_indtastet_rap else "Ustabiliseret basistykkelse",
+            titel="Uarmeret basistykkelse (φ-korrigeret)"
+                  if har_indtastet_rap else "Uarmeret basistykkelse",
             t_baerelag_mm=t_uarm_krav_rap,
             geonet_y_fracs=[],
             sub_lag=sub_red_u if brug_sub_u else None,
@@ -3945,7 +3816,7 @@ def render_rapport() -> None:
 
     if not snit_liste:
         st.warning(
-            "Vælg mindst ét snit (ustabiliseret / 1 lag / 2 lag) for at kunne "
+            "Vælg mindst ét snit (uarmeret / 1 lag / 2 lag) for at kunne "
             "generere rapporten."
         )
         visu_png: bytes | None = None
@@ -4152,7 +4023,7 @@ if aktiv_side == "dimensionering":
     if tilstand == "Standard":
         st.caption(
             "I standardberegningen forudsættes 1 homogent bærelag med en forudsat "
-            "friktionsvinkel på φ = 37°."
+            "friktionsvinkel på φ = 35°."
         )
     else:
         st.caption(

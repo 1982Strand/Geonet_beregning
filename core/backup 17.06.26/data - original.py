@@ -627,7 +627,7 @@ CV_TIL_EU = [
 MATERIAL_DB = [
     {
         "navn": "Bundsikringssand",
-        "phi": 37,
+        "phi": 35,
         "max_korn": 8,
         "lagtype": "Bundsikring",
         "anvendelse": "Frostsikring og drænlag",
@@ -1223,10 +1223,7 @@ GEONET_NOTER = [
 #    Kilde: Excel fane 4 "Korrektionsfaktorer"
 # ---------------------------------------------------------------------------
 
-# Basis-friktionsvinkel for opslagstabellens referencegrundlag
-PHI_BASIS = 37.0
-
-# φ-korrektion pr. grad over 37° (negativ = tyndere bærelag ved højere φ)
+# φ-korrektion pr. grad over 35° (negativ = tyndere bærelag ved højere φ)
 K_PHI = -0.02
 
 # Gyldighedsgrænser
@@ -1234,7 +1231,7 @@ EU_MIN = 1.0    # MPa - hård fejl under denne grænse
 EU_MAX = 45.0   # MPa - hård fejl over denne grænse
 EO_MIN = 30.0   # MPa
 EO_MAX = 150.0  # MPa
-PHI_MIN = PHI_BASIS  # grader - advarsel under denne (følger basis-friktionsvinklen)
+PHI_MIN = 35.0  # grader - advarsel under denne
 PHI_MAX = 50.0  # grader - advarsel over denne
 MIN_DAKLAG_STANDARD = 200  # mm - minimum dæklag over geonet i opbygning
 
@@ -1289,24 +1286,3 @@ def eo_til_klasse(eo: float) -> int | None:
         if data["eo"] == eo:
             return klasse
     return None
-
-
-def format_klasse_interval(klasser) -> str:
-    """Komprimér en klasseliste til intervaller: [3, 4, 5, 6] → '3-6',
-    [3, 5, 6] → '3, 5-6', [4] → '4'. Tom liste → '—'.
-
-    Delt formatering brugt af både UI (app.py) og validering (validators.py).
-    """
-    ks = sorted({int(k) for k in klasser})
-    if not ks:
-        return "—"
-    grupper: list[str] = []
-    start = forrige = ks[0]
-    for k in ks[1:]:
-        if k == forrige + 1:
-            forrige = k
-            continue
-        grupper.append(str(start) if start == forrige else f"{start}-{forrige}")
-        start = forrige = k
-    grupper.append(str(start) if start == forrige else f"{start}-{forrige}")
-    return ", ".join(grupper)

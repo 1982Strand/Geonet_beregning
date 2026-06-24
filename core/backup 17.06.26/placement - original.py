@@ -32,7 +32,7 @@ def placement_requirements(geonet: dict | None = None) -> dict:
         source = "Tensar"
     else:
         max_spacing = MAX_SPACING_CONSERVATIVE_MM
-        source = "referencenet"
+        source = "reference/ukendt"
 
     return {
         "min_top_cover_mm": max(MIN_TOP_COVER_MM, product_cover_mm),
@@ -137,7 +137,7 @@ def check_geonet_placement(
         if spacing > max_spacing:
             advarsler.append(
                 f"Afstanden mellem geonetlagene er {spacing:.0f} mm. "
-                f"Anbefalingen for bedst effekt er højst {max_spacing:.0f} mm for {krav['source']}."
+                f"Kravet er højst {max_spacing:.0f} mm for {krav['source']}."
             )
 
     y_fracs = [

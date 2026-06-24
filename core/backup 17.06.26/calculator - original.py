@@ -15,7 +15,6 @@ from .data import (
     EO_KOLONNER,
     GEONET_DB,
     K_PHI,
-    PHI_BASIS,
 )
 from .placement import check_geonet_placement
 
@@ -108,7 +107,7 @@ def beregn(
     # -- Trin 1 & 2: Eu og Eo er allerede fastlagt af kalderen --
 
     # -- Trin 3: Fastlæg φ-korrektion --
-    phi_korrektion = K_PHI * (phi - PHI_BASIS)
+    phi_korrektion = K_PHI * (phi - 35.0)
 
     # -- Trin 4: Opslag i designdiagram --
     eu_raekker = _aktive_eu_raekker(t_basis_table)
@@ -220,13 +219,13 @@ def beregn_alle_produkter(
     eu: float,
     eo: float,
     lag_mode: str,
-    phi: float = PHI_BASIS,
+    phi: float = 35.0,
     t_basis_table: dict | None = None,
 ) -> list[dict]:
     """
     Beregn T_armeret for alle geonet-produkter med en given friktionsvinkel.
 
-    phi defaulter til 37° (Standard-tilstand). Brugerdefineret-tilstand
+    phi defaulter til 35° (Standard-tilstand). Brugerdefineret-tilstand
     kan sende en anden φ-værdi beregnet fra materialelagene.
 
     Returnerer liste af dicts med:
