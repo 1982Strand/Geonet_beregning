@@ -120,7 +120,7 @@ def _vis_billede_med_info(
     """
     col_img, col_info = st.columns([0.95, 0.05])
     with col_img:
-        kwargs = {"use_container_width": use_container_width}
+        kwargs = {"width": "stretch" if use_container_width else "content"}
         if caption:
             st.image(png, caption=caption, **kwargs)
         else:
@@ -128,7 +128,7 @@ def _vis_billede_med_info(
     with col_info:
         popover = getattr(st, "popover", None)
         if callable(popover):
-            with popover("ℹ️", use_container_width=True):
+            with popover("ℹ️", width="stretch"):
                 st.markdown(info_md)
         else:
             with st.expander("ℹ️", expanded=False):

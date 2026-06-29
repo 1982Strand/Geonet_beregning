@@ -3,5 +3,7 @@
     "claudeCodeChat.wsl.enabled": false,
     "claudeCodeChat.thinking.intensity": "think-harder",
     "claudeCodeChat.wsl.nodePath": "/usr/bin/node",
-    "claudeCodeChat.wsl.claudePath": "/usr/bin/claude"
+    "claudeCodeChat.wsl.claudePath": "/usr/bin/claude",
+    "claudeUsageBar.displayMode": "both",
+    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
 }
