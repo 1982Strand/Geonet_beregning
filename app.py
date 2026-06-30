@@ -577,7 +577,8 @@ st.markdown(f"""
     border-bottom:2px solid {GRØN};
   }}
   .rt-head .num {{ text-align:right; }}
-  .rt-raekke {{ border-bottom:0.5px solid #EEE; }}
+  .rt-raekke {{ border-bottom:0.5px solid #EEE;
+                border-left:3px solid transparent; }}
   .rt-sum {{
     cursor:pointer; padding:0.5rem 0.6rem; font-size:0.92rem;
     list-style:none;
@@ -609,8 +610,9 @@ st.markdown(f"""
   .rt-navn {{ font-weight:500; }}
   .rt-ref {{ background:#F5F5F5; }}
   .rt-ref .rt-navn {{ font-style:italic; color:#555; font-weight:400; }}
-  .rt-bedste {{ background:{LYS_GR}; border-left:3px solid {GRØN}; }}
-  .rt-bedste .rt-navn {{ color:#173404; }}
+  /* Grøn markering følger den udfoldede række (ikke det tyndeste produkt). */
+  .rt-raekke[open] {{ background:{LYS_GR}; border-left-color:{GRØN}; }}
+  .rt-raekke[open] .rt-navn {{ color:#173404; }}
   .rt-badge {{ font-size:0.78rem; padding:1px 9px; border-radius:12px;
                white-space:nowrap; }}
   .rt-badge-ok {{ background:{LYS_GR}; color:#173404; }}
@@ -934,312 +936,12 @@ def _produkt_label(navn: str) -> str:
     return navn
 
 
-def _klasse_linjer_html(produkter: list[dict], valgt_klasse: int | None) -> str:
-    if valgt_klasse is None:
-        return ""
-
-    linjer: list[str] = []
-    for p in _sort_produkter(produkter):
-        klasser = p.get("klasser") or []
-        kl_txt = _format_klasse_liste(klasser)
-        css = "klasse-ok" if p.get("klasse_ok") else "klasse-advarsel"
-        prefix = "Anbefalet" if p.get("klasse_ok") else "Ikke anbefalet til valgt klasse"
-        linjer.append(
-            f'<div class="{css}">{p["navn"]}: {prefix} · klasser {kl_txt}</div>'
-        )
-    return "".join(linjer)
-
-
-def _bd_reduktion_opdeling_html(
-    basis_uarm: float | None,
-    t_basis: float | None,
-    phi: float,
-    produkter: list[dict],
-    interval_p: dict | None,
-) -> str:
-    """Brugerdefineret: opdel reduktionen i basis-, φ- og net-bidrag.
-
-    Returnerer HTML med op til tre linjer:
-      Basisreduktion: xx mm
-      φ-korrektion for φ = xx,x°: xx mm (xx %)
-      Net-korrektion (xx %): xx mm ift reference
-    Net-linjen vises som interval (xx %/xx % opt.) for interax-produkter.
-    Retning angives via farve (blå = reduktion, rød = forøgelse).
-    """
-    if not t_basis or t_basis <= 0:
-        return ""
-    linjer: list[str] = []
-
-    # Basisreduktion — ren diagram-forskel uden korrektioner.
-    if basis_uarm:
-        basis_red = round(basis_uarm - t_basis)
-        linjer.append(
-            f'<div class="bd-basis">Basisreduktion: {basis_red} mm</div>'
-        )
-
-    # φ-korrektion — kun hvis φ afviger fra basis.
-    if abs(phi - PHI_BASIS) > 0.05:
-        phi_kor = K_PHI * (phi - PHI_BASIS)
-        phi_mm = round(t_basis * phi_kor)
-        phi_pct = round(phi_kor * 100)
-        phi_str = f"{phi:.1f}".replace(".", ",")
-        css = "net-kor-spar" if phi_mm <= 0 else "net-kor-pen"
-        linjer.append(
-            f'<div class="{css}">'
-            f'φ-korrektion for φ = {phi_str}°: '
-            f'{phi_mm:+d} mm ({phi_pct:+d}%)'
-            f'</div>'
-        )
-
-    # Net-korrektion — interval (interax) eller enkelt værdi.
-    if interval_p is not None and interval_p.get("korrektion_min") is not None:
-        kor_opt = interval_p["korrektion_min"]    # største reduktion (optimal)
-        kor_kons = interval_p["korrektion_max"]   # mindste reduktion (konservativ)
-        mm_kons = round(t_basis * kor_kons)
-        mm_opt = round(t_basis * kor_opt)
-        pct_kons = round(kor_kons * 100)
-        pct_opt = round(kor_opt * 100)
-        linjer.append(
-            f'<div class="net-kor-spar">'
-            f'Net-korrektion ({pct_kons:+d}%/{pct_opt:+d}% opt.) ift. reference: '
-            f'{mm_kons:+d} mm /{mm_opt:+d} mm (opt.)'
-            f'</div>'
-        )
-    else:
-        kor = produkter[0].get("korrektion", 0.0) if produkter else 0.0
-        if abs(kor) < 0.005:
-            linjer.append(
-                '<div class="net-kor-ref">referenceprodukt (0 % korrektion)</div>'
-            )
-        else:
-            net_mm = round(t_basis * kor)
-            net_pct = round(kor * 100)
-            css = "net-kor-spar" if net_mm <= 0 else "net-kor-pen"
-            linjer.append(
-                f'<div class="{css}">'
-                f'Net-korrektion ({net_pct:+d}%) ift. reference: '
-                f'{net_mm:+d} mm'
-                f'</div>'
-            )
-
-    return "".join(linjer)
-
-
-def _render_gruppe_kort(
-    gruppe: dict,
-    primaer: bool,
-    phi: float = PHI_BASIS,
-    valgt_klasse: int | None = None,
-    brugerdefineret: bool = False,
-) -> None:
-    """
-    Render én tykkelses-gruppe som kort.
-    primaer=True ⇒ fremhævet grønt kort (bedste). False ⇒ dæmpet grå variant.
-    brugerdefineret=True ⇒ vis 3-linje reduktionsopdeling (basis/φ/net) i
-    stedet for de simple φ-/net-korrektionslinjer.
-    """
-    t_vis   = gruppe["t_armeret_mm"]
-    red_pct = gruppe["reduktion_pct"]
-
-    # Basis-ustabiliseret tykkelse (rå tabelopslag uden korrektioner). Alle
-    # produkter i gruppen deler samme eu/eo/lag_mode og dermed samme basis.
-    # Reduktionen i headline vises ift. denne basistykkelse i begge tilstande.
-    t_uarm_prod = (
-        gruppe["produkter"][0].get("t_uarmeret_mm")
-        if gruppe.get("produkter") else None
-    )
-
-    # Interval-produkter (fx NX750/NX850): vises i egen gruppe med spænd.
-    # Efter grupper_produkter() er en interval-gruppe altid mono-produkt, så
-    # vi læser tallene direkte fra det ene produkt.
-    interval_p = (
-        gruppe["produkter"][0]
-        if gruppe.get("produkter")
-        and gruppe["produkter"][0].get("t_armeret_mm_min") is not None
-        else None
-    )
-    if interval_p is not None:
-        t_low_vis = round(interval_p["t_armeret_mm_min"])
-        t_high_vis = round(interval_p["t_armeret_mm_max"])
-        if t_low_vis == t_high_vis:
-            tal_html = f'{t_high_vis:.0f} mm'
-        else:
-            # Konservativ (større tykkelse) som hovedværdi, optimal i parentes
-            tal_html = (
-                f'{t_high_vis:.0f} mm'
-                f'<span class="parentes" style="margin-left:8px">'
-                f'({t_low_vis:.0f} mm)</span>'
-            )
-    else:
-        t_low_vis = None
-        t_high_vis = round(t_vis)
-        tal_html = f'{t_vis:.0f} mm'
-
-    # ↓ mm-reduktionslinje. Format: "Reduceres ↓ {kons} mm → {pct}% (↓ {best} mm → {pct}%)"
-    # Konservativ ende (mindst reduktion) er hovedværdi, best-case i parentes.
-    if interval_p is not None and t_uarm_prod is not None and t_low_vis is not None:
-        red_mm_best = round(t_uarm_prod - t_low_vis)    # største reduktion (best case)
-        red_mm_kons = round(t_uarm_prod - t_high_vis)   # mindste reduktion (konservativ)
-        red_pct_best = red_mm_best / t_uarm_prod if t_uarm_prod > 0 else 0
-        red_pct_kons = red_mm_kons / t_uarm_prod if t_uarm_prod > 0 else 0
-        if t_low_vis == t_high_vis:
-            red_linje = (
-                f'<div class="gruppe-red-linje">'
-                f'Reduceret i alt {red_mm_best} mm → {red_pct_best:.0%}'
-                f'</div>'
-            )
-        else:
-            red_linje = (
-                f'<div class="gruppe-red-linje">'
-                f'Reduceret i alt {red_mm_kons} mm → {red_pct_kons:.0%} '
-                f'<span class="parentes">'
-                f'({red_mm_best} mm → {red_pct_best:.0%})'
-                f'</span>'
-                f'</div>'
-            )
-    elif t_uarm_prod:
-        red_mm = round(t_uarm_prod - t_vis)
-        red_pct_val = red_mm / t_uarm_prod if t_uarm_prod > 0 else 0
-        red_linje = (
-            f'<div class="gruppe-red-linje">Reduceret i alt {red_mm} mm → {red_pct_val:.0%}</div>'
-        )
-    else:
-        red_linje = ""
-
-    # Brugerdefineret: opdel reduktionen i basis-, φ- og net-bidrag.
-    breakdown_html = (
-        _bd_reduktion_opdeling_html(
-            t_uarm_prod, gruppe.get("t_basis_arm_mm"), phi,
-            gruppe.get("produkter") or [], interval_p,
-        )
-        if brugerdefineret else ""
-    )
-
-    # φ-korrektionslinje — vises kun hvis phi ≠ 37°
-    phi_kor_html = ""
-    t_basis = gruppe.get("t_basis_arm_mm")
-    if t_basis and t_basis > 0 and abs(phi - PHI_BASIS) > 0.05:
-        phi_kor = -0.02 * (phi - PHI_BASIS)
-        phi_kor_mm = round(t_basis * phi_kor)
-        abs_mm = abs(phi_kor_mm)
-        pct = abs(round(phi_kor * 100))
-        phi_str = f"{phi:.1f}".replace(".", ",")
-        if phi_kor < 0:
-            phi_kor_html = (
-                f'<div class="net-kor-spar">'
-                f'φ-kor: \u2212{abs_mm} mm (\u2212{pct}\u00a0%) · φ = {phi_str}°'
-                f'</div>'
-            )
-        else:
-            phi_kor_html = (
-                f'<div class="net-kor-pen">'
-                f'φ-kor: +{abs_mm} mm (+{pct}\u00a0%) · φ = {phi_str}°'
-                f'</div>'
-            )
-
-    # ↕ net-korrektionslinje — viser delta ift. referenceprodukt (kor=0)
-    # t_basis er fælles for alle produkter i gruppen (samme eu/eo/lag_mode)
-    net_kor_html = ""
-    t_basis = gruppe.get("t_basis_arm_mm")
-    if t_basis and t_basis > 0 and gruppe.get("produkter"):
-        kor_vaerdier: set[float] = set()
-        for p in gruppe["produkter"]:
-            if p.get("korrektion_min") is not None:
-                kor_vaerdier.add(p["korrektion_min"])
-                kor_vaerdier.add(p["korrektion_max"])
-            else:
-                kor_vaerdier.add(p["korrektion"])
-        korrektioner = sorted(kor_vaerdier)
-        kor_min = korrektioner[0]
-        kor_max = korrektioner[-1]
-        # Skelnetegn: interval-produkter bruger "/", andre blandede grupper bruger "til"
-        interval_separator = (
-            interval_p is not None and t_low_vis is not None and t_low_vis != t_high_vis
-        )
-        delta_min = round(t_basis * kor_min)  # mm; negativ = sparer, positiv = koster mere
-        delta_max = round(t_basis * kor_max)
-
-        if abs(kor_min) < 0.005 and abs(kor_max) < 0.005:
-            # Referenceprodukt(er)
-            net_kor_html = '<div class="net-kor-ref">referenceprodukt (0 % korrektion)</div>'
-        elif abs(kor_min - kor_max) < 0.005:
-            # Alle produkter i gruppen har samme korrektion
-            delta = delta_min
-            pct = int(round(abs(kor_min) * 100))
-            abs_delta = abs(delta)
-            if kor_min < 0:
-                net_kor_html = (
-                    f'<div class="net-kor-spar">'
-                    f'net-kor: −{abs_delta} mm (−{pct} %) ift. reference'
-                    f'</div>'
-                )
-            else:
-                net_kor_html = (
-                    f'<div class="net-kor-pen">'
-                    f'net-kor: +{abs_delta} mm (+{pct} %) ift. reference'
-                    f'</div>'
-                )
-        else:
-            # Blandet gruppe — vis interval. Interval-produkter bruger
-            # "best-case / konservativ, ift. reference"; andre blandede
-            # grupper bruger den klassiske "{d_lo} til {d_hi}"-syntaks.
-            d_lo, d_hi = delta_min, delta_max
-            if d_hi <= 0:
-                css = "net-kor-spar"
-            elif d_lo >= 0:
-                css = "net-kor-pen"
-            else:
-                css = "net-kor-ref"
-            if interval_separator:
-                pct_lo = int(round(kor_min * 100))
-                pct_hi = int(round(kor_max * 100))
-                # Laveste effektindeks (konservativ, mindst reduktion) først;
-                # højeste effektindeks (best-case, mest reduktion) i parentes.
-                tekst = (
-                    f'net-kor: {d_hi:+d} mm ({pct_hi:+d}%) '
-                    f'<span class="parentes">'
-                    f'({d_lo:+d} mm / {pct_lo:+d}%)</span>'
-                    f', ift. reference'
-                )
-            elif d_lo >= 0:
-                tekst = f'net-kor: +{d_lo} til +{d_hi} mm ift. reference'
-            else:
-                tekst = f'net-kor: {d_lo:+d} til {d_hi:+d} mm ift. reference'
-            net_kor_html = f'<div class="{css}">{tekst}</div>'
-
-    pr_serie: dict[str, list[dict]] = {}
-    for p in _sort_produkter(gruppe["produkter"]):
-        pr_serie.setdefault(p["serie"], []).append(p)
-
-    serie_linjer: list[str] = []
-    for serie in sorted(pr_serie.keys(), key=lambda s: SERIE_ORDER.get(s, 99)):
-        navne = [p["navn"].replace(f"{serie} ", "", 1) for p in pr_serie[serie]]
-        serie_linjer.append(
-            f'<div class="gruppe-serie"><b>{serie}:</b> {", ".join(navne)}</div>'
-        )
-    klasse_linjer = _klasse_linjer_html(gruppe.get("produkter", []), valgt_klasse)
-
-    kort_css = "gruppe-kort" if primaer else "gruppe-kort-rest"
-    tal_css  = "gruppe-tal"  if primaer else "gruppe-tal-rest"
-
-    st.markdown(
-        f'<div class="{kort_css}">'
-        f'<span class="{tal_css}">{tal_html}</span>'
-        f'{red_linje}'
-        f'{breakdown_html if brugerdefineret else phi_kor_html + net_kor_html}'
-        f'{"".join(serie_linjer)}'
-        f'{klasse_linjer}'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-
 def _resultat_til_gruppe(
     res: dict, geonet: dict, valgt_klasse: int
 ) -> dict | None:
     """
     Pak et enkelt beregn()-resultat ind i samme dict-struktur som
-    grupper_produkter()-output, så det kan vises med _render_gruppe_kort.
+    grupper_produkter()-output, så det kan vises i _render_produkt_tabel.
 
     Returnerer None hvis beregningen fejlede.
     """
@@ -1369,98 +1071,12 @@ def _beregn_referencegrupper(
     )
 
 
-def _render_referenceblok(
-    ref_1: dict | None,
-    ref_2: dict | None,
-    fejl_1: str | None,
-    fejl_2: str | None,
-    valgt_klasse: int,
-    phi: float = PHI_BASIS,
-    brugerdefineret: bool = False,
-) -> None:
-    st.markdown("**Referencenet (SX160 / T6 / TX160)**")
-    if valgt_klasse not in REFERENCE_KLASSER:
-        st.warning(
-            "Referencenettet er ikke anbefalet til den valgte belastningsklasse. "
-            f"Referenceprodukterne er anbefalet til klasse {_format_klasse_liste(REFERENCE_KLASSER)}."
-        )
-
-    col_1, col_2 = st.columns(2, gap="large")
-    with col_1:
-        st.markdown('<div class="kol-titel">1 LAG REFERENCENET</div>', unsafe_allow_html=True)
-        if ref_1 is not None:
-            _render_gruppe_kort(ref_1, primaer=True, phi=phi, valgt_klasse=valgt_klasse,
-                                brugerdefineret=brugerdefineret)
-        else:
-            st.info(fejl_1 or "Ingen gyldigt 1-lag-resultat for referencenettet.")
-    with col_2:
-        st.markdown('<div class="kol-titel">2 LAG REFERENCENET</div>', unsafe_allow_html=True)
-        if ref_2 is not None:
-            _render_gruppe_kort(ref_2, primaer=True, phi=phi, valgt_klasse=valgt_klasse,
-                                brugerdefineret=brugerdefineret)
-        else:
-            st.info(fejl_2 or "Ingen gyldigt 2-lag-resultat for referencenettet.")
-
-
 def _render_uarmeret_mangler_besked(eu: float, eo: float) -> None:
     st.warning(
         "Der er ikke defineret nogen ustabiliseret bærelagstykkelse for "
         f"det valgte Eu/Eo ({eu:.0f} MPa / {eo:.0f} MPa). "
         "Stabiliserede resultater vises stadig, hvor designdiagrammet har data."
     )
-
-
-def _render_lag_kolonne(
-    titel: str,
-    grupper: list[dict],
-    valgt_klasse: int,
-    lag_mode: str,
-    tom_besked: str | None = None,
-    phi: float = PHI_BASIS,
-    brugerdefineret: bool = False,
-) -> None:
-    """
-    Render én kolonne (1-lag eller 2-lag): bedste gruppe øverst,
-    øvrige skjult i en expander nedenunder.
-
-    tom_besked: tilpasset besked når grupper er tomme (overstyrer default).
-    """
-    st.markdown(f'<div class="kol-titel">{titel}</div>', unsafe_allow_html=True)
-
-    if not grupper:
-        if tom_besked is not None:
-            st.info(tom_besked)
-        elif lag_mode == "2_lag":
-            st.info(
-                f"Designdiagrammet definerer ikke 2-lag-værdier for "
-                f"kombinationen af det valgte Eu og klasse {valgt_klasse}. "
-            )
-        else:
-            st.info(
-                f"Ingen produkter giver et gyldigt 1-lag-resultat for "
-                f"kombinationen af det valgte Eu og klasse {valgt_klasse}. "
-                f"Prøv en anden belastningsklasse eller justér Eu."
-            )
-        return
-
-    grupper_sorteret = sorted(grupper, key=lambda g: g["t_armeret_eksakt_mm"])
-    bedste = grupper_sorteret[0]
-    rest   = grupper_sorteret[1:]
-
-    st.markdown('<div class="bedste-label">Stabiliseret bærelagstykkelse</div>',
-                unsafe_allow_html=True)
-    _render_gruppe_kort(bedste, primaer=True, phi=phi, valgt_klasse=valgt_klasse,
-                        brugerdefineret=brugerdefineret)
-
-    if rest:
-        label = (
-            f"Vis {len(rest)} flere mulighed"
-            f"{'er' if len(rest) > 1 else ''}"
-        )
-        with st.expander(label, expanded=False):
-            for g in rest:
-                _render_gruppe_kort(g, primaer=False, phi=phi, valgt_klasse=valgt_klasse,
-                                    brugerdefineret=brugerdefineret)
 
 
 # ---------------------------------------------------------------------------
@@ -1485,11 +1101,14 @@ def _rt_reduktion_linjer(
     *,
     kor: float | None = None,
     t_arm: float | None = None,
+    phi: float = PHI_BASIS,
 ) -> str:
-    """Reduktions-opdeling for ÉT lag (basis/net/samlet) som fortegns-deltaer.
+    """Reduktions-opdeling for ÉT lag (basis/net/φ/samlet) som fortegns-deltaer.
 
-    De tre linjer summer: basisreduktion (grå, negativ) + net-korrektion
-    (grøn hvis sparer, rød hvis koster) = samlet reduktion (grå, overstreg).
+    Linjerne summer: basisreduktion (grå, negativ) + net-korrektion (grøn hvis
+    sparer, rød hvis koster) + φ-korrektion (kun når φ ≠ 37) = samlet reduktion
+    (grå, overstreg). Alle deltaer måles mod rå t_uarmeret_mm, så summen går op
+    med produktets faktiske t_armeret_mm = t_basis × (1 + φ-kor + net-kor).
     Returnerer en dæmpet '—' hvis laget ikke har et gyldigt resultat.
 
     kor/t_arm kan overskrives (fx til interval-produkternes optimale værdier);
@@ -1539,6 +1158,20 @@ def _rt_reduktion_linjer(
                 f'<span class="val">{net_mm:+d} mm</span></span>'
             )
 
+    # φ-korrektion — kun når φ afviger fra basis (Brugerdefineret). Placeres
+    # lige under net-korrektion. Samme fortegns-/farvekonvention som net.
+    if t_basis is not None and abs(phi - PHI_BASIS) > 0.05:
+        phi_kor = K_PHI * (phi - PHI_BASIS)
+        phi_mm = round(t_basis * phi_kor)
+        phi_pct = round(phi_kor * 100)
+        phi_str = f"{phi:.1f}".replace(".", ",")
+        css = "rt-spar" if phi_mm <= 0 else "rt-pen"
+        linjer.append(
+            f'<span class="rt-dlinje {css}">'
+            f'<span>φ-korrektion ({phi_pct:+d} %, φ = {phi_str}°)</span>'
+            f'<span class="val">{phi_mm:+d} mm</span></span>'
+        )
+
     if t_uarm is not None:
         samlet_delta = -round(t_uarm - t_arm)
         linjer.append(
@@ -1550,18 +1183,20 @@ def _rt_reduktion_linjer(
     return "".join(linjer)
 
 
-def _rt_optimal_tip_html(p: dict | None) -> str:
+def _rt_optimal_tip_html(p: dict | None, phi: float = PHI_BASIS) -> str:
     """Tooltip-indhold: optimal opdeling for et interval-produkt (ét lag).
 
     Returnerer "" hvis produktet ikke er et interval-produkt (intet
     t_armeret_mm_min). Genbruger _rt_reduktion_linjer med de optimale værdier.
+    Reduktionsprocenten måles mod rå t_uarmeret_mm (som resten af tabellen).
     """
     if not _rt_gyldig(p) or p.get("t_armeret_mm_min") is None:
         return ""
     kor_opt = p.get("korrektion_min")
     t_opt = p["t_armeret_mm_min"]
-    pct_opt = p.get("reduktion_pct_max")
-    linjer = _rt_reduktion_linjer(p, False, kor=kor_opt, t_arm=t_opt)
+    t_uarm = p.get("t_uarmeret_mm")
+    pct_opt = (t_uarm - t_opt) / t_uarm if t_uarm else None
+    linjer = _rt_reduktion_linjer(p, False, kor=kor_opt, t_arm=t_opt, phi=phi)
     pct_txt = f" (↓ {pct_opt:.0%})" if pct_opt is not None else ""
     return (
         '<span class="rt-tip-box">'
@@ -1574,11 +1209,13 @@ def _rt_optimal_tip_html(p: dict | None) -> str:
     )
 
 
-def _rt_tk_celle(p: dict | None, valid: bool, t_txt: str, cls: str) -> str:
+def _rt_tk_celle(
+    p: dict | None, valid: bool, t_txt: str, cls: str, phi: float = PHI_BASIS
+) -> str:
     """Tykkelse-celle. For interval-produkter pakkes værdien i et hover-tooltip
     med den optimale beregning; ellers vises bare værdien."""
     if valid and p is not None and p.get("t_armeret_mm_min") is not None:
-        tip = _rt_optimal_tip_html(p)
+        tip = _rt_optimal_tip_html(p, phi)
         return (
             f'<span class="{cls}">'
             f'<span class="rt-tip">{t_txt}'
@@ -1593,6 +1230,7 @@ def _rt_detalje_html(
     p1: dict | None,
     p2: dict | None,
     is_ref: bool = False,
+    phi: float = PHI_BASIS,
 ) -> str:
     """Foldbar detalje justeret efter tabellens kolonner.
 
@@ -1622,8 +1260,8 @@ def _rt_detalje_html(
         '</div>'
     )
 
-    bd1 = _rt_reduktion_linjer(p1, is_ref)
-    bd2 = _rt_reduktion_linjer(p2, is_ref)
+    bd1 = _rt_reduktion_linjer(p1, is_ref, phi=phi)
+    bd2 = _rt_reduktion_linjer(p2, is_ref, phi=phi)
 
     return (
         '<div class="rt-detalje">'
@@ -1635,15 +1273,18 @@ def _rt_detalje_html(
 
 
 def _rt_red_txt(p: dict | None) -> str:
-    """Reduktionstekst for ét lag: '{mm} mm ({pct})' eller '—'."""
+    """Reduktionstekst for ét lag mod rå uarmeret basis: '{mm} mm ({pct})' / '—'.
+
+    Måles mod rå t_uarmeret_mm (ikke φ-korrigeret), så kolonnen stemmer med
+    fold-ud 'Samlet reduktion'. Ved φ = 37 identisk med calculator-reduktionen.
+    """
     if not _rt_gyldig(p):
         return "—"
-    pct = p.get("reduktion_pct")
-    mm = p.get("reduktion_mm")
-    if pct is not None and mm is not None:
-        return f'{int(round(mm))} mm ({pct:.0%})'
-    if pct is not None:
-        return f'{pct:.0%}'
+    t_uarm = p.get("t_uarmeret_mm")
+    t_arm = p.get("t_armeret_mm")
+    if t_uarm and t_arm is not None:
+        mm = t_uarm - t_arm
+        return f'{int(round(mm))} mm ({mm / t_uarm:.0%})'
     return "—"
 
 
@@ -1653,9 +1294,14 @@ def _rt_raekke_html(
     p2: dict | None,
     *,
     is_ref: bool = False,
-    is_bedste: bool = False,
+    phi: float = PHI_BASIS,
 ) -> str:
-    """Byg én foldbar tabelrække (<details>) for et produkt/referencenet."""
+    """Byg én foldbar tabelrække (<details>) for et produkt/referencenet.
+
+    Alle rækker deler details-attributten name="rt-produkt", så de opfører sig
+    som en harmonika: kun én række kan være foldet ud ad gangen (native HTML
+    'exclusive accordion'). Den udfoldede række markeres grønt via CSS [open].
+    """
     v1 = _rt_gyldig(p1)
     v2 = _rt_gyldig(p2)
     chosen = p1 if v1 else (p2 if v2 else (p1 or p2 or {}))
@@ -1676,23 +1322,19 @@ def _rt_raekke_html(
     red1_cls = "num" if v1 else "num rt-tom"
     red2_cls = "num" if v2 else "num rt-tom"
 
-    raekke_css = "rt-raekke"
-    if is_ref:
-        raekke_css += " rt-ref"
-    elif is_bedste:
-        raekke_css += " rt-bedste"
+    raekke_css = "rt-raekke rt-ref" if is_ref else "rt-raekke"
 
     return (
-        f'<details class="{raekke_css}">'
+        f'<details class="{raekke_css}" name="rt-produkt">'
         f'<summary class="rt-sum">'
         f'<span class="rt-navn"><span class="rt-chev">▸</span> {navn}</span>'
         f'<span><span class="rt-badge {badge_css}">{badge_pre}{kl_txt}</span></span>'
-        f'{_rt_tk_celle(p1, v1, t1, t1_cls)}'
-        f'{_rt_tk_celle(p2, v2, t2, t2_cls)}'
+        f'{_rt_tk_celle(p1, v1, t1, t1_cls, phi)}'
+        f'{_rt_tk_celle(p2, v2, t2, t2_cls, phi)}'
         f'<span class="{red1_cls}">{red1_txt}</span>'
         f'<span class="{red2_cls}">{red2_txt}</span>'
         f'</summary>'
-        f'{_rt_detalje_html(navn, p1, p2, is_ref)}'
+        f'{_rt_detalje_html(navn, p1, p2, is_ref, phi)}'
         f'</details>'
     )
 
@@ -1705,12 +1347,19 @@ def _render_produkt_tabel(
     prod_1lag: list[dict],
     prod_2lag: list[dict],
     valgt_klasse: int,
+    phi: float = PHI_BASIS,
+    vis_reference: bool = True,
 ) -> None:
-    """Standard-tilstandens resultattabel: én foldbar række pr. produkt.
+    """Resultattabel: én foldbar række pr. produkt. Bruges af både Standard og
+    Brugerdefineret (sidstnævnte sender φ ≠ 37, som giver en φ-korrektionslinje
+    i fold-ud-opdelingen).
 
     Referencenettet øverst som basis, derefter produkter med tyndeste
     1-lag-bærelag først (tyndeste gyldige fremhævet grønt). 1-lag og 2-lag
     vises som kolonner; detaljer (reduktions-opdeling) skjules i fold-ud.
+
+    vis_reference=False udelader referencerækken (brugt af 'Vælg specifikt
+    produkt', hvor kun det valgte produkt skal vises).
     """
     refp1 = ref_1["produkter"][0] if ref_1 and ref_1.get("produkter") else None
     refp2 = ref_2["produkter"][0] if ref_2 and ref_2.get("produkter") else None
@@ -1721,12 +1370,6 @@ def _render_produkt_tabel(
     for n in p2_by:
         if n not in p1_by:
             navne.append(n)
-
-    # Bedste = tyndeste gyldige 1-lag (prod_1lag er sorteret tyndeste først);
-    # ellers tyndeste gyldige 2-lag.
-    bedste_navn = next((n for n in navne if _rt_gyldig(p1_by.get(n))), None)
-    if bedste_navn is None:
-        bedste_navn = next((n for n in navne if _rt_gyldig(p2_by.get(n))), None)
 
     dele = ['<div class="rt-tabel">']
     dele.append(
@@ -1739,18 +1382,24 @@ def _render_produkt_tabel(
         '<span class="num">Reduktion i alt, 2 lag</span>'
         '</div>'
     )
-    dele.append(_rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True))
+    if vis_reference:
+        dele.append(
+            _rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True, phi=phi)
+        )
     for n in navne:
         p1 = p1_by.get(n)
         p2 = p2_by.get(n)
         if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
             continue
-        dele.append(_rt_raekke_html(n, p1, p2, is_bedste=(n == bedste_navn)))
+        dele.append(_rt_raekke_html(n, p1, p2, phi=phi))
     dele.append('</div>')
-    dele.append(
-        '<div class="rt-caption">Referencenet vises øverst, derefter de mest '
-        'effektive produkter først. Klik på hver række for flere detaljer</div>'
+    caption = (
+        "Referencenet vises øverst, derefter de mest effektive produkter "
+        "først. Klik på hver række for flere detaljer"
+        if vis_reference
+        else "Klik på rækken for flere detaljer"
     )
+    dele.append(f'<div class="rt-caption">{caption}</div>')
     st.markdown("".join(dele), unsafe_allow_html=True)
 
 
@@ -3176,7 +2825,6 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
         st.session_state.setdefault(f"bd_t_{_idx}", _t)
 
     materialer: list[dict] = []
-    phi_vaerdier: list[float] = []
 
     for i in range(int(antal_lag)):
         lag_kol, _ = st.columns([1, 1])
@@ -3241,8 +2889,6 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
                     f"φ = {phi_i}° · max korn = {korn_i} mm · {ltype_i}{krav_txt}"
                 )
 
-            phi_vaerdier.append(phi_i)
-
             t_key = f"bd_t_{i}"
             if (
                 t_key in st.session_state
@@ -3266,11 +2912,7 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     total_t = sum(m["tykkelse_mm"] for m in materialer)
     st.markdown(f"**Samlet tykkelse af opbygning:** {total_t:.0f} mm")
 
-    phi_weighted = (
-        sum(m["phi"] * m["tykkelse_mm"] for m in materialer) / total_t
-        if total_t > 0
-        else (sum(phi_vaerdier) / len(phi_vaerdier) if phi_vaerdier else PHI_BASIS)
-    )
+    phi_weighted = _phi_tabel_data(materialer)["phi_weighted"]
 
     if st.checkbox("Overskriv φ manuelt", key="bd_phi_override"):
         phi = st.number_input(
@@ -3430,20 +3072,10 @@ def render_brugerdefineret() -> None:
                 _render_uarm_banner_bd(t_uarm, phi)
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
-            _render_referenceblok(
+            _render_produkt_tabel(
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                valgt_klasse=valgt_klasse,
-                phi=phi,
-                brugerdefineret=True,
+                prod_1lag, prod_2lag, valgt_klasse, phi=phi,
             )
-            st.markdown("")
-            kol_1, kol_2 = st.columns(2, gap="large")
-            with kol_1:
-                _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag",
-                                    phi=phi, brugerdefineret=True)
-            with kol_2:
-                _render_lag_kolonne("2 LAG GEONET", grupper_2, valgt_klasse, "2_lag",
-                                    phi=phi, brugerdefineret=True)
 
     else:
         # SPECIFIKT PRODUKT-MODE
@@ -3536,31 +3168,21 @@ def render_brugerdefineret() -> None:
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
 
-            grupper_1 = [bedste_1] if bedste_1 else []
-            grupper_2 = [bedste_2] if bedste_2 else []
-
-            tom_1 = (
-                f"**{geonet_navn}** har ingen gyldigt 1-lag-resultat for "
-                f"denne kombination.\n\n_{res_1.get('fejl', '')}_"
-                if bedste_1 is None else None
+            # Ny tabel: referencerække + den valgte produkt-række. Enkelt-
+            # produkt-lister læses fra de interval-berigede grupper.
+            prod_1 = (
+                [bedste_1["produkter"][0]]
+                if bedste_1 and bedste_1.get("produkter") else []
             )
-            tom_2 = (
-                f"**{geonet_navn}** har ingen gyldigt 2-lag-resultat for "
-                f"denne kombination.\n\n_{res_2.get('fejl', '')}_"
-                if bedste_2 is None else None
+            prod_2 = (
+                [bedste_2["produkter"][0]]
+                if bedste_2 and bedste_2.get("produkter") else []
             )
-
-            kol_1, kol_2 = st.columns(2, gap="large")
-            with kol_1:
-                _render_lag_kolonne(
-                    "1 LAG GEONET", grupper_1, valgt_klasse, "1_lag",
-                    tom_besked=tom_1, phi=phi, brugerdefineret=True,
-                )
-            with kol_2:
-                _render_lag_kolonne(
-                    "2 LAG GEONET", grupper_2, valgt_klasse, "2_lag",
-                    tom_besked=tom_2, phi=phi, brugerdefineret=True,
-                )
+            _render_produkt_tabel(
+                ref_1, ref_2, ref_fejl_1, ref_fejl_2,
+                prod_1, prod_2, valgt_klasse, phi=phi,
+                vis_reference=False,
+            )
 
             if geonet and geonet.get("navn"):
                 from core import rapport as rapport_mod
