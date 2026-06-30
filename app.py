@@ -562,6 +562,84 @@ st.markdown(f"""
     margin-bottom:0.4rem;
   }}
 
+  /* Resultat-tabel (Standard-tilstand) */
+  .rt-tabel {{ margin:0.2rem 0 0.3rem; }}
+  .rt-head, .rt-sum, .rt-detalje {{
+    display:grid;
+    grid-template-columns:1.5fr 0.8fr 1.2fr 1.2fr 0.9fr 0.9fr;
+    gap:0.5rem;
+  }}
+  .rt-head, .rt-sum {{ align-items:center; }}
+  .rt-head {{
+    font-size:0.72rem; color:#666; text-transform:uppercase;
+    letter-spacing:0.03em; padding:0 0.6rem 0.35rem;
+    border-bottom:2px solid {GRØN};
+  }}
+  .rt-head .num {{ text-align:right; }}
+  .rt-raekke {{ border-bottom:0.5px solid #EEE; }}
+  .rt-sum {{
+    cursor:pointer; padding:0.5rem 0.6rem; font-size:0.92rem;
+    list-style:none;
+  }}
+  .rt-sum::-webkit-details-marker {{ display:none; }}
+  .rt-sum::marker {{ content:""; }}
+  .rt-sum .num {{ text-align:right; font-variant-numeric:tabular-nums; }}
+  .rt-tom {{ color:{GRÅ}; }}
+  /* Optimal-tooltip for interval-produkter (NX750/NX850) */
+  .rt-tip {{ position:relative; cursor:help;
+             border-bottom:1px dotted {GRØN}; }}
+  .rt-tip-mark {{ font-size:0.6rem; color:{GRØN}; vertical-align:super;
+                  margin-left:2px; font-weight:500; letter-spacing:0.02em; }}
+  .rt-tip-box {{ display:none; position:absolute; right:0; top:1.6em;
+                 width:250px; background:#fff; border:0.5px solid #CCC;
+                 border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.13);
+                 padding:0.5rem 0.7rem; z-index:60; text-align:left;
+                 font-weight:400; white-space:normal; }}
+  .rt-tip:hover .rt-tip-box {{ display:block; }}
+  .rt-tip-box .rt-dlinje {{ font-size:0.8rem; }}
+  .rt-tip-titel {{ display:block; font-size:0.7rem; color:{GRØN};
+                   text-transform:uppercase; letter-spacing:0.04em;
+                   font-weight:500; margin-bottom:0.25rem; }}
+  .rt-tip-resultat {{ border-top:0.5px solid #C0DD97; margin-top:0.15rem;
+                      padding-top:0.2rem; font-weight:500; color:#173404; }}
+  .rt-chev {{ display:inline-block; width:0.9em; color:{GRÅ};
+              transition:transform 0.12s; }}
+  details[open] > .rt-sum .rt-chev {{ transform:rotate(90deg); }}
+  .rt-navn {{ font-weight:500; }}
+  .rt-ref {{ background:#F5F5F5; }}
+  .rt-ref .rt-navn {{ font-style:italic; color:#555; font-weight:400; }}
+  .rt-bedste {{ background:{LYS_GR}; border-left:3px solid {GRØN}; }}
+  .rt-bedste .rt-navn {{ color:#173404; }}
+  .rt-badge {{ font-size:0.78rem; padding:1px 9px; border-radius:12px;
+               white-space:nowrap; }}
+  .rt-badge-ok {{ background:{LYS_GR}; color:#173404; }}
+  .rt-badge-advarsel {{ background:#FBE9E7; color:#BF360C; }}
+  .rt-detalje {{ align-items:start; padding:0.3rem 0.6rem 0.7rem; }}
+  .rt-d-krav {{ grid-column:1 / 3; min-width:0; }}
+  .rt-d-krav .rt-dlinje {{ grid-template-columns:230px auto; }}
+  .rt-d-krav .rt-dlinje .val {{ text-align:left; padding-left:0; }}
+  .rt-d-bd {{ min-width:0; }}
+  .rt-d-bd1 {{ grid-column:3 / 4; }}
+  .rt-d-bd2 {{ grid-column:4 / 5; }}
+  .rt-d-bd .rt-dlinje {{ font-size:0.8rem; }}
+  /* 2-lag-kolonnen viser kun værdier — labels står ved 1-lag-kolonnen */
+  .rt-d-bd2 .rt-dlinje > span:first-child {{ display:none; }}
+  .rt-bd-tom {{ color:{GRÅ}; font-size:0.85rem; text-align:right; }}
+  .rt-detalje-tom {{ color:#666; font-size:0.85rem;
+                     padding:0.3rem 0.6rem 0.7rem; }}
+  .rt-dlinje {{ display:grid; grid-template-columns:1fr auto;
+                font-size:0.85rem; padding:0.12rem 0; }}
+  .rt-dlinje .val {{ text-align:right; font-variant-numeric:tabular-nums;
+                     padding-left:0.75rem; }}
+  .rt-graa {{ color:#666; }}
+  .rt-spar {{ color:{GRØN}; }}
+  .rt-pen {{ color:#BF360C; }}
+  .rt-samlet {{ border-top:0.5px solid #C0DD97; margin-top:0.15rem;
+                padding-top:0.2rem; font-weight:500; }}
+  .rt-krav-titel {{ font-size:0.7rem; color:#888; text-transform:uppercase;
+                    letter-spacing:0.04em; margin-bottom:0.15rem; }}
+  .rt-caption {{ font-size:0.78rem; color:#666; margin-top:0.5rem; }}
+
   .diagram-række-afstand {{
     height: 1.8rem;
   }}
@@ -1342,6 +1420,297 @@ def _render_lag_kolonne(
             for g in rest:
                 _render_gruppe_kort(g, primaer=False, phi=phi, valgt_klasse=valgt_klasse,
                                     brugerdefineret=brugerdefineret)
+
+
+# ---------------------------------------------------------------------------
+# Standard-tilstand: produkt-tabel (én række pr. produkt, foldbar)
+# ---------------------------------------------------------------------------
+
+# Referencerækkens label i tabellen — fulde produktnavne (≠ REFERENCE_NAVN,
+# der bruges til produkt-matchning andre steder).
+REFERENCE_NAVN_TABEL = "Referencenet (GS-GRID SX160 / E'GRID T6 / Tensar TriAx TX160)"
+
+
+def _rt_gyldig(p: dict | None) -> bool:
+    """True hvis produkt-dict'en har et gyldigt beregningsresultat."""
+    return bool(
+        p and p.get("fejl") is None and p.get("t_armeret_mm") is not None
+    )
+
+
+def _rt_reduktion_linjer(
+    p: dict | None,
+    is_ref: bool,
+    *,
+    kor: float | None = None,
+    t_arm: float | None = None,
+) -> str:
+    """Reduktions-opdeling for ÉT lag (basis/net/samlet) som fortegns-deltaer.
+
+    De tre linjer summer: basisreduktion (grå, negativ) + net-korrektion
+    (grøn hvis sparer, rød hvis koster) = samlet reduktion (grå, overstreg).
+    Returnerer en dæmpet '—' hvis laget ikke har et gyldigt resultat.
+
+    kor/t_arm kan overskrives (fx til interval-produkternes optimale værdier);
+    default er produktets konservative korrektion/tykkelse. Basisreduktionen er
+    uafhængig af korrektionen (ren diagram-forskel). Linjerne udskrives med
+    <span>-wrappers, så de også er gyldige inde i et tooltip-<span>.
+    """
+    if not _rt_gyldig(p):
+        return '<span class="rt-bd-tom">—</span>'
+
+    t_uarm = p.get("t_uarmeret_mm")
+    t_basis = p.get("t_basis_arm_mm")
+    if kor is None:
+        kor = p.get("korrektion") or 0.0
+    if t_arm is None:
+        t_arm = p["t_armeret_mm"]
+    linjer: list[str] = []
+
+    if t_uarm is not None and t_basis is not None:
+        basis_delta = -round(t_uarm - t_basis)
+        linjer.append(
+            '<span class="rt-dlinje rt-graa">'
+            '<span>Basisreduktion</span>'
+            f'<span class="val">{basis_delta:+d} mm</span></span>'
+        )
+
+    if t_basis is not None:
+        if abs(kor) < 0.005 and is_ref:
+            linjer.append(
+                '<span class="rt-dlinje rt-graa">'
+                '<span>Net-korrektion ift. reference</span>'
+                '<span class="val">referenceprodukt (0 %)</span></span>'
+            )
+        elif abs(kor) < 0.005:
+            linjer.append(
+                '<span class="rt-dlinje rt-graa">'
+                '<span>Net-korrektion (0 %) ift. reference</span>'
+                '<span class="val">0 mm</span></span>'
+            )
+        else:
+            net_mm = round(t_basis * kor)
+            net_pct = round(kor * 100)
+            css = "rt-spar" if net_mm <= 0 else "rt-pen"
+            linjer.append(
+                f'<span class="rt-dlinje {css}">'
+                f'<span>Net-korrektion ({net_pct:+d} %) ift. reference</span>'
+                f'<span class="val">{net_mm:+d} mm</span></span>'
+            )
+
+    if t_uarm is not None:
+        samlet_delta = -round(t_uarm - t_arm)
+        linjer.append(
+            '<span class="rt-dlinje rt-graa rt-samlet">'
+            '<span>Samlet reduktion</span>'
+            f'<span class="val">{samlet_delta:+d} mm</span></span>'
+        )
+
+    return "".join(linjer)
+
+
+def _rt_optimal_tip_html(p: dict | None) -> str:
+    """Tooltip-indhold: optimal opdeling for et interval-produkt (ét lag).
+
+    Returnerer "" hvis produktet ikke er et interval-produkt (intet
+    t_armeret_mm_min). Genbruger _rt_reduktion_linjer med de optimale værdier.
+    """
+    if not _rt_gyldig(p) or p.get("t_armeret_mm_min") is None:
+        return ""
+    kor_opt = p.get("korrektion_min")
+    t_opt = p["t_armeret_mm_min"]
+    pct_opt = p.get("reduktion_pct_max")
+    linjer = _rt_reduktion_linjer(p, False, kor=kor_opt, t_arm=t_opt)
+    pct_txt = f" (↓ {pct_opt:.0%})" if pct_opt is not None else ""
+    return (
+        '<span class="rt-tip-box">'
+        '<span class="rt-tip-titel">Under optimale forhold</span>'
+        f'{linjer}'
+        '<span class="rt-dlinje rt-tip-resultat">'
+        '<span>Optimal bærelagstykkelse</span>'
+        f'<span class="val">{int(round(t_opt))} mm{pct_txt}</span></span>'
+        '</span>'
+    )
+
+
+def _rt_tk_celle(p: dict | None, valid: bool, t_txt: str, cls: str) -> str:
+    """Tykkelse-celle. For interval-produkter pakkes værdien i et hover-tooltip
+    med den optimale beregning; ellers vises bare værdien."""
+    if valid and p is not None and p.get("t_armeret_mm_min") is not None:
+        tip = _rt_optimal_tip_html(p)
+        return (
+            f'<span class="{cls}">'
+            f'<span class="rt-tip">{t_txt}'
+            f'<span class="rt-tip-mark">opt.</span>'
+            f'{tip}</span></span>'
+        )
+    return f'<span class="{cls}">{t_txt}</span>'
+
+
+def _rt_detalje_html(
+    navn: str,
+    p1: dict | None,
+    p2: dict | None,
+    is_ref: bool = False,
+) -> str:
+    """Foldbar detalje justeret efter tabellens kolonner.
+
+    Layout (samme grid som tabellen): 'Krav til nettet' til venstre (under
+    Produkt/klasse), 1-lags reduktions-opdeling under '...1 lag geonet' og
+    2-lags under '...2 lag geonet'.
+    """
+    if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
+        return (
+            '<div class="rt-detalje-tom">'
+            'Ingen gyldig beregning for denne kombination.</div>'
+        )
+
+    # Krav til nettet — uafhængig af lag.
+    geonet = None if is_ref else find_geonet(navn)
+    krav = placement_requirements(geonet)
+    tilslag = (geonet or {}).get("anbefalet_tilslag") or "—"
+    krav_html = (
+        '<div class="rt-d-krav">'
+        '<div class="rt-krav-titel">Krav til nettet</div>'
+        '<div class="rt-dlinje rt-graa"><span>Minimum dæklag over geonet</span>'
+        f'<span class="val">{krav["min_top_cover_mm"]:.0f} mm</span></div>'
+        '<div class="rt-dlinje rt-graa"><span>Anbefalet afstand imellem geonetlag</span>'
+        f'<span class="val">{krav["min_spacing_mm"]:.0f}–{krav["max_spacing_mm"]:.0f} mm</span></div>'
+        '<div class="rt-dlinje rt-graa"><span>Anbefalet tilslagsstørrelse</span>'
+        f'<span class="val">{tilslag}</span></div>'
+        '</div>'
+    )
+
+    bd1 = _rt_reduktion_linjer(p1, is_ref)
+    bd2 = _rt_reduktion_linjer(p2, is_ref)
+
+    return (
+        '<div class="rt-detalje">'
+        f'{krav_html}'
+        f'<div class="rt-d-bd rt-d-bd1">{bd1}</div>'
+        f'<div class="rt-d-bd rt-d-bd2">{bd2}</div>'
+        '</div>'
+    )
+
+
+def _rt_red_txt(p: dict | None) -> str:
+    """Reduktionstekst for ét lag: '{mm} mm ({pct})' eller '—'."""
+    if not _rt_gyldig(p):
+        return "—"
+    pct = p.get("reduktion_pct")
+    mm = p.get("reduktion_mm")
+    if pct is not None and mm is not None:
+        return f'{int(round(mm))} mm ({pct:.0%})'
+    if pct is not None:
+        return f'{pct:.0%}'
+    return "—"
+
+
+def _rt_raekke_html(
+    navn: str,
+    p1: dict | None,
+    p2: dict | None,
+    *,
+    is_ref: bool = False,
+    is_bedste: bool = False,
+) -> str:
+    """Byg én foldbar tabelrække (<details>) for et produkt/referencenet."""
+    v1 = _rt_gyldig(p1)
+    v2 = _rt_gyldig(p2)
+    chosen = p1 if v1 else (p2 if v2 else (p1 or p2 or {}))
+
+    klasser = chosen.get("klasser") or []
+    klasse_ok = chosen.get("klasse_ok", True)
+    kl_txt = _format_klasse_liste(klasser) if klasser else "—"
+    badge_css = "rt-badge-ok" if klasse_ok else "rt-badge-advarsel"
+    badge_pre = "" if klasse_ok else "⚠️ "
+
+    t1 = f'{int(round(p1["t_armeret_mm"]))}' if v1 else "—"
+    t2 = f'{int(round(p2["t_armeret_mm"]))}' if v2 else "—"
+    t1_cls = "num" if v1 else "num rt-tom"
+    t2_cls = "num" if v2 else "num rt-tom"
+
+    red1_txt = _rt_red_txt(p1)
+    red2_txt = _rt_red_txt(p2)
+    red1_cls = "num" if v1 else "num rt-tom"
+    red2_cls = "num" if v2 else "num rt-tom"
+
+    raekke_css = "rt-raekke"
+    if is_ref:
+        raekke_css += " rt-ref"
+    elif is_bedste:
+        raekke_css += " rt-bedste"
+
+    return (
+        f'<details class="{raekke_css}">'
+        f'<summary class="rt-sum">'
+        f'<span class="rt-navn"><span class="rt-chev">▸</span> {navn}</span>'
+        f'<span><span class="rt-badge {badge_css}">{badge_pre}{kl_txt}</span></span>'
+        f'{_rt_tk_celle(p1, v1, t1, t1_cls)}'
+        f'{_rt_tk_celle(p2, v2, t2, t2_cls)}'
+        f'<span class="{red1_cls}">{red1_txt}</span>'
+        f'<span class="{red2_cls}">{red2_txt}</span>'
+        f'</summary>'
+        f'{_rt_detalje_html(navn, p1, p2, is_ref)}'
+        f'</details>'
+    )
+
+
+def _render_produkt_tabel(
+    ref_1: dict | None,
+    ref_2: dict | None,
+    ref_fejl_1: str | None,
+    ref_fejl_2: str | None,
+    prod_1lag: list[dict],
+    prod_2lag: list[dict],
+    valgt_klasse: int,
+) -> None:
+    """Standard-tilstandens resultattabel: én foldbar række pr. produkt.
+
+    Referencenettet øverst som basis, derefter produkter med tyndeste
+    1-lag-bærelag først (tyndeste gyldige fremhævet grønt). 1-lag og 2-lag
+    vises som kolonner; detaljer (reduktions-opdeling) skjules i fold-ud.
+    """
+    refp1 = ref_1["produkter"][0] if ref_1 and ref_1.get("produkter") else None
+    refp2 = ref_2["produkter"][0] if ref_2 and ref_2.get("produkter") else None
+
+    p1_by = {p["navn"]: p for p in prod_1lag}
+    p2_by = {p["navn"]: p for p in prod_2lag}
+    navne = list(p1_by.keys())
+    for n in p2_by:
+        if n not in p1_by:
+            navne.append(n)
+
+    # Bedste = tyndeste gyldige 1-lag (prod_1lag er sorteret tyndeste først);
+    # ellers tyndeste gyldige 2-lag.
+    bedste_navn = next((n for n in navne if _rt_gyldig(p1_by.get(n))), None)
+    if bedste_navn is None:
+        bedste_navn = next((n for n in navne if _rt_gyldig(p2_by.get(n))), None)
+
+    dele = ['<div class="rt-tabel">']
+    dele.append(
+        '<div class="rt-head">'
+        '<span>Produkt</span>'
+        '<span>Anbefalet belastningsklasse</span>'
+        '<span class="num">Bærelagstykkelse, 1 lag geonet</span>'
+        '<span class="num">Bærelagstykkelse, 2 lag geonet</span>'
+        '<span class="num">Reduktion i alt, 1 lag</span>'
+        '<span class="num">Reduktion i alt, 2 lag</span>'
+        '</div>'
+    )
+    dele.append(_rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True))
+    for n in navne:
+        p1 = p1_by.get(n)
+        p2 = p2_by.get(n)
+        if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
+            continue
+        dele.append(_rt_raekke_html(n, p1, p2, is_bedste=(n == bedste_navn)))
+    dele.append('</div>')
+    dele.append(
+        '<div class="rt-caption">Referencenet vises øverst, derefter de mest '
+        'effektive produkter først. Klik på hver række for flere detaljer</div>'
+    )
+    st.markdown("".join(dele), unsafe_allow_html=True)
 
 
 def _navne_kort(gruppe: dict) -> str:
@@ -2591,17 +2960,10 @@ def render_standard() -> None:
         else:
             _render_uarmeret_mangler_besked(eu, eo)
 
-        _render_referenceblok(
+        _render_produkt_tabel(
             ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-            valgt_klasse=valgt_klasse,
+            prod_1lag, prod_2lag, valgt_klasse,
         )
-        st.markdown("")
-
-        kol_1, kol_2 = st.columns(2, gap="large")
-        with kol_1:
-            _render_lag_kolonne("1 LAG GEONET", grupper_1, valgt_klasse, "1_lag")
-        with kol_2:
-            _render_lag_kolonne("2 LAG GEONET", grupper_2, valgt_klasse, "2_lag")
 
     # --- Informations-expandere ----------------------------------------
     st.divider()
