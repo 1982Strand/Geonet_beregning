@@ -206,12 +206,28 @@ def upper_geonet_frac_for_sub_lag(sub_lag: list[dict] | None) -> float:
     return max(0.05, min(0.95, frac))
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# Justérbare knapper for materialeteksten (lagnavn + tykkelse) inde i hvert
+# materialelag i opbygnings-billederne. Redigér tallene her efter behov.
+#   MAT_LABEL_FONTSCALE : tekststørrelse. 1.0 = standard (auto-tilpasset efter
+#                         laghøjde), 1.3 = 30 % større, 0.8 = mindre.
+#   MAT_LABEL_WEIGHT    : "normal" eller "bold".
+#   MAT_LABEL_DX        : vandret forskydning i akse-enheder (boksen er ~0.52
+#                         bred). + = højre, − = venstre. 0 = centreret.
+#   MAT_LABEL_DY        : lodret forskydning i mm. + = op, − = ned. 0 = centreret.
+# ───────────────────────────────────────────────────────────────────────────
+MAT_LABEL_FONTSCALE = 1.2
+MAT_LABEL_WEIGHT = "normal"
+MAT_LABEL_DX = 0.0
+MAT_LABEL_DY = 0.0
+
+
 def render_opbygning_png(
     eu: float,
     snit_liste: list[Snit],
     geonet_label: str,
     *,
-    dpi: int = 150,
+    dpi: int = 300,
 ) -> bytes:
     """Render N opbygnings-tværsnit som en samlet PNG.
 
@@ -427,7 +443,6 @@ def render_opbygning_png(
         baerelag = Rectangle(
             (BOX_X1, 0), BOX_X2 - BOX_X1, t,
             facecolor="#E8E8E8", edgecolor="#666", linewidth=1,
-            hatch=".." if not s.sub_lag else None,
         )
         ax.add_patch(baerelag)
 
@@ -441,18 +456,17 @@ def render_opbygning_png(
             ]
             sum_lag = sum(l["tykkelse_mm"] for l in sl)
             if sum_lag > 0:
-                # Skift hatch-mønster pr. lag for visuel adskillelse.
-                hatches = [".", "..", "...", "x", "//"]
+                # Skift fyldfarve pr. lag for visuel adskillelse — ingen hatch,
+                # så materialeteksten forbliver læsbar.
+                lag_farver = ["#ECECEC", "#E0E0E0"]
                 y_top = t
                 for idx, lag in enumerate(sl):
                     h = lag["tykkelse_mm"]
                     y_bot = max(0.0, y_top - h)
-                    # Fyld med subtil hatch — viser at det er sub-lag
                     lag_rect = Rectangle(
                         (BOX_X1, y_bot), BOX_X2 - BOX_X1, y_top - y_bot,
-                        facecolor="#EEEEEE", edgecolor="none",
-                        hatch=hatches[idx % len(hatches)],
-                        alpha=0.6,
+                        facecolor=lag_farver[idx % len(lag_farver)],
+                        edgecolor="none",
                     )
                     ax.add_patch(lag_rect)
                     # Separator-linje under (undtagen bunden af bærelaget)
@@ -465,10 +479,13 @@ def render_opbygning_png(
                         lag["navn"], h, label_h_mm
                     )
                     ax.text(
-                        (BOX_X1 + BOX_X2) / 2, (y_top + y_bot) / 2,
+                        (BOX_X1 + BOX_X2) / 2 + MAT_LABEL_DX,
+                        (y_top + y_bot) / 2 + MAT_LABEL_DY,
                         label_txt,
                         ha="center", va="center",
-                        fontsize=label_fs, color="#222",
+                        fontsize=label_fs * MAT_LABEL_FONTSCALE,
+                        fontweight=MAT_LABEL_WEIGHT,
+                        color="#222",
                         linespacing=1.35,
                     )
                     y_top = y_bot
@@ -579,7 +596,7 @@ def render_personligt_designdiagram_png(
     t_2_lag_mm: float | None = None,
     t_1_lag_best_mm: float | None = None,
     t_2_lag_best_mm: float | None = None,
-    dpi: int = 150,
+    dpi: int = 300,
 ) -> bytes:
     """Designdiagram tilpasset brugerens opbygning + geonet.
 
