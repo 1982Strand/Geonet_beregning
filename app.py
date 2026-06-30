@@ -34,6 +34,7 @@ from core.data import (
     PHI_BASIS,
     find_geonet,
     cv_til_eu,
+    CV_TIL_EU,
     eo_til_klasse,
     T_BASIS_TABLE,
     DESIGNDIAGRAM_RAW_TABLES,
@@ -591,7 +592,7 @@ st.markdown(f"""
   .rt-tip-mark {{ font-size:0.6rem; color:{GRØN}; vertical-align:super;
                   margin-left:2px; font-weight:500; letter-spacing:0.02em; }}
   .rt-tip-box {{ display:none; position:absolute; right:0; top:1.6em;
-                 width:250px; background:#fff; border:0.5px solid #CCC;
+                 width:300px; background:#fff; border:0.5px solid #CCC;
                  border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.13);
                  padding:0.5rem 0.7rem; z-index:60; text-align:left;
                  font-weight:400; white-space:normal; }}
@@ -639,6 +640,17 @@ st.markdown(f"""
   .rt-krav-titel {{ font-size:0.7rem; color:#888; text-transform:uppercase;
                     letter-spacing:0.04em; margin-bottom:0.15rem; }}
   .rt-caption {{ font-size:0.78rem; color:#666; margin-top:0.5rem; }}
+
+  .cv-eu-wrap {{ margin-top:-10.6rem; }}
+  .st-key-kl_diagram_wrap {{ margin-top:-4rem; margin-left:10rem; }}
+  .cv-eu-tabel {{ width:100%; max-width:360px; border-collapse:collapse;
+                  font-size:0.85rem; margin-top:0.3rem; }}
+  .cv-eu-tabel th {{ text-align:left; font-size:0.72rem; color:{GRÅ};
+                     text-transform:uppercase; letter-spacing:0.03em;
+                     padding:0.25rem 0.5rem; border-bottom:1px solid #DDD; }}
+  .cv-eu-tabel td {{ padding:0.25rem 0.5rem; border-bottom:1px solid #EEE; }}
+  .cv-row-aktiv td {{ background:{LYS_GR}; font-weight:600; color:#173404; }}
+  .cv-eu-note {{ font-size:0.78rem; color:#666; margin-top:0.4rem; }}
 
   .diagram-række-afstand {{
     height: 1.8rem;
@@ -751,34 +763,62 @@ KLASSE_IKON = {1: "🚲", 2: "🚜", 3: "🚗", 4: "🚛", 5: "🏗️", 6: "✈
 def input_underbund(key_prefix: str) -> float:
     """Render Underbund (Eu eller Cv → Eu). Returnerer Eu i MPa."""
     st.subheader("Underbund")
+    st.caption(
+        "Vælg om underbundens E-modul (Eu) angives direkte, eller udledes ud fra "
+        "en korrelation med vingestyrken Cv."
+    )
 
     eu_mode = st.radio(
         "Input-form",
-        ["Eu — E-modul (MPa)", "Cv — vingestyrke (kN/m²)"],
+        ["Eu - E-modul (MPa)", "Cv - vingestyrke (kN/m²)"],
         horizontal=True,
         key=f"{key_prefix}_eu_mode",
         label_visibility="collapsed",
     )
 
+    slider_kol, tabel_kol = st.columns([1, 1])
+
     if eu_mode.startswith("Eu"):
-        eu = float(st.slider(
-            "Eu (MPa)", min_value=int(EU_MIN), max_value=int(EU_MAX),
-            value=10, step=1, key=f"{key_prefix}_eu_slider",
-            help="Angiv E-modul for underbunden. Ofte målt ved belastningsforsøg i forvejen, evt. ved vingeforsøg i lerjord.",
-        ))
+        with slider_kol:
+            eu = float(st.slider(
+                "Eu (MPa)", min_value=int(EU_MIN), max_value=int(EU_MAX),
+                value=10, step=1, key=f"{key_prefix}_eu_slider",
+                help="Angiv E-modul for underbunden. Oftest målt ved belastningsforsøg i marken, eller skønnet.",
+            ))
         st.caption(f"Valgt **Eu = {eu:.0f} MPa**")
         return eu
 
-    cv = st.slider(
-        "Cv (kN/m²)", min_value=0, max_value=180,
-        value=60, step=5, key=f"{key_prefix}_cv_slider",
-        help="Ukorrigeret vingerstyrke fra feltmåling (tabel 7.4).",
-    )
-    eu_opslag = cv_til_eu(float(cv))
-    if eu_opslag is None:
-        st.error("Cv er uden for tabelområdet (0–180 kN/m²).")
-        return 10.0
-    st.caption(f"Cv = {cv} kN/m²  →  **Eu = {eu_opslag:.0f} MPa**")
+    with slider_kol:
+        cv = st.slider(
+            "Cv (kN/m²)", min_value=0, max_value=180,
+            value=60, step=5, key=f"{key_prefix}_cv_slider",
+            help="Ukorrigeret vingerstyrke fra feltmåling/markjournal.",
+        )
+        eu_opslag = cv_til_eu(float(cv))
+        if eu_opslag is None:
+            st.error("Cv er uden for tabelområdet (0–180 kN/m²).")
+            return 10.0
+        st.caption(f"Cv = {cv} kN/m²  →  **Eu = {eu_opslag:.0f} MPa**")
+    with tabel_kol:
+        rækker = []
+        for cv_min, cv_max, eu_trin in CV_TIL_EU:
+            interval = f"0 – {cv_max}" if cv_min == 0 else f"{cv_min + 1} – {cv_max}"
+            css = "cv-row-aktiv" if eu_trin == eu_opslag else ""
+            rækker.append(
+                f'<tr class="{css}"><td>{eu_trin:.0f} MN/m²</td>'
+                f'<td>{interval} kN/m²</td></tr>'
+            )
+        st.markdown(
+            '<div class="cv-eu-wrap">'
+            '<table class="cv-eu-tabel">'
+            '<thead><tr><th>E-modul på planum Eu</th>'
+            '<th>Tilhørende vingestyrke Cv</th></tr></thead>'
+            f'<tbody>{"".join(rækker)}</tbody></table>'
+            '<p class="cv-eu-note">Relationen mellem E-modul og vingestyrke som '
+            'typisk findes for moræneler, gytje og lignende.</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
     return eu_opslag
 
 
@@ -833,7 +873,8 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
                 "diagrambilleder",
                 diagram["image_name"],
             )
-            st.image(image_path, width="stretch")
+            with st.container(key="kl_diagram_wrap"):
+                st.image(image_path, width="stretch")
     return valgt, info, eo
 
 
@@ -1428,7 +1469,7 @@ def _render_lag_kolonne(
 
 # Referencerækkens label i tabellen — fulde produktnavne (≠ REFERENCE_NAVN,
 # der bruges til produkt-matchning andre steder).
-REFERENCE_NAVN_TABEL = "Referencenet (GS-GRID SX160 / E'GRID T6 / Tensar TriAx TX160)"
+REFERENCE_NAVN_TABEL = "Referencenet (SX160 / T6 / TriAx TX160)"
 
 
 def _rt_gyldig(p: dict | None) -> bool:
@@ -3064,11 +3105,12 @@ def _vis_phi_opsummeringsboks(
     phi_kor_str = _dk_num(phi_kor, "+.4f")
     phi_kor_pct_str = _dk_num(phi_kor * 100, "+.2f")
 
-    with st.container(border=True):
+    boks_kol, _ = st.columns([1, 1])
+    with boks_kol, st.container(border=True):
         st.markdown("**📐 φ-beregning fra materialelagene**")
         st.markdown(data["tabel_md"])
         st.markdown(
-            f"φ = Σ({data['symbol']}ᵢ × φᵢ) / Σ({data['symbol']}ᵢ) = "
+            f"**Vægtet φ** = Σ({data['symbol']}ᵢ × φᵢ) / Σ({data['symbol']}ᵢ) = "
             f"{bidrag_str} / {v_str} = **{phi_w_str}°**"
         )
 
@@ -3081,7 +3123,7 @@ def _vis_phi_opsummeringsboks(
         st.markdown(
             f"**φ-korrektion** = −0,02 × (φ − 37°) = "
             f"−0,02 × ({phi_f_str} − 37) = **{phi_kor_str}** "
-            f"({phi_kor_pct_str} % af T_basis)"
+            f"({phi_kor_pct_str} % af basistykkelsen)"
         )
 
         ref_1 = beregn(eu=eu, eo=eo, phi=phi_final,
@@ -3114,10 +3156,12 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     """
     st.subheader("Materialelag")
 
-    antal_lag = st.number_input(
-        "Antal lag", min_value=1, max_value=3, value=2, step=1,
-        key="bd_antal_lag",
-    )
+    antal_lag_kol, _ = st.columns([1, 7])
+    with antal_lag_kol:
+        antal_lag = st.number_input(
+            "Antal lag", min_value=1, max_value=3, value=2, step=1,
+            key="bd_antal_lag",
+        )
     st.caption(f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm.")
 
     # Default-opbygning ved første besøg på siden: Stabilgrus SGII 0-32
@@ -3135,7 +3179,8 @@ def _input_materialelag(eu: float, eo: float) -> tuple[list[dict], float]:
     phi_vaerdier: list[float] = []
 
     for i in range(int(antal_lag)):
-        with st.expander(_lag_label(i, int(antal_lag)), expanded=True):
+        lag_kol, _ = st.columns([1, 1])
+        with lag_kol, st.expander(_lag_label(i, int(antal_lag)), expanded=True):
             dynamiske_navne = [
                 m["navn"] for m in st.session_state.get("materialer", [])
             ]
@@ -4534,7 +4579,7 @@ if aktiv_side == "dimensionering":
         )
     else:
         st.caption(
-            "I den brugerdefinerede beregning kan du selv sammensætte op til "
+            "I brugerdefineret tilstand kan du selv sammensætte op til "
             "3 materialelag, med forskellige friktionsvinkler og egenskaber."
         )
 

@@ -1,0 +1,1360 @@
+½# Dimensionering – Befæstelser og Forstærkningsbelægninger
+
+**Håndbog · Konstruktioner**
+**Januar 2022 — Rettelser af 1. august 2025 indgår**
+*Vejregler · Vejdirektoratet*
+
+---
+
+> **Læsevejledning (tilføjet ved konvertering til Markdown — ikke en del af den oprindelige håndbog)**
+>
+> Denne fil er en tro gengivelse af PDF'en *"Dimensionering – befæstelser og forstærkningsbelægninger"* (Vejdirektoratet, januar 2022, med rettelser af 1. august 2025).
+>
+> - Håndbogen indeholder **rettelsesblokke** markeret med *"Rettelse af 1. august 2025, start/slut"*. Tekst under **"Følgende udgår"** er den tidligere version (vist med rød skrift i den originale PDF), som er fjernet ved rettelsen. Tekst under **"Følgende indsættes"** er den nu gældende version. **Begge dele er bevaret her**, så intet indhold går tabt. Hvor et afsnit er udgået *uden* erstatning, er det markeret med en kort note.
+> - Formler, der var forvansket i PDF-tekstudtrækket, er genskabt i korrekt, læsbar notation og vist i kodeblokke.
+> - Figurnumre, der stod blanke i kilden, er udfyldt med det mest sandsynlige nummer og markeret med **[udledt]**.
+> - Grafen i **Figur 6.3** og illustrationen i **Figur 6.4** er erstattet af tekniske beskrivelser på figurernes oprindelige plads.
+> - Katalogopbygningerne i **Figur 8.1, 8.2 og 8.3** er rekonstrueret fra den flade tekst og krydstjekket mod mindste koblingshøjde (Figur 5.3, frosttvivlsom underbund, 40 MPa).
+> - Originalens sidetal er udeladt, da de ikke er relevante i Markdown. Åbenlyse linjeskift-artefakter (sammensmeltede ord) fra udtrækket er rettet.
+
+---
+
+## Forord
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Denne håndbog om dimensionering af befæstelser og forstærkningsbelægninger giver anvisning i dimensionering af fleksible, halvstive og stive befæstelser på veje og pladser. Håndbogen indeholder retningslinjer for fastlæggelse af grundlaget for dimensionering af befæstelser i form af dimensionsgivende trafikbelastning, underbund og materialer. Herudover giver håndbogen en kortfattet beskrivelse om mulighederne ved anvendelse af dimensioneringssystemet MMOPP.
+
+**Følgende indsættes:**
+
+Denne håndbog om dimensionering af befæstelser og forstærkningsbelægninger giver anvisning i dimensionering af fleksible befæstelser på veje og pladser. Håndbogen indeholder retningslinjer for fastlæggelse af grundlaget for dimensionering af befæstelser i form af dimensionsgivende trafikbelastning, underbund og materialer. Herudover giver håndbogen en kortfattet beskrivelse om mulighederne ved anvendelse af dimensioneringsprogrammet VejDim.
+
+Rettelserne af den 1. august 2025 er indsat, da Vejdirektoratets dimensioneringsprogram MMOPP erstattes af Vejdirektoratets dimensioneringsprogram VejDim, og da der er sket ændringer af materialer. Ved dimensionering af halvstive befæstelser med hydraulisk bunde bærelag (HBB) kan Vejdirektoratets dimensioneringsprogram MMOPP fortsat anvendes, da HBB ikke indgår i VejDim pt.
+
+**Rettelse af 1. august 2025, slut**
+
+Håndbogen er udarbejdet af en ad hoc-gruppe under vejregelgruppe Dimensionering, der i perioden havde følgende sammensætning:
+
+- Vejdirektoratet ved Susanne Baltzer, formand
+- Vejdirektoratet ved Claus Krøldrup Pedersen
+- Sweco ved Christian Busch
+- Københavns Kommune ved Michael Rasmussen
+- Colas Danmark A/S ved Claus Thorup
+- Teknologisk Institut ved Jesper Laugesen
+- COWI ved Mogens Løvendorf Holst, frem til oktober 2021
+- COWI ved Gregers Hildebrand, fra oktober 2021
+- Niras ved Mogens Løvendorf Holst, fra januar 2022
+- Rambøll ved Sidsel Petri Tønnesen
+- Vejdirektoratet ved Henrik Majlund, projektleder
+
+Ad hoc-gruppen har haft følgende sammensætning:
+
+- Vejdirektoratet ved Susanne Baltzer
+- Vejdirektoratet ved Claus Krøldrup Pedersen
+- Sweco ved Christian Busch
+- Københavns Kommune ved Michael Rasmussen
+- Colas Danmark A/S ved Claus Thorup
+- Teknologisk Institut ved Jesper Laugesen
+- COWI ved Mogens Løvendorf Holst, frem til oktober 2021
+- COWI ved Gregers Hildebrand, fra oktober 2021
+- Niras ved Mogens Løvendorf Holst, fra januar 2022
+- Rambøll ved Sidsel Petri Tønnesen, konsulent
+- Vejdirektoratet ved Henrik Majlund, projektleder
+
+Denne håndbog om dimensionering af befæstelser og forstærkningsbelægninger erstatter håndbog om dimensionering af befæstelser og forstærkningsbelægninger af september 2017. Væsentlige ændringer fremgår af afsnit 1.
+
+Denne håndbog om dimensionering af befæstelser og forstærkningsbelægninger indeholder beskrivelser, der har til formål at give vejledning af teknisk karakter. Det forudsætter derfor, at brugeren af håndbogen har den nødvendige tekniske indsigt.
+
+---
+
+## Indholdsfortegnelse
+
+1. **Indledning**
+   - 1.1 Referencer
+   - 1.2 Terminologi
+2. **Grundlag**
+   - 2.1 Regler og vilkår
+3. **Miljømæssige hensyn**
+4. **Trafik**
+   - 4.1 Trafikklasser
+   - 4.2 Dimensionsgivende trafikbelastning
+5. **Underbund**
+   - 5.1 Frostfølsomhed
+   - 5.2 Bæreevne
+   - 5.3 Koblingshøjde
+   - 5.4 Stabilisering af underbunden
+6. **Materialer**
+   - 6.1 Bundne materialer
+   - 6.2 Betonbelægningssten
+   - 6.3 Ubundne materialer
+7. **Dimensionering af befæstelser**
+   - 7.1 Dimensioneringskriterier
+   - 7.2 Analytisk-Empirisk dimensionering
+   - 7.3 Dimensionering ved simulation
+   - 7.4 Dimensionering af forstærkningsbelægninger
+8. **Katalog**
+   - 8.1 Befæstelser med varmblandet asfalt
+   - 8.2 Befæstelser med betonbelægningssten
+   - 8.3 Befæstelser med bitumenstabiliseret materiale
+9. **Bilag**
+   - 9.1 Bilag 1
+
+---
+
+## 1 Indledning
+
+Formålet med denne håndbog er at give vejledning i korrekt dimensionering af befæstelser og forstærkningsbelægninger.
+
+M�lgruppen for håndbogen er bygherrer, rådgivere og entreprenører, der ønsker at dimensionere befæstelser efter gældende vejregler og udbudsforskrifter.
+
+Håndbogen er struktureret som følger:
+
+**Afsnit 2** beskriver hvilke håndbøger, udbudsforskrifter og standarder, der danner grundlag for dimensionering af befæstelser.
+
+**Afsnit 3** beskriver miljømæssige hensyn og tiltag, der kan gøres i forbindelse med valg af materialer til befæstelser for at reducere udledningen af CO₂ og spare på råstofferne.
+
+**Afsnit 4** beskriver fastlæggelsen af den dimensionsgivende trafikbelastning.
+
+**Afsnit 5** beskriver, hvordan underbundens frostfølsomhed og bæreevne har indflydelse på opbygningen af den samlede befæstelse, og hvilke forhold man skal være opmærksom på for at sikre, at befæstelsen har tilstrækkelig bæreevne.
+
+**Afsnit 6** beskriver de materialer, der kan indgå i befæstelsen, og giver anvisninger til korrekt valg af materialer og lagtykkelser.
+
+**Afsnit 7** beskriver grundlaget for dimensionering af befæstelser og forstærkningsbelægninger.
+
+**Afsnit 8** indeholder katalogbefæstelser for befæstelser med varmblandet asfalt, betonbelægningssten og bitumenstabiliseret materiale.
+
+**Afsnit 9** indeholder bilag til denne håndbog.
+
+I forhold til håndbog *dimensionering af befæstelser og forstærkningsbelægninger* fra september 2017 er der med denne håndbog sket følgende væsentlige ændringer:
+
+- Betegnelser på asfaltmaterialer er ændret, så de overholder anvisningerne i byggevareforordningen.
+- Der er tilføjet et afsnit, der beskriver miljømæssige hensyn i forbindelse med valg af materialer ift. reduktion af CO₂-belastningen.
+- Bitumenstabiliseret materiale er tilføjet, og der er udarbejdet et katalog, der giver forslag til befæstelser med bitumenstabiliseret materiale, BSM.
+- Katalog for fleksible befæstelser til 10 års trafik er udgået.
+- Katalog for befæstelser med betonbelægningssten til 10 års levetid er udgået.
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende indsættes:**
+
+I denne version af håndbog *dimensionering af befæstelser og forstærkningsbelægninger*, med rettelser af august 2025, er der følgende væsentlige ændringer:
+
+- "MMOPP" er erstattet af "VejDim".
+- Beskrivelser vedr. materialetyperne beton og hydraulisk bunde bærelag (HBB) er udgået. HBB indgår dog fortsat i kataloget for dimensionering af befæstelser med betonbelægningssten.
+- Beskrivelser vedr. materialetypen semi-fleksibel belægning (SFB) er udgået.
+- E-værdier for ubundne materialer er justeret.
+- Dimensionering ved simulation er udgået.
+- Kataloger for dimensionering af befæstelser med varmblandet asfalt og bitumenstabiliseret materialer (BSM) er udgået.
+
+**Rettelse af 1. august 2025, slut**
+
+### 1.1 Referencer
+
+#### 1.1.1 Regler og vilkår
+
+- Håndbog *Projektering af vejbefæstelser*
+
+Almindelig arbejdsbeskrivelse, AAB for Jord:
+
+- Jordarbejder
+- Jordstabilisering
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Almindelig arbejdsbeskrivelse, AAB for sten, sand og grus:
+- Bundsikring af sand og grus
+- Stabilt grus
+- Macadam
+
+Almindelig arbejdsbeskrivelse, AAB for genbrug:
+- Bundsikring af forbrændingsslagge
+- Ubundne bærelag af knust beton og tegl
+- Ubundne bærelag af knust asfalt og beton
+
+Almindelig arbejdsbeskrivelse, AAB for stabiliserede materialer:
+- Hydraulisk bundne bærelag
+- BSM-KMA (Bitumenstabiliseret materiale)
+
+**Følgende indsættes:**
+
+Almindelig arbejdsbeskrivelse, AAB for sten, sand og grus:
+- Bundsikringssand og grus
+- Stabilt grus
+- Macadam
+
+Almindelig arbejdsbeskrivelse, AAB for genbrug:
+- Forbrændingsslagge
+- Knust asfalt, beton og tegl
+
+Almindelig arbejdsbeskrivelse, AAB for stabiliserede materialer:
+- BSM-KMA (Bitumenstabiliseret materiale – Kold Mix Anlæg)
+- BSM-In situ (Bitumenstabiliseret materiale – In situ)
+
+**Rettelse af 1. august 2025, slut**
+
+Almindelig arbejdsbeskrivelse, AAB for asfalt:
+- Varmblandet asfalt
+- Overfladebehandling
+
+Almindelig arbejdsbeskrivelse, AAB for brolægning:
+- Brolægning
+
+#### 1.1.2 Standarder og normer
+
+Prøvningsmetoder for udførelse af:
+
+- **Statiske pladebelastningsmålinger:** *Vejledning i udførelse af statiske pladebelastningsmålinger*, Statens Vejlaboratorium, 1976.
+- **Faldlodsmålinger:** *Vejledning i udførelse af deflektionsmålinger med faldlodsapparat*, Statens Vejlaboratorium, 1976.
+- **Minifaldlod:** *Måling af overflademodul med minifaldlod*, prVI 90-4:2007, Vejteknisk institut, 2007.
+
+#### 1.1.3 Øvrige referencer
+
+- *Technical Guideline, Bitumen Stabilized Materials, "A Guideline for the Design and Construction of Bitumen Emulsion and Foamed Bitumen Stabilized Materials"*, TG2 – Third Edition, Southern African Bitumen Association (Sabita), 2020.
+
+### 1.2 Terminologi
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+I denne håndbog anvendes følgende terminologi:
+
+| Term | Betydning |
+|---|---|
+| Tunge køretøjer | Tunge køretøjer er køretøjer med en tilladt totalvægt > 3,5 ton. |
+| Lette køretøjer | Lette køretøjer er køretøjer med en tilladt totalvægt ≤ 3,5 ton. |
+| Æ10-belastning | Ækvivalent 10-ton aksel der er defineret som en aksel der vejer 10 tons, med tvillingemonterede dæk, med et dæktryk på 0,7 MPa, og en afstand mellem midten af dækkene, i det enkelte hjulsæt, på 350 mm. |
+| Dimensioneringsperiode | Den levetid befæstelsen dimensioneres for. |
+| Dimensionsgivende trafikbelastning, NÆ10 | Antal ækvivalente 10-tons aksler (Æ10) pr. vognbane i dimensioneringsperioden. |
+| Trafikklasse | Opdeling af trafikbelastninger i klasser (T0–T7) på baggrund af antal tunge køretøjer eller Æ10-belastninger. |
+| MMOPP | Vejdirektoratets dimensioneringsprogram: Mathematical Model Of Pavement Performance. |
+| Vækstfaktor, P | En faktor der tager højde for en trafikstigning i dimensioneringsperioden. |
+| L | Antallet af tunge køretøjer pr. år i begge retninger tilsammen. |
+| Stigende tilvækst | Samme procentvise stigning af foregående års trafik. |
+| Konstant tilvækst | Samme procentvise stigning af første års trafik. |
+| KF | Korrektionsfaktor der tager højde for tunge køretøjers fordeling hen over vejens tværsnit. |
+| KK | Korrektionsfaktor der tager højde for trafikkens kanaliseringsgrad. |
+| KR | Korrektionsfaktor der tager højde for køretøjernes vridning i rundkørsler og kryds. |
+| FSS | Korrektionsfaktor der korrigerer for montering af supersingledæk. |
+| FÆ10 | Korrektionsfaktor der angiver hvor stor en andel et køretøj i gennemsnit bidrager til den samlede Æ10-belastning. |
+| Supersingledæk | En dæktype hvor de traditionelle tvillingmonterede dæk er erstattet af ét bredere dæk. |
+| Frostrisiko | Underbundens frostfølsomhed udtrykt ved én af de tre frostrisikogrupper: frostsikker, frosttvivlsom og frostfarlig. |
+| Poisson's forhold, ν | Den numeriske værdi af forholdet mellem materialets tværtøjning og længdetøjning. |
+| Statisk belastning | Belastning fra køretøjer, der holder stille i længere tid. |
+| Katalogmetoden | Fastlæggelse af befæstelse ved opslag i et katalog. |
+
+*Figur 1.1 Terminologi*
+
+**Følgende indsættes:**
+
+I denne håndbog anvendes følgende terminologi:
+
+| Term | Betydning |
+|---|---|
+| Tunge køretøjer | Tunge køretøjer er køretøjer med en tilladt totalvægt > 3,5 ton. |
+| Lette køretøjer | Lette køretøjer er køretøjer med en tilladt totalvægt ≤ 3,5 ton. |
+| Æ10-belastning | Ækvivalent 10-ton aksel der er defineret som en aksel der vejer 10 tons, med tvillingemonterede dæk, med et dæktryk på 0,7 MPa, og en afstand mellem midten af dækkene, i det enkelte hjulsæt, på 350 mm. |
+| Dimensioneringsperiode | Den levetid befæstelsen dimensioneres for. |
+| Dimensionsgivende trafikbelastning, NÆ10 | Antal ækvivalente 10-tons aksler (Æ10) pr. vognbane i dimensioneringsperioden. |
+| Trafikklasse | Opdeling af trafikbelastninger i klasser (T0–T7) på baggrund af antal tunge køretøjer eller Æ10-belastninger. |
+| VejDim | Vejdirektoratets dimensioneringsprogram. |
+| Vækstfaktor, P | En faktor der tager højde for en trafikstigning i dimensioneringsperioden. |
+| L | Antallet af tunge køretøjer pr. år i begge retninger tilsammen. |
+| Stigende tilvækst | Samme procentvise stigning af foregående års trafik. |
+| Konstant tilvækst | Samme procentvise stigning af første års trafik. |
+| KF | Korrektionsfaktor der tager højde for tunge køretøjers fordeling hen over vejens tværsnit. |
+| KK | Korrektionsfaktor der tager højde for trafikkens kanaliseringsgrad. |
+| KR | Korrektionsfaktor der tager højde for køretøjernes vridning i rundkørsler og kryds. |
+| FSS | Korrektionsfaktor der korrigerer for montering af supersingledæk. |
+| FÆ10 | Korrektionsfaktor der angiver hvor stor en andel et køretøj i gennemsnit bidrager til den samlede Æ10-belastning. |
+| Supersingledæk | En dæktype hvor de traditionelle tvillingmonterede dæk er erstattet af ét bredere dæk. |
+| Frostrisiko | Underbundens frostfølsomhed udtrykt ved én af de tre frostrisikogrupper: frostsikker, frosttvivlsom og frostfarlig. |
+| Poisson's forhold, ν | Den numeriske værdi af forholdet mellem materialets tværtøjning og længdetøjning. |
+| Statisk belastning | Belastning fra køretøjer, der holder stille i længere tid. |
+| Katalogmetoden | Fastlæggelse af befæstelse ved opslag i et katalog. |
+
+*Figur 1.1 Terminologi*
+
+**Rettelse af 1. august 2025, slut**
+
+---
+
+## 2 Grundlag
+
+### 2.1 Regler og vilkår
+
+#### 2.1.1 Almindelige arbejdsbeskrivelser (AAB)
+
+Ved dimensionering af befæstelser forudsættes det, at der anvendes materialer iht. gældende AAB'ere, og at materialerne indbygges i overensstemmelse med gældende AAB'ere.
+
+---
+
+## 3 Miljømæssige hensyn
+
+Der findes forskellige miljømæssige hensyn og tiltag, der kan gøres i forbindelse med valg af materialer til en befæstelse.
+
+Når der vælges materialer til en befæstelse, kan der med fordel være et øget fokus på at anvende materialer, hvor transporten minimeres, så den hertil hørende CO₂-udledning reduceres.
+
+Der kan ydermere med fordel lægges øget vægt på anvendelse af genbrugsmaterialer og at genbrugsmaterialerne anvendes så højt oppe i befæstelsen som muligt for at få størst mulig udnyttelse af materialerne og dermed spare på anvendelse af nye råstoffer.
+
+Hvis underbunden har ringe bæreevne og/eller for højt vandindhold, bør det overvejes, om der med fordel kan anvendes stabilisering som alternativ metode til udskiftning af materialer. Stabilisering kan sædvanligvis medføre et reduceret forbrug af råstoffer, og behovet for transport af materialer kan derved oftest reduceres.
+
+En vigtig parameter er at vælge materialer, der giver mindst mulig udledning af CO₂ såvel ved produktionen som ved anvendelsen af materialerne. Der kan som dokumentation af dette gøres brug af materialernes miljøvaredeklarationer, som giver information om CO₂-udledningen relateret til et givent materiale/produkt.
+
+Miljøvaredeklarationerne benyttes i LCA-værktøjer til beregning af den samlede miljøbelastning i form af CO₂-udledning på et konkret produkt og herfra i relation til det enkelte projekt. Belastningen kan beregnes for alle faser i projektet, lige fra planlægningsfasen til anlægsfasen, og senere over i drifts- og vedligeholdelsesfasen. LCA-værktøjerne giver mulighed for at regne på forskellige scenarier for materialevalg og giver derved mulighed for at vælge den mest miljøvenlige løsning.
+
+---
+
+## 4 Trafik
+
+Befæstelser dimensioneres for den dimensionsgivende trafikbelastning, NÆ10.
+
+Fastsættelsen af den dimensionsgivende trafikbelastning kan ske ved enten at angive en trafikklasse, som beskrevet i afsnit 4.1, eller ved at beregne den dimensionsgivende trafikbelastning, som beskrevet i afsnit 4.2.
+
+### 4.1 Trafikklasser
+
+Der skelnes mellem trafikklasserne T0–T7, jf. Figur 4.1. Ved omregningen fra antal tunge køretøjer til Æ10 er der forudsat en tosporet vej med en vognbanebredde på 3,75 m.
+
+For en trafikklasse er belastningen angivet som enten et antal tunge køretøjer på vejen pr. døgn i begge retninger tilsammen, som det samlede antal Æ10-belastninger, NÆ10 pr. døgn pr. vognbane, eller som den årlige dimensionsgivende trafikbelastning, NÆ10 pr. vognbane pr. år.
+
+For veje i trafikklasse T0 er det forudsat, at der træffes aktive foranstaltninger mod færdsel med tunge køretøjer, herunder snerydningskøretøjer, idet denne trafikklasse alene er beregnet til kørsel med lette køretøjer.
+
+| Trafikklasse | Tunge køretøjer på vejen pr. døgn i begge retninger tilsammen | NÆ10 pr. døgn pr. vognbane (øvre grænse) | Dimensionsgivende trafikbelastning pr. vognbane, NÆ10/år |
+|---|---|---|---|
+| T0 | Ingen | – | – |
+| T1 | ≤ 1 | 0,5 | 75 |
+| T2 | ≤ 65 | 20 | 7.300 |
+| T3 | 65 til 120 | 50 | 18.300 |
+| T4 | 120 til 560 | 200 | 73.000 |
+| T5 | 560 til 1.200 | 500 | 180.000 |
+| T6 | 1.200 til 1.500 | 800 | 300.000 |
+| T7 | > 1.500 | Ingen | > 300.000 |
+
+*Figur 4.1 Trafikklasser.*
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+De værdier, der er angivet i Figur 4.1 for den dimensionsgivende trafikbelastning, NÆ10 pr. vognbane pr. år, benyttes som standard inputværdier for de enkelte trafikklasser ved dimensionering af befæstelser i MMOPP.
+
+**Følgende indsættes:**
+
+De værdier, der er angivet i Figur 4.1 for den dimensionsgivende trafikbelastning, NÆ10 pr. vognbane pr. år, benyttes som standard inputværdier for de enkelte trafikklasser ved dimensionering af befæstelser i VejDim.
+
+**Rettelse af 1. august 2025, slut**
+
+### 4.2 Dimensionsgivende trafikbelastning
+
+Den påvirkning, de tunge køretøjer har på befæstelsen, afhænger i høj grad af køretøjernes fordeling over vejens tværsnit, hvor mange vognbaner der er pr. retning, og den geometriske udformning af vejen.
+
+Herudover har brugen af supersingledæk en væsentlig betydning, idet supersingledæk har en større skadevirkning på befæstelsen end de traditionelle tvillingmonterede dæk.
+
+Disse forhold tages der højde for ved anvendelse af formlen for beregning af den dimensionsgivende trafikbelastning, NÆ10, som er beskrevet i dette afsnit.
+
+Den dimensionsgivende trafikbelastning udtrykt ved NÆ10 kan beregnes ved anvendelse af formlen:
+
+```
+NÆ10 = P × KF × KK × KR × FSS × Σ(FÆ10 × L)
+```
+
+**L** bestemmes ud fra følgende formel, i de situationer hvor der anvendes trafiktællinger som basis for fastlæggelse af den dimensionsgivende trafikbelastning:
+
+```
+L = Årsdøgntrafik × 365 × (lastbilprocent / 100) × 0,86
+```
+
+Lastbilprocenten i ovenstående formel angiver andelen af tunge køretøjer for hverdage i tidsrummet kl. 6–18, mens korrektionsfaktoren 0,86 tager højde for, at der er færre tunge køretøjer på vejene på hverdage i tidsrummet kl. 18–6 og i weekender. Hvis der anvendes 7-døgns tællinger, udelades faktoren 0,86.
+
+**P** beregnes ud fra en af nedenstående formler, afhængig af om den årlige tilvækst i trafikbelastningen er stigende eller konstant i dimensioneringsperioden.
+
+Stigende tilvækst:
+
+```
+        (1 + α)^n − 1
+P  =  ─────────────────
+              α
+```
+
+Konstant tilvækst:
+
+```
+                           α
+P  =  n × ( 1 + (n − 1) × ─── )
+                           2
+```
+
+I Figur 4.2 er P beregnet for en stigende tilvækst, α på hhv. 0, 1, 2, 3, 4 og 5 %, og en dimensioneringsperiode, n på hhv. 10, 15 og 20 år.
+
+| Tilvækst, α | n = 10 år | n = 15 år | n = 20 år |
+|---|---|---|---|
+| 0,00 | 10,00 | 15,00 | 20,00 |
+| 0,01 | 10,46 | 16,10 | 22,02 |
+| 0,02 | 10,95 | 17,29 | 24,30 |
+| 0,03 | 11,46 | 18,60 | 26,87 |
+| 0,04 | 12,01 | 20,02 | 29,78 |
+| 0,05 | 12,58 | 21,58 | 33,07 |
+
+*Figur 4.2 Vækstfaktor, P for stigende tilvækst.*
+
+I Figur 4.3 er P beregnet for en konstant tilvækst, α på hhv. 0, 1, 2, 3, 4 og 5 %, og en dimensioneringsperiode, n på hhv. 10, 15 og 20 år.
+
+| Tilvækst, α | n = 10 år | n = 15 år | n = 20 år |
+|---|---|---|---|
+| 0,00 | 10,00 | 15,00 | 20,00 |
+| 0,01 | 10,45 | 16,05 | 21,90 |
+| 0,02 | 10,90 | 17,10 | 23,80 |
+| 0,03 | 11,35 | 18,15 | 25,70 |
+| 0,04 | 11,80 | 19,20 | 27,60 |
+| 0,05 | 12,25 | 20,25 | 29,50 |
+
+*Figur 4.3 Vækstfaktor, P for konstant tilvækst.*
+
+**KF** – korrektionsfaktor for fordeling, vælges i Figur 4.4.
+
+| Fordeling | KF |
+|---|---|
+| Smalle veje, hvor trafikken forventes at køre i ét spor. | 1,0 |
+| 2-sporede veje | 0,5 |
+| Veje med 4 eller flere spor | 0,45 |
+
+*Figur 4.4 Korrektionsfaktor for fordeling.*
+
+**KK** – korrektionsfaktor for kanaliseringsgrad, vælges i Figur 4.5.
+
+| Kanaliseringsgrad | KK |
+|---|---|
+| Opmarchfelter, kanaliserede kryds med kantsten | 2,0 |
+| Miljøprioriteret gennemfart og lignende | 1,5 |
+| Vognbanebredde (3,75 m) | 1,0 |
+
+*Figur 4.5 Korrektionsfaktor for kanalisering.*
+
+Ved vognbanebredder mindre end 3,75 m, som ikke er en miljøprioriteret gennemfart, kan der anvendes værdier for KK i intervallet 1,0–1,5. Det vil være på den sikre side at vælge 1,5.
+
+**KR** – korrektionsfaktor for rundkørsler og kryds, vælges i Figur 4.6.
+
+| Rundkørsler og kryds | KR |
+|---|---|
+| Lige vej uden vridning | 1,0 |
+| Rundkørsler og kryds med en enkelt vognbane | 2,0 |
+| Rundkørsler og kryds med to eller flere vognbaner | 1,0 |
+
+*Figur 4.6 Korrektionsfaktor for rundkørsler og kryds.*
+
+**FSS** – korrektionsfaktor for supersingledæk, vælges i Figur 4.7.
+
+| Vejtype | FSS |
+|---|---|
+| Motorveje | 1,8 |
+| Øvrige statsveje | 1,6 |
+| Kommuneveje 1) | 1,2 – 1,5 |
+
+1) For kommuneveje bør den lave værdi anvendes i by og den høje værdi uden for by. For kommuneveje i by med væsentlig andel af tung trafik eller for kommuneveje uden for by med begrænset tung trafik kan andre værdier i intervallet anvendes.
+
+*Figur 4.7 Korrektionsfaktor for supersingledæk.*
+
+**FÆ10** – korrektionsfaktor for køretøjer stammer fra trafiktællinger, hvor der foretages en typeopdeling af køretøjerne. For hver enkelt køretøjstype anvendes en specifik FÆ10-faktor. FÆ10-faktorerne er i de følgende figurer opdelt efter enten køretøjsart eller køretøjslængde.
+
+I Figur 4.8 er FÆ10-faktorerne opdelt efter køretøjsarterne sololastbiler, påhængsvogntog, sættevognstog og busser, som er kendt fra manuelle tællinger.
+
+| Køretøjsart | FÆ10 – Motorveje og øvrige statsveje | FÆ10 – Kommuneveje 1) |
+|---|---|---|
+| Sololastbiler | 0,35 | 0,15 – 0,25 |
+| Påhængsvogntog | 1,65 | 0,90 – 1,50 |
+| Sættevognstog | 1,30 | 0,65 – 1,20 |
+| Busser, ekskl. ledbusser | 0,75 | 0,50 – 0,60 |
+
+1) For kommuneveje bør den lave værdi anvendes i by og den høje værdi uden for by. For kommuneveje i by med væsentlig andel af tung trafik eller for kommuneveje uden for by med begrænset tung trafik kan andre værdier i intervallet anvendes.
+
+*Figur 4.8 FÆ10-faktorer opdelt på køretøjsart.*
+
+I Figur 4.9 er FÆ10-faktorerne opdelt efter køretøjslængder ud fra en opdeling, der anvendes ved de maskinelle længdeklassifikationer, hvor køretøjerne opdeles efter længdegrænserne 5,8 m og 12,5 m. Disse resultater er behæftet med større usikkerhed, da personbiler med anhænger bliver registreret som tunge køretøjer.
+
+| Køretøjslængde / Længdegruppe | FÆ10 – Motorveje og øvrige statsveje | FÆ10 – Kommuneveje 1) |
+|---|---|---|
+| **Ved opdeling i 2 længdegrupper** | | |
+| 5,8 – 12,5 m | 0,20 | 0,10 – 0,20 |
+| Over 12,5 m | 1,35 | 0,80 – 1,30 |
+| **Uden opdeling i længdegrupper** | | |
+| Over 5,8 m | 0,80 | 0,15 – 0,75 |
+
+1) For kommuneveje bør den lave værdi anvendes i by og den høje værdi uden for by. For kommuneveje i by med væsentlig andel af tung trafik eller for kommuneveje uden for by med begrænset tung trafik kan andre værdier i intervallet anvendes.
+
+*Figur 4.9 FÆ10-faktorer opdelt efter køretøjslængde.*
+
+FÆ10-faktorerne gælder for almindeligt forekommende trafik. For kommuneveje uden væsentlig andel af gennemkørende trafik er FÆ10-faktorerne lavere end for det øvrige vejnet.
+
+Ved større andele af særligt tunge køretøjer bør disse køretøjers FÆ10-faktorer fastlægges separat, f.eks. ved brug af 4. potens reglen.
+
+---
+
+## 5 Underbund
+
+En vigtig parameter for dimensionering af befæstelser er underbundens frostfølsomhed og bæreevne. Kendskabet til hvilke jordarter, der findes i underbunden, er af afgørende betydning for, hvor stor koblingshøjden af befæstelsen bør være, for at kunne modstå frostpåvirkning af underbunden og for at have tilstrækkelig bæreevne til at kunne modstå den dimensionsgivende trafikbelastning.
+
+Ved anlæg af en vej bør der udføres geotekniske undersøgelser for at klarlægge hvilke jordarter, der findes på strækningen, så underbundens frostfølsomhed og styrke kan fastlægges. Hvis der ikke udføres geotekniske undersøgelser, kan underbundens bæreevne indledningsvis skønnes.
+
+### 5.1 Frostfølsomhed
+
+Ved dimensionering af befæstelser inddeles underbunden i tre risikogrupper, der beskriver risikoen for frosthævning. De tre risikogrupper er:
+
+- Frostsikker underbund
+- Frosttvivlsom underbund
+- Frostfarlig underbund
+
+De tre risikogrupper for frostfølsomheden er et udtryk for, hvor stor risikoen er for, at underbunden vil fryse. Fryser underbunden, vil det kunne medføre skadelige frosthævninger i befæstelsen, idet risikoen afhænger af hvilke jordarter, der er til stede i underbunden. Risikogruppe for frosthævning kan vurderes ved en geoteknisk undersøgelse.
+
+Hvis der ikke foreligger tilstrækkelige oplysninger om hvilke jordarter, der findes i underbunden, bør der udføres undersøgelser i marken, som kan give et velunderbygget kendskab til jordbundsforholdene.
+
+### 5.2 Bæreevne
+
+Underbundens bæreevne udtrykkes i dimensioneringssammenhænge som en E-værdi. E-værdien afhænger blandt andet af jordbundens art.
+
+På baggrund af oplysninger om typen af jordarter kan underbundens E-værdi indledningsvis fastsættes ved at anvende nedenstående vejledende værdier:
+
+| Jordarter | E-værdi [MPa] |
+|---|---|
+| Moræneler, kalkfrit 1) | 10 – 20 |
+| Moræneler, kalkholdigt 1) | 20 – 50 |
+| Moræneler, fedt, kalkholdigt 1) | 10 – 30 |
+| Senglaciale ler- og siltaflejringer 1) | 5 – 15 |
+| Sand, fint (frostfarligt) | 40 – 70 |
+| Sand | 70 – 150 |
+| Grus | 100 – 300 |
+
+1) Afhængigt af in situ vandindhold.
+
+*Figur 5.1 E-værdier for underbunden.*
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Som standard E-værdier for de tre risikogrupper for underbundens frostfølsomhed, for hhv. frostsikker, frosttvivlsom og frostfarlig, anvendes ved dimensionering i MMOPP følgende værdier:
+
+**Følgende indsættes:**
+
+Som standard E-værdier for de tre risikogrupper for underbundens frostfølsomhed, for hhv. frostsikker, frosttvivlsom og frostfarlig, anvendes ved dimensionering i VejDim følgende værdier:
+
+**Rettelse af 1. august 2025, slut**
+
+| Frosthævningsrisiko | E-værdi [MPa] |
+|---|---|
+| Frostsikker | 100 |
+| Frosttvivlsom | 40 |
+| Frostfarlig | 20 |
+
+*Figur 5.2 Standard E-værdier for underbunden.*
+
+Ved anlæggets gennemførelse bør det verificeres ved måling, at niveauet for underbundens bæreevne er i overensstemmelse med det niveau, der blev fastlagt ved den indledende dimensionering. Hvis underbundens bæreevne er væsentlig lavere end forudsat, bør der foretages en fornyet dimensionering, hvor den endelige koblingshøjde fastlægges, så det sikres, at befæstelsen har den fornødne bæreevne.
+
+Hvis verifikationen viser, at underbundens bæreevne er bedre end forudsat ved den indledende dimensionering, er det ikke nødvendigt at foretage en fornyet dimensionering.
+
+M�ling af underbundens bæreevne udføres ved statisk pladebelastningsforsøg. Der kan anvendes en anden metode, hvis korrelationen mellem den valgte metode og statisk pladebelastningsforsøg er kendt.
+
+### 5.3 Koblingshøjde
+
+Koblingshøjden fastlægges på basis af underbundens frosthævningsrisiko og vejens trafikklasse. Er den aktuelle underbunds frosthævningsrisiko ikke bestemt på anden måde, kan værdierne i Figur 5.3 herunder benyttes.
+
+Tabellen herunder angiver mindste koblingshøjde. Kolonneoverskrifterne kombinerer frosthævningsrisiko med de tilhørende materialetyper:
+
+- **Frostsikker** = Sand og grus uden betydende partier af silt og siltholdigt ler.
+- **Frosttvivlsom** = Moræneler, ler og stabiliseret underbund 2).
+- **Frostfarlig** = Silt og meget siltholdige jordarter med mulighed for vandtilførsel, forbrændingsslagge og flyveaske 1) og stabiliseret underbund 2).
+
+| Trafikklasse | Frostsikker (Sand og grus …) | Frosttvivlsom (Moræneler, ler, stab. underbund 2)) | Frostfarlig (Silt, siltholdige jordarter m.m. 1) 2)) |
+|---|---|---|---|
+| T0, T1 | Som bestemt ud fra Analytisk-Empirisk Dimensionering | 400 mm | 500 mm |
+| T2 | Som bestemt ud fra Analytisk-Empirisk Dimensionering | 500 mm | 700 mm |
+| T3 | Som bestemt ud fra Analytisk-Empirisk Dimensionering | 600 mm | 800 mm |
+| T4, T5, T6, T7 | Som bestemt ud fra Analytisk-Empirisk Dimensionering | 700 mm | 900 mm |
+
+1) Aktuel frosthævningsrisiko bør fastlægges ved laboratorieundersøgelse.
+2) Se afsnit 5.4.
+
+*Figur 5.3 Mindste koblingshøjder under hensyn til frosthævningsrisiko og trafikklasse.*
+
+Ved fastlæggelse af mindste koblingshøjde er det forudsat, at vejkassen tørholdes ved etablering af et velfungerende afløbssystem for både overfladevand og grundvand.
+
+På strækninger, hvor der anvendes kantsten eller rørlagt afløb fra kørebanen med befæstet fortov eller rabat, kan de i Figur 5.3 angivne mindste koblingshøjder for frosttvivlsom og frostfarlig underbund reduceres med 100 mm.
+
+Hvis geotekniske undersøgelser viser, at jordarterne betegnes som frosttvivlsomme, men at E-værdien kun vurderes at være 30 MPa, vil det for katalogbefæstelserne i Figur 8.1 være tilstrækkeligt for befæstelserne i trafikklasserne T2–T5 at øge bundsikringslagets tykkelse med 100 mm. For katalogbefæstelserne i trafikklasse T0 og T1 er det ikke nødvendigt at øge tykkelsen af bundsikringslaget.
+
+### 5.4 Stabilisering af underbunden
+
+Stabilisering af underbunden vil kunne reducere befæstelsens koblingshøjde, idet styrken af underbunden øges. Underbundens frostfølsomhed kan dog ikke forudsættes ændret som følge af stabiliseringen, hvorfor fastlæggelsen af mindste koblingshøjde fortsat skal ske efter anvisningerne i Figur 5.3, ud fra den aktuelle underbunds frosthævningsrisiko.
+
+Hvis stabiliseringen udføres i henhold til Almindelig Arbejdsbeskrivelse (AAB) for Jordstabilisering, anvendes en regningsmæssig E-værdi på 55 MPa for underbunden, i forhold til en måling med minifaldlod.
+
+---
+
+## 6 Materialer
+
+Ved dimensionering af befæstelser kræves der kendskab til materialernes E-værdier og Poisson's forhold, ν.
+
+De regningsmæssige E-værdier for de almindeligt forekommende asfaltmaterialer fremgår af **Figur 6.2 [udledt]** og for de øvrige almindelige materialer af **Figur 6.5 [udledt]**.
+
+De E-værdier, der er angivet i figurerne, er de regningsmæssige E-værdier, der anvendes ved dimensionering af befæstelser. Ved udførelse af en asfaltbelægning med flere lag vil den vægtede E-værdi af den samlede asfaltbelægning erfaringsmæssigt svare til den E-værdi, der kan eftervises ved udførelse af faldlodsmålinger.
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Ved dimensionering af befæstelser tillægges Poisson's forhold nedenstående værdier.
+
+| Materiale | Poisson's forhold, ν |
+|---|---|
+| Beton | 0,15 |
+| Hydraulisk Bundne Bærelag (HBB) | 0,25 |
+| Øvrige materialer | 0,35 |
+
+*Figur 6.1 Poisson's forhold, ν*
+
+**Følgende indsættes:**
+
+Ved dimensionering af befæstelser tillægges Poisson's forhold værdien 0,35 for bituminøst bundne materialer og ubundne materialer.
+
+**Rettelse af 1. august 2025, slut**
+
+Ovenstående forudsætninger er grundlag for håndbogens katalogbefæstelser, som fremgår af afsnit 8.
+
+### 6.1 Bundne materialer
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+#### 6.1 Asfalt
+
+Der anvendes sædvanligvis følgende materialer: slidlag, kombilag, bindelag og bærelag. De forskellige typer er vist herunder:
+
+**Slidlag:**
+- Overfladebehandling, OB
+- Tyndlagsbelægning, kombinationsbelægning, TB k
+- Pulverasfalt, type A, tætgraderet, PA t
+- Asfaltbeton, tætgraderet, AB t
+- Skærvemastiks, SMA
+- Semi-fleksibel belægning, SFB
+
+**Kombilag:**
+- Asfaltbetonkombilag, KBL
+
+**Bindelag:**
+- Asfaltbetonbindelag, ABB
+
+**Bærelag:**
+- Grusasfaltbeton specificeres i tre typer, hhv. GAB 0, GAB I, GAB II
+
+I **Figur 6.2 [udledt]** er de regningsmæssige E-værdier samt anbefalede minimum- og maksimumlagtykkelser for asfaltmaterialerne angivet.
+
+I kolonnen "E-værdi" angives to værdier: ved dybde under vejoverflade indtil 100 mm (t = 30 °C) og ved dybde under vejoverflade over 100 mm (t = 25 °C). Hvor kun én værdi er angivet, gælder den for indtil 100 mm (t = 30 °C).
+
+| Materiale | E-værdi (indtil 100 mm, t=30°C) [MPa] | E-værdi (over 100 mm, t=25°C) [MPa] | Anbefalet interval for lagtykkelse [mm] |
+|---|---|---|---|
+| **Slidlag** | | | |
+| OB 500 | 500 | – | 10 – 15 |
+| TB k 1000 | 1.000 | – | 20 – 25 |
+| TB k 1500 | 1.500 | – | 20 – 25 |
+| TB k 2500 | 2.500 | – | 20 – 25 |
+| PA 500 | 500 | – | 15 – 35 |
+| AB 1000 | 1.000 | – | 20 – 40 |
+| AB 1500 | 1.500 | – | 25 – 40 |
+| AB 2000 | 2.000 | – | 25 – 40 |
+| AB 3000 | 3.000 | – | 30 – 40 |
+| SMA 1000 | 1.000 | – | 20 – 30 |
+| SMA 1500 | 1.500 | – | 20 – 30 |
+| SMA 2000 | 2.000 | – | 20 – 35 |
+| SMA 3000 | 3.000 | – | 20 – 40 |
+| SFB 8000 | 8.000 | – | 30 – 80 |
+| **Kombilag** | | | |
+| KBL 500 | 500 | – | 40 – 65 |
+| KBL 1000 | 1.000 | – | 40 – 65 |
+| KBL 1500 | 1.500 | – | 40 – 65 |
+| KBL 2000 | 2.000 | – | 40 – 65 |
+| **Bindelag** | | | |
+| ABB 3000 | 3.000 | 5.000 | 40 – 85 |
+| **Bærelag** | | | |
+| GAB 0 2000 | 2.000 | 3.000 | 40 – 65 |
+| GAB 0 3000 | 3.000 | 5.000 | 45 – 70 |
+| GAB I 2000 | 2.000 | 3.000 | 50 – 100 |
+| GAB I 3000 | 3.000 | 5.000 | 60 – 110 |
+| GAB II 3000 | 3.000 | 5.000 | 80 – 180 |
+
+1) Der henvises til bilag 1 for sammenhængen mellem materiale E-værdier og regningsmæssige bindemiddelhårdheder i MMOPP, samt anvendelsesområder.
+2) Interval for lagtykkelser er fastsat ud fra materialetyper og stendensiteter. Der kan forekomme variationer i lagtykkelserne indenfor de enkelte materialer, se bilag 1. De maksimale lagtykkelser for bærelagene er anbefalede maksimale lagtykkelse for udlægning af materialet i ét lag. Ved behov for udlægning af bærelag i større tykkelse end de anførte maksimale lagtykkelser, udlægges det samlede bærelagsmateriale i mere end ét lag.
+
+*Figur 6.2 E-værdier og interval for lagtykkelser for asfaltmaterialer.*
+
+For befæstelser, hvor den samlede tykkelse af asfaltlaget overstiger 100 mm, beregnes E-værdien af det samlede asfaltlag bestående af slidlag, evt. et bindelag og bærelaget ved brug af formlen for ækvivalente tykkelsers metode. Funktionaliteten er indbygget i MMOPP.
+
+**Følgende indsættes:**
+
+#### 6.1 Bundne materialer
+
+Der anvendes sædvanligvis følgende materialer: slidlag, bindelag, kombilag og bærelag. De forskellige typer er vist herunder:
+
+**Slidlag:**
+- Pulverasfalt, type A, tætgraderet, PA t
+- Asfaltbeton, tætgraderet, AB t
+- Skærvemastiks, SMA
+- Tyndlagsbelægning, kombinationsbelægning, TB k
+- Overfladebehandling, OB
+
+**Bindelag:**
+- Asfaltbetonbindelag, ABB
+
+**Kombilag:**
+- Asfaltbetonkombilag, KBL
+
+**Bærelag:**
+- Grusasfaltbeton specificeres i tre typer, hhv. GAB 0, GAB I, GAB II
+- Bitumenstabiliseret materiale, BSM
+
+I **Figur 6.2 [udledt]** er de regningsmæssige E-værdier samt anbefalede minimum- og maksimumlagtykkelser for bundne materialer angivet.
+
+I kolonnen "E-værdi" angives to værdier: ved dybde under vejoverflade indtil 100 mm (t = 30 °C) og ved dybde under vejoverflade over 100 mm (t = 25 °C). Hvor kun én værdi er angivet, gælder den for indtil 100 mm (t = 30 °C).
+
+| Materiale | E-værdi (indtil 100 mm, t=30°C) [MPa] | E-værdi (over 100 mm, t=25°C) [MPa] | Anbefalet interval for lagtykkelse [mm] |
+|---|---|---|---|
+| **Slidlag** | | | |
+| PA 500 | 500 | – | 15 – 35 |
+| AB 1000 | 1.000 | – | 20 – 40 |
+| AB 2000 | 2.000 | – | 25 – 40 |
+| AB 3000 | 3.000 | – | 30 – 40 |
+| SMA 1000 | 1.000 | – | 20 – 30 |
+| SMA 2000 | 2.000 | – | 20 – 35 |
+| SMA 3000 | 3.000 | – | 20 – 40 |
+| TB k 1000 | 1.000 | – | 20 – 25 |
+| TB k 1500 | 1.500 | – | 20 – 25 |
+| TB k 2500 | 2.500 | – | 20 – 25 |
+| OB 500 | 500 | – | 10 – 15 |
+| **Bindelag** | | | |
+| ABB 3000 | 3.000 | 5.000 | 40 – 80 |
+| **Kombilag** | | | |
+| KBL 500 | 500 | – | 40 – 65 |
+| KBL 1000 | 1.000 | – | 40 – 65 |
+| KBL 2000 | 2.000 | – | 40 – 65 |
+| **Bærelag** | | | |
+| GAB 0 2000 | 2.000 | 3.000 | 40 – 65 |
+| GAB 0 3000 | 3.000 | 5.000 | 45 – 70 |
+| GAB I 2000 | 2.000 | 3.000 | 50 – 100 |
+| GAB I 3000 | 3.000 | 5.000 | 60 – 110 |
+| GAB II 3000 | 3.000 | 5.000 | 80 – 160 |
+| BSM | 800 | 800 | 125 – 250 |
+
+1) Der henvises til bilag 1 for sammenhængen mellem materiale E-værdier og regningsmæssige bindemiddelhårdheder i VejDim, samt anvendelsesområder.
+2) Interval for lagtykkelser er fastsat ud fra materialetyper og stendensiteter. Der kan forekomme variationer i lagtykkelserne indenfor de enkelte materialer, se bilag 1. De maksimale lagtykkelser for bærelagene er anbefalede maksimale lagtykkelse for udlægning af materialet i ét lag. Ved behov for udlægning af bærelag i større tykkelse end de anførte maksimale lagtykkelser, udlægges det samlede bærelagsmateriale i mere end ét lag.
+
+*Figur 6.2 E-værdier og interval for lagtykkelser for bundne materialer.*
+
+For befæstelser, hvor den samlede tykkelse af asfaltlaget overstiger 100 mm, beregnes E-værdien af det samlede asfaltlag bestående af slidlag, evt. et bindelag og bærelaget ved brug af formlen for ækvivalente tykkelsers metode. Funktionaliteten er indbygget i VejDim.
+
+**Rettelse af 1. august 2025, slut**
+
+#### 6.1.1 Hastighedsreduktion af E-værdier for asfaltmaterialerne
+
+Ved en reduktion af kørselshastigheden til under 60 km/h vil asfaltens visko-elastiske karakter medføre en reduktion af E-værdien for asfaltlaget.
+
+Efter danske forhold kan det traditionelt antages, at størrelsen af reduktionen afhænger af hastigheden som angivet i nedenstående formel for hastigheder under 60 km/h:
+
+```
+              ⎛   V      ⎞ 0,37
+E_V = E_60 ×  ⎜ ──────── ⎟
+              ⎝ 60 km/h  ⎠
+```
+
+hvor (E_V) og (E_60) er asfaltens E-værdi angivet i MPa ved henholdsvis den givne hastighed (V) i km/h og ved en hastighed på mindst 60 km/h (standardværdier for asfaltens E-værdi fremgår af **Figur 6.2 [udledt]**).
+
+Ved en hastighed på 20 km/h vil et asfaltmateriale have en E-værdi på 1.998 MPa, svarende til 66,6 % af E-værdien ved en hastighed ≥ 60 km/h, forudsat at asfaltmaterialet har en standard E-værdi på 3.000 MPa.
+
+> **Figur 6.3 (graf) — teknisk beskrivelse**
+>
+> Figuren viser reduktionsfaktoren for asfaltens E-værdi som funktion af kørselshastigheden, dvs. forholdet `E_V / E_60` afsat mod hastigheden.
+>
+> - **X-akse:** Hastighed [km/h], fra 0 til 130.
+> - **Y-akse:** Reduktionsfaktor af asfaltens E-værdi [-] (dimensionsløs), fra 0 til ca. 1,20 (gitterlinjer pr. 0,10).
+> - **Kurveforløb:** For hastigheder under 60 km/h følger kurven potensfunktionen `(V/60)^0,37`. Den starter lavt ved meget små hastigheder (omkring 0,20–0,25 i den nederste venstre del af grafen), stiger stejlt og aftagende (konkavt) med hastigheden, og når værdien 1,0 ved præcis 60 km/h. For hastigheder ≥ 60 km/h er faktoren konstant lig 1,0 (vandret linje) — der sker altså ingen yderligere forøgelse over 60 km/h; E-værdien "kappes" ved standardværdien.
+> - **Vigtigt datapunkt (fra teksten):** Ved V = 20 km/h er faktoren ca. 0,666 (66,6 %), svarende til en E-værdi på 1.998 MPa for et materiale med standard E-værdi 3.000 MPa.
+> - **Fortolkning:** Lavere hastighed → lavere E-værdi for asfalten (blødere respons pga. længere belastningstid), hvilket er ugunstigt for befæstelsens bæreevne. Effekten er stærkest ved de laveste hastigheder og forsvinder ved 60 km/h og derover.
+
+Funktionaliteten er indbygget i VejDim.
+
+Ved dimensionering af befæstelser til pladser med statiske belastninger samt busstoppesteder anvendes typisk en dimensioneringshastighed på 2–3 km/h.
+
+### 6.2 Betonbelægningssten
+
+For befæstelser med betonbelægningssten (BBS) er det blandt andet stenens geometriske udformning, tykkelsen af stenen og læggemønsteret, der har indflydelse på befæstelsens bæreevne.
+
+Betonbelægningssten er defineret som en sten med en geometrisk udformning som angivet i DS/EN 1338. Ved dimensioner udover angivelserne i DS/EN 1338 er der tale om fliser, og de viste katalogbefæstelser er derfor ikke gældende.
+
+Betonbelægningssten findes i forskellige udformninger, som kan inddeles i følgende tre hovedtyper:
+
+- **Type A:** Fortandede sten, der griber ind i hinanden og derved modvirker bevægelser mellem stenene i både tvær- og længdeaksen.
+- **Type B:** Fortandede sten, der griber ind i hinanden og derved modvirker bevægelser mellem stenene i én retning.
+- **Type C:** Sten, der ikke har nogen låse-effekt.
+
+> **Figur 6.4 (illustration) — teknisk beskrivelse**
+>
+> Figuren viser eksempler på de tre stentyper som omrids/plantegninger af brostensformer:
+> - **Type A:** Flere eksempler på sten med fortandede (sammenlåsende) kanter hele vejen rundt, så de griber ind i nabostenene i begge retninger (tvær- og længderetning). Formerne er typisk uregelmæssige/dobbelt-T- eller knogleformede.
+> - **Type B:** Sten med fortanding, der kun låser i én retning (f.eks. bølgede/rektangulære former med indgreb langs to modstående sider).
+> - **Type C:** Simple former uden låse-effekt (f.eks. rektangler, kvadrater og regulære sekskanter), der ikke griber ind i hinanden.
+>
+> *Figur 6.4 Eksempler på de forskellige stentyper.*
+
+### 6.3 Ubundne materialer
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+#### 6.3 Øvrige materialer
+
+De øvrige materialer, der traditionelt anvendes i befæstelser, er delt op i hhv. bundne og ubundne materialer.
+
+**Bundne materialer:**
+- **Beton:** Betonbelægninger dimensioneres med beton i styrkeklasse C40/50 iht. DS/EN 1992-1-1 + AC, 2008.
+- **Hydraulisk bundet bærelag:** HBB specificeres i to typer hhv. HBB-A og HBB-B i styrkeklasse C6/8.
+- **Bitumenstabiliseret materiale:** BSM
+
+**De ubundne materialer er:**
+- **Macadam:** Der skelnes mellem to typer af macadam, hhv. skærvemacadam og singelsmacadam.
+- **Stabilt grus:** Stabilt grus specificeres i to kvaliteter hhv. SG I og SG II.
+- **Knust Beton, Knust Beton og Tegl:** Genbrugsmaterialer der indeholder beton eller en blanding af beton og tegl. Materialerne specificeres i fire kvaliteter hhv. KB, KBT I, KBT II og KBT III.
+- **Knust asfalt, Knust asfalt og Beton:** Genbrugsmaterialer der indeholder asfalt eller en blanding af asfalt og beton. Materialerne specificeres i tre kvaliteter hhv. KAS, KAB I og KAB II.
+- **Bundsikring af sand og grus:** Bundsikring specificeres i to kvaliteter hhv. BL I og BL II.
+- **Bundsikringslag af forbrændingsslagge:** Forbrændingsslagge fra forbrændingsanlæg specificeres i én kvalitet, FS.
+
+I Figur 6.5 er de regningsmæssige E-værdier og anbefalede minimum- og maksimumlagtykkelser for de bundne og ubundne materialer angivet.
+
+| Materiale | E-værdi [MPa] | Anbefalet minimum tykkelse [mm] | Anbefalet maksimum tykkelse ved udlægning i ét lag [mm] |
+|---|---|---|---|
+| **Bundne** | | | |
+| Beton, C40/50, uarmeret | 35.000 | 150 | – |
+| Hydraulisk Bundet Bærelag (HBB-A), C6/8, initial | 9.000 | 150 | 300 |
+| Hydraulisk Bundet Bærelag (HBB-A), terminal | 1.500 | 150 | 300 |
+| Hydraulisk Bundet Bærelag (HBB-B), C6/8, initial | 13.000 | 150 | 250 |
+| Hydraulisk Bundet Bærelag (HBB-B), terminal | 2.000 | 150 | 250 |
+| Bitumenstabiliseret materiale BSM | 700 | 125 | 250 |
+| **Ubundne** | | | |
+| Skærvemacadam (SKM) | 1.000 | 70 | 130 |
+| Singelsmacadam (SIM) | 600 | 70 | 130 |
+| Stabilt grus I (SG I) | 350 | 100 | 250 |
+| Stabilt grus II (SG II) | 300 | 100 | 250 |
+| Knust Beton (KB) | 350 | 100 | 250 |
+| Knust Beton/Tegl I (KBT I) | 250 | 100 | 250 |
+| Knust Beton/Tegl II (KBT II) | 200 | 100 | 250 |
+| Knust Beton/Tegl III (KBT III) | 150 | 100 | 250 |
+| Knust Asfalt (KAS) | 250 | 100 | 250 |
+| Knust Asfalt/Beton I (KAB I) | 250 | 100 | 250 |
+| Knust Asfalt/Beton II (KAB II) | 300 | 100 | 250 |
+| Bundsikring (BL I og BL II), U > 3 | 150 | 200 | 250 |
+| Bundsikring (BL I og BL II), U ≤ 3 | 100 | 200 | 300 |
+| Forbrændingsslagge som bundsikringslag (FS) | 100 | 200 | 250 |
+
+1) For de ubundne materialer er interval for lagtykkelser fastsat ud fra materialetyper. De maksimale lagtykkelser for lagene er anbefalede maksimale lagtykkelse for udlægning af materialerne i ét lag. Ved behov for udlægning af større tykkelse end de anførte maksimale lagtykkelser, udlægges materialet i mere end ét lag.
+
+*Figur 6.5 E-værdier og interval for lagtykkelser for øvrige materialer.*
+
+**Følgende indsættes:**
+
+#### 6.3 Ubundne materialer
+
+Der anvendes sædvanligvis følgende materialer: bærelag og bundsikringslag. De forskellige typer er vist herunder:
+
+**Bærelag:**
+- **Macadam:** Der skelnes mellem to typer af macadam, hhv. SKM og SIM.
+- **Stabilt grus:** Stabilt grus specificeres i to kvaliteter hhv. SG I og SG II.
+- **Knust beton samt Knust beton og tegl:** Materialer der indeholder beton eller en blanding af beton og tegl. Materialerne specificeres i tre kvaliteter hhv. KB, KBT I og KBT II.
+- **Knust asfalt samt Knust beton og asfalt:** Materialer der indeholder asfalt eller en blanding af beton og asfalt. Materialerne specificeres i tre kvaliteter hhv. KAS, KBA I og KBA II.
+- **Forbrændingsslagge:** Materiale af slagge fra affaldsforbrænding. Som bærelag specificeres materialet i én kvalitet, FS I.
+
+**Bundsikringslag:**
+- **Forbrændingsslagge:** Materiale af slagge fra affaldsforbrænding. Materialet specificeres i to kvaliteter hhv. FS I og FS II.
+- **Bundsikringssand og -grus:** Bundsikringssand og -grus specificeres i to kvaliteter hhv. BL I og BL II.
+
+I Figur 6.5 er de regningsmæssige E-værdier og anbefalede minimum- og maksimumlagtykkelser for de ubundne materialer angivet.
+
+| Materiale | E-værdi [MPa] | Anbefalet minimum tykkelse [mm] | Anbefalet maksimum tykkelse ved udlægning i ét lag [mm] |
+|---|---|---|---|
+| **Bærelag** | | | |
+| Skærvemacadam (SKM) | 1.000 | 70 | 130 |
+| Singelsmacadam (SIM) | 600 | 70 | 130 |
+| Stabilt grus I (SG I) | 350 | 100 | 250 |
+| Stabilt grus II (SG II) | 300 | 100 | 250 |
+| Knust Beton (KB) | 400 | 100 | 250 |
+| Knust beton og tegl (KBT I) | 250 | 100 | 250 |
+| Knust beton og tegl (KBT II) | 150 | 100 | 250 |
+| Knust Asfalt (KAS) | 250 | 100 | 250 |
+| Knust beton og asfalt (KBA I) | 350 | 100 | 250 |
+| Knust beton og asfalt (KBA II) | 300 | 100 | 250 |
+| Forbrændingsslagge som bærelag (FS I) | 350 | 100 | 250 |
+| **Bundsikringslag** | | | |
+| Forbrændingsslagge som bundsikringslag (FS I og FS II) | 150 | 100 | 250 |
+| Bundsikringssand og -grus (BL I og BL II), U > 3 | 150 | 200 | 250 |
+| Bundsikringssand og -grus (BL I og BL II), U ≤ 3 | 100 | 200 | 300 |
+
+1) For de ubundne materialer er interval for lagtykkelser fastsat ud fra materialetyper. De maksimale lagtykkelser for lagene er anbefalede maksimale lagtykkelse for udlægning af materialerne i ét lag. Ved behov for udlægning af større tykkelse end de anførte maksimale lagtykkelser, udlægges materialet i mere end ét lag.
+
+*Figur 6.5 E-værdier og interval for lagtykkelser for ubundne materialer.*
+
+**Rettelse af 1. august 2025, slut**
+
+---
+
+## 7 Dimensionering af befæstelser
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Håndbogen indeholder tre niveauer for dimensionering af befæstelser:
+
+- Niveau 1 – Katalogmetoden
+- Niveau 2 – Analytisk-empirisk dimensionering
+- Niveau 3 – Dimensionering ved simulation
+
+**Følgende indsættes:**
+
+Håndbogen indeholder to niveauer for dimensionering af befæstelser:
+
+- Niveau 1 – Katalogmetoden
+- Niveau 2 – Analytisk-empirisk dimensionering
+
+**Rettelse af 1. august 2025, slut**
+
+**Niveau 1** Ved anvendelse af katalogmetoden kan der fastlægges befæstelser i trafikklasse T0 til T5 ved brug af katalogerne i afsnit 8. Metoden kræver udelukkende, at man fastlægger vejens trafikklasse og træffer nogle valg ift. materialetyper. Katalogmetoden forudsætter, at underbunden har en bæreevne på 40 MPa svarende til kategorien for frosttvivlsom underbund.
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+**Niveau 2** er den analytisk-empiriske dimensioneringsmetode, som er indbygget i MMOPP. Den anvendes til dimensionering af befæstelser på grundlag af prædefinerede eller brugervalgte trafik- og materialeparametre. Metoden benyttes, når der ønskes en detaljeret og optimeret dimensionering af befæstelserne. Den dimensionsgivende trafikbelastning fastlægges som beskrevet i afsnit 4 og benyttes som input til beregningerne sammen med valg af materialer og underbundens bæreevne. På niveau 2 kan der dimensioneres fleksible, halvstive og stive befæstelser, og forstærkningsbelægninger af fleksible og halvstive befæstelser.
+
+**Niveau 3** Dimensionering ved simulation, som er indbygget i MMOPP, kan benyttes til at dimensionere befæstelser på grundlag af simulerede nedbrydningsforløb, som sættes op til at overholde standardiserede eller brugervalgte krav til befæstelsens holdbarhed og pålidelighed. På dette niveau kan der dimensioneres nye fleksible befæstelser og forstærkningsbelægninger af fleksible befæstelser, og det er muligt at foretage en optimering af anlægsomkostningerne for nye fleksible befæstelser.
+
+Niveau 1 og 2 betragtes som gældende, mens niveau 3 er ment som et værktøj til at sammenligne nedbrydningsforløbet af forskellige alternative befæstelser eller til økonomisk optimering. Desuden giver dimensionering ved simulation mulighed for at afprøve forskellige klimamodellers påvirkning af en befæstelse.
+
+Både ved anvendelse af den analytisk-empiriske dimensioneringsmetode og ved anvendelse af dimensionering ved simulation er man i stand til at fastlægge flere varianter af en befæstelse ud fra forskellige forhold. Uanset brug af metode gælder det, at der ved det endelige valg af lagtykkelser skal tages hensyn til arbejdets praktiske gennemførelse og udførelsestolerancer, og det bør sikres, at der er overensstemmelse med gældende udbudsforskrifter for de anvendte materialer.
+
+**Følgende indsættes:**
+
+**Niveau 2** er den analytisk-empiriske dimensioneringsmetode, som er indbygget i VejDim. Den anvendes til dimensionering af befæstelser på grundlag af prædefinerede eller brugervalgte trafik- og materialeparametre. Metoden benyttes, når der ønskes en detaljeret og optimeret dimensionering af befæstelserne. Den dimensionsgivende trafikbelastning fastlægges som beskrevet i afsnit 4 og benyttes som input til beregningerne sammen med valg af materialer og underbundens bæreevne. På niveau 2 kan der dimensioneres fleksible befæstelser, og forstærkningsbelægninger.
+
+Ved anvendelse af den analytisk-empiriske dimensioneringsmetode er man i stand til at fastlægge flere varianter af en befæstelse ud fra forskellige forhold.
+
+Uanset brug af dimensioneringsmetode gælder det, at der ved det endelige valg af lagtykkelser skal tages hensyn til arbejdets praktiske gennemførelse og udførelsestolerancer, og det bør sikres, at der er overensstemmelse med gældende udbudsforskrifter for de anvendte materialer.
+
+**Rettelse af 1. august 2025, slut**
+
+### 7.1 Dimensioneringskriterier
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+De danske dimensioneringskriterier har følgende form:
+
+**Ubundne materialer:** Dimensioneringskriteriet er største tilladelige lodrette trykspænding på oversiden af laget:
+
+```
+σ_z = 0,086 MPa × (E / 160 MPa)^1,06 × (NÆ10 / 10^6)^(−0,25)
+```
+
+Som det ses af ovenstående dimensioneringskriterie for ubundne materialer, afhænger den tilladelige trykspænding af lagets E-værdi (E) i MPa.
+
+**Asfalt:** Dimensioneringskriteriet er største tilladelige vandrette træktøjning i undersiden af asfaltlaget:
+
+```
+ε_h = −0,000250 × (NÆ10 / 10^6)^(−0,191)
+```
+
+Ved forstærkningsberegninger beregnes tøjningen i undersiden af det gamle asfaltlag.
+
+**Beton:** Dimensioneringskriteriet er største tilladelige vandrette træktøjning i undersiden af betonlaget:
+
+```
+ε_h = −0,000038 × (NÆ10 / 10^6)^(−0,118)
+```
+
+Dimensioneringskriteriet for beton er et "ækvivalent" dimensioneringskriterie, der sikrer, at der fastlægges samme tykkelser som ved diagrammetoden i den oprindelige Vejregel 7.10.03.
+
+Der gøres opmærksom på, at teoretisk korrekt dimensionering af betonbelægninger foregår ved at bestemme trækspændingerne i betonen fra Æ10-belastningen og sammenholde disse med betonens bøjningstrækstyrke. Spændingerne beregnes enten ved hjælp af Westergaards formler eller Finite Element beregning. Ingen af disse metoder er indbygget i MMOPP.
+
+Opmærksomheden henledes på, at der ved dimensionering af betonbelægninger med MMOPP ikke tages hensyn til bl.a. pladestørrelser, armering, lastoverførsel mellem plader, samt fugestørrelser og typer.
+
+**Betonbelægningssten (BBS):** Der findes ikke et analytisk-empirisk dimensioneringskriterie for betonbelægningssten, det er derfor ikke muligt at dimensionere befæstelser med betonbelægningssten i MMOPP. Befæstelser med betonbelægningssten kan fastlægges ved brug af kataloget angivet i Figur 8.2.
+
+**Hydraulisk Bundne Bærelag (HBB):** Dimensioneringskriteriet er største tilladelige vandrette træktøjning i undersiden af HBB-laget:
+
+```
+HBB-A C6/8:  ε_h = −0,000060 × (NÆ10 / 10^6)^(−0,180)
+HBB-B C6/8:  ε_h = −0,000075 × (NÆ10 / 10^6)^(−0,139)
+```
+
+Kriterierne for HBB afhænger af materialets initial E-værdi (E_INIT), samt hvilken grad af nedbrydning, der accepteres ved dimensioneringsperiodens udløb. Nedbrydningsgraden karakteriseres ved materialets terminal E-værdi (E_TERM). E-værdierne i initialtilstanden er fastlagt ud fra 360-døgns cylindertrykstyrken (højde:diameterforhold på 2:1). E-værdierne fremgår af Figur.
+
+Dimensionering af HBB foretages på grundlag af 28-døgns styrkekravene. Materialerne karakteriseres i henhold til DS/EN 14227-1, og i håndbogen skelnes der mellem typerne HBB-A og HBB-B. Ved dimensionering af befæstelser med HBB i MMOPP anvendes parallel dimensionering, hvor forventet, teoretisk levetid af befæstelsen kontrolleres med HBB-laget i både initial- og terminal tilstand.
+
+Den valgte E-værdi for terminaltilstand sikrer, at materialet efter dimensioneringsperiodens udløb vil bevare en høj bæreevne.
+
+**Bitumenstabiliseret materiale (BSM):** For befæstelser med bitumenstabiliseret materiale er der i denne håndbog benyttet det sydafrikanske kriterie kaldet Stellenbosch kriteriet, som er udviklet på baggrund af laboratorie- og feltundersøgelser og baseret på værdier for materialets kohæsion og friktionsvinkel bestemt ved triaxialforsøg.
+
+Kriteriet er beskrevet i *Technical Guideline, Bitumen Stabilized Materials*, hvor de forskellige parametre, der indgår i kriteriet, er beskrevet nærmere.
+
+Kriteriet ser ud som angivet herunder:
+
+```
+Log N = A − 57,286 × (DSR)^3 + 0,0009159 × (PMDD × RetC)
+```
+
+hvor:
+
+- **N** = Antallet af standardakselpassager, indtil der forekommer en valgt sporkøringsdybde.
+- **A** = Pålidelighedskoefficient knyttet til valgt vejkategori.
+- **DSR** = Deviator Stress Ratio – Forholdet mellem forskellen på største og mindste hovedspænding i den aktuelle spændingstilstand og forskellen på største og mindste hovedspænding ved brudtilstanden.
+- **PMDD** = Compaction Density – Komprimeringsgrad.
+- **RetC** = Retained Cohesion – Forhold mellem kohæsion i vandmættet tilstand og kohæsion ved ligevægt.
+
+Det er ikke for nuværende muligt at dimensionere befæstelser med BSM i MMOPP, men befæstelserne kan fastlægges ud fra kataloget i Figur 8.3. Kataloget er udarbejdet ved brug af det sydafrikanske dimensioneringsværktøj Rubicon Toolbox med udgangspunkt i Stellenbosch kriteriet for BSM-laget og de danske kriterier for de øvrige lag.
+
+**Følgende indsættes:**
+
+De danske dimensioneringskriterier har følgende form:
+
+**Ubundne materialer:** Dimensioneringskriteriet er største tilladelige lodrette trykspænding på oversiden af laget:
+
+```
+σ_z = 0,086 MPa × (E / 160 MPa)^1,06 × (NÆ10 / 10^6)^(−0,25)
+```
+
+Som det ses af ovenstående dimensioneringskriterie for ubundne materialer, afhænger den tilladelige trykspænding af lagets E-værdi (E) i MPa.
+
+**Asfalt:** Dimensioneringskriteriet er største tilladelige vandrette træktøjning i undersiden af asfaltlaget:
+
+```
+ε_h = −0,000250 × (NÆ10 / 10^6)^(−0,191)
+```
+
+Ved forstærkningsberegninger beregnes tøjningen i undersiden af det gamle asfaltlag.
+
+**Betonbelægningssten (BBS):** Der findes ikke et analytisk-empirisk dimensioneringskriterie for betonbelægningssten, det er derfor ikke muligt at dimensionere befæstelser med betonbelægningssten i VejDim. Befæstelser med betonbelægningssten kan fastlægges ved brug af kataloget angivet i Figur 8.2.
+
+**Bitumenstabiliseret materiale (BSM):** For befæstelser med bitumenstabiliseret materiale er der i denne håndbog benyttet det sydafrikanske kriterie kaldet Stellenbosch kriteriet, som er udviklet på baggrund af laboratorie- og feltundersøgelser og baseret på værdier for materialets kohæsion og friktionsvinkel bestemt ved triaxialforsøg.
+
+Kriteriet er beskrevet i *Technical Guideline, Bitumen Stabilized Materials*, hvor de forskellige parametre, der indgår i kriteriet, er beskrevet nærmere.
+
+Kriteriet ser ud som angivet herunder:
+
+```
+Log N = A − 57,286 × (DSR)^3 + 0,0009159 × (PMDD × RetC)
+```
+
+hvor:
+
+- **N** = Antallet af standardakselpassager, indtil der forekommer en valgt sporkøringsdybde.
+- **A** = Pålidelighedskoefficient knyttet til valgt vejkategori.
+- **DSR** = Deviator Stress Ratio – Forholdet mellem forskellen på største og mindste hovedspænding i den aktuelle spændingstilstand og forskellen på største og mindste hovedspænding ved brudtilstanden.
+- **PMDD** = Compaction Density – Komprimeringsgrad.
+- **RetC** = Retained Cohesion – Forhold mellem kohæsion i vandmættet tilstand og kohæsion ved ligevægt.
+
+**Rettelse af 1. august 2025, slut**
+
+### 7.2 Analytisk-Empirisk dimensionering
+
+Den analytisk-empiriske dimensioneringsmetode er baseret på lineærelastiske beregninger med uendelig vandret udstrækning af lagene. Fastlæggelse af lagtykkelserne sker ud fra de dimensioneringskriterier, der er angivet i afsnit 7.1, som sammenkæder trafikmængden udtrykt ved den dimensionsgivende trafikbelastning og de dynamiske påvirkninger, der kan tillades i de enkelte lag.
+
+### 7.3 Dimensionering ved simulation
+
+> **Note:** Hele afsnit 7.3 (inkl. 7.3.1 og 7.3.2) er udgået ved rettelsen af 1. august 2025 **uden erstatning** — "Dimensionering ved simulation er udgået". Indholdet er bevaret her for fuldstændighedens skyld.
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Simulationsberegningerne er baseret på ækvivalente tykkelsers metode. I MMOPP foretages en løbende opskrivning af trafikmængden (stigende tilvækst) med den valgte tilvækst.
+
+Ved denne type dimensionering fastlægges fire forskellige levetider angivet i antal år for den valgte befæstelse. Disse levetider er baseret på acceptgrænser for befæstelsens tilladelige tilstand, som følger:
+
+**IRI – jævnhed af befæstelsens overflade:**
+Tilladelig værdi: 4 m/km
+
+**Sporkøring – gennemsnitlig spordybde:**
+Tilladelig værdi: 10 mm
+
+Typisk er målte spordybder på op til 15 mm acceptable ved normale tværfald. Den valgte grænseværdi giver rum for en 5 mm sporkøring af asfaltlagene, fremkommet ved forskydningsdeformationer, der ikke tages i regning i MMOPP.
+
+**ESNIT** – forhold mellem asfaltlagets gennemsnitlige E-værdi og et intakt asfaltlag med de aktuelle materialers standard E-værdier.
+Tilladelig værdi: 0,67
+Når denne værdi nås, er der risiko for begyndende revnedannelser i køresporet.
+
+**EMIN** – forhold mellem den mindste E-værdi af asfaltlaget og et intakt asfaltlag med de aktuelle materialers standard E-værdier.
+Tilladelig værdi: 0,35
+Når denne værdi nås, er der risiko for slaghuller i køresporet.
+
+#### 7.3.1 Begrænsninger
+
+Der gøres opmærksom på, at simulationsdelen af programmet er kalibreret til danske forhold. Dette medfører, at simulationsberegninger skal udføres under anvendelse af databasens standardparametre for at være i overensstemmelse med håndbogen.
+
+#### 7.3.2 Præcision i simulation
+
+Simulationsberegning er en stokastisk proces, hvor skønnet over de "sande" værdier af middel og spredning for de forskellige levetider bliver mere præcist, jo flere simulationer, der foretages.
+
+Det er f.eks. nødvendigt at foretage ca. 1.000 simulationer for at bestemme 85 % fraktiler for levetiderne med en præcision bedre end 4 %. I det praktiske arbejde samt udviklingsarbejdet med MMOPP har vejregelgruppen sjældent brugt mere end 100 simulationer.
+
+Vurdering af et slutresultat, eller sammenligning af to alternative befæstelser, bør dog altid baseres på et højt antal simulationer.
+
+**Rettelse af 1. august 2025, slut**
+
+### 7.4 Dimensionering af forstærkningsbelægninger
+
+#### 7.4.1 Inddata til forstærkningsdimensionering
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Dimensionering af forstærkningsbelægninger kan udføres ved både analytisk-empirisk dimensionering og ved simulation.
+
+**Følgende indsættes:**
+
+Dimensionering af forstærkningsbelægninger udføres ved analytisk-empirisk dimensionering.
+
+**Rettelse af 1. august 2025, slut**
+
+Som forberedelse til en forstærkningsdimensionering opdeles strækningen ved hjælp af egnede statistiske metoder i delstrækninger, der statistisk set kan betragtes som ensartede med hensyn til materialer, lagtykkelser, nedbrydningstilstand m.v.
+
+Inddata til dimensioneringen er:
+
+- trafik, beregnet efter samme metodik som for nye befæstelser
+- data for den eksisterende befæstelse, hvor der anvendes gennemsnitlige lagtykkelser og 25 % fraktiler for lagenes E-værdier (dvs. at 75 % af E-værdierne er højere end de indtastede værdier)
+- forstærkningslagets E-værdi (typisk 2.000 MPa eller 3.000 MPa afhængig af valg af materiale).
+
+E-værdier vil typisk komme fra faldlodsforsøg. For asfaltlaget bør de målte E-værdier regningsmæssigt korrigeres til referencetemperaturen på 25 °C inden beregning af 25 % fraktilen. Mange faldlodsprogrammer kan udføre denne korrektion automatisk, ellers kan anvendes en omregning efter nedenstående formel, hvor (T) er asfalttemperaturen i °C:
+
+Gammel asfalt (ældre end 1 år):
+
+```
+k = 0,05 + 0,95 × e^(0,03 × ((T − 25 °C) / 1 °C))
+```
+
+Ny asfalt (indtil 1 år):
+
+```
+k = 0,25 + 0,75 × e^(0,13 × ((T − 25 °C) / 1 °C))
+```
+
+Disse faktorer er altså multiplikatorer, f.eks. skal en E-værdi målt på gammel asfalt ved 15 °C multipliceres med en faktor på ca. 0,75 for at kunne anvendes i dimensioneringsberegningerne.
+
+#### 7.4.2 Forstærkningsdimensionering ved analytisk beregning
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Selve dimensioneringen foretages ved, at dimensioneringsprogrammet justerer forstærkningslagets tykkelse, indtil den lineærelastiske beregninger viser, at spændingskriterierne på oversiden af de ubundne lag og underbunden, samt tøjningskriteriet i undersiden af det eksisterende asfaltlag, alle er overholdt.
+
+**Følgende indsættes:**
+
+Selve dimensioneringen foretages ved, at dimensioneringsprogrammet justerer forstærkningslagets tykkelse, indtil den lineærelastiske beregning viser, at spændingskriterierne på oversiden af de ubundne lag og underbunden, samt tøjningskriteriet i undersiden af det eksisterende asfaltlag og spændingskriteriet i det bitumenstabiliserede materiale, alle er overholdt.
+
+**Rettelse af 1. august 2025, slut**
+
+#### 7.4.3 Forstærkningsdimensionering ved simulation
+
+> **Note:** Hele afsnit 7.4.3 er udgået ved rettelsen af 1. august 2025 **uden erstatning** (følger af, at dimensionering ved simulation er udgået). Indholdet er bevaret her for fuldstændighedens skyld.
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Dimensionering af forstærkningsbelægninger ved simulation kræver, at der regningsmæssigt tilvejebringes en nedbrudt befæstelse.
+
+Inddata til dimensioneringen er de samme som til den analytiske dimensionering. Disse anvendes af programmet, så der regningsmæssigt tilvejebringes en nedbrudt befæstelse, hvis E-værdier og nedbrydningstilstand svarer til de egenskaber, der er målt på vejen.
+
+Brugeren kan så indtaste en forstærkningstykkelse. Som udgangspunkt kan f.eks. anvendes resultatet fra den analytiske dimensionering. MMOPP vil så simulere nedbrydningen af den forstærkede befæstelse og præsentere resultatet i form af de sædvanlige middelværdier og spredninger.
+
+Brugeren må herefter vurdere, om der er opnået den ønskede levetid og pålidelighed, eller foretage en beregning med ændret forstærkningstykkelse.
+
+**Rettelse af 1. august 2025, slut**
+
+---
+
+## 8 Katalog
+
+> **Note om katalogtabellerne (tilføjet ved konvertering):** Tabellernes oprindelige 2D-gitter (opbygninger stablet i hver trafikklasse-kolonne) gik tabt i PDF-tekstudtrækket. Hver opbygning herunder er rekonstrueret og krydstjekket mod mindste koblingshøjde i Figur 5.3 (frosttvivlsom underbund, 40 MPa), så hver opbygning er placeret i den trafikklasse, hvis mindstekrav den netop opfylder. Lagene i hver celle er angivet ovenfra og ned (slidlag øverst → bundsikring nederst), tykkelser i mm.
+
+### 8.1 Befæstelser med varmblandet asfalt
+
+> **Note:** Dette katalog er udgået ved rettelsen af 1. august 2025 **uden erstatning** — "Kataloger for dimensionering af befæstelser med varmblandet asfalt … er udgået". Indholdet er bevaret her for fuldstændighedens skyld.
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Befæstelser med varmblandet asfalt til 20 års trafik (lagtykkelse i mm). Opbygningerne er grupperet efter slidlagstype. For T2 og T3 findes alle tre slidlagsvarianter; for T0–T1 anvendes PA, og for T4–T5 anvendes AB eller SMA.
+
+| Slidlagsvariant | T0 | T1 | T2 | T3 | T4 | T5 |
+|---|---|---|---|---|---|---|
+| **Tunge køretøjer pr. døgn** | Ingen | < 1 | ≤ 65 | 65–120 | 120–560 | 560–1.200 |
+| **Æ10-belastning** | – | 0,5 | 0,5–20 | 20–50 | 50–200 | 200–500 |
+| **PA-slidlag** | 30 PA 500<br>120 SG<br>250 BL | 20 PA 500<br>40 GAB 0 2000<br>100 SG<br>240 BL | 20 PA 500<br>95 GAB I 2000<br>150 SG<br>270 BL | 20 PA 500<br>45 GAB 0 2000<br>75 GAB I 2000<br>160 SG<br>300 BL | – | – |
+| **AB-slidlag** | – | – | 25 AB 1000<br>85 GAB I 2000<br>160 SG<br>265 BL | 25 AB 1000<br>40 GAB 0 2000<br>70 GAB I 2000<br>170 SG<br>295 BL | 25 AB 2000<br>45 GAB 0 3000<br>75 GAB I 3000<br>220 SG<br>335 BL | 30 AB 3000<br>50 ABB 3000<br>85 GAB I 3000<br>250 SG<br>350 BL |
+| **SMA-slidlag** | – | – | 25 SMA 2000<br>80 GAB I 2000<br>160 SG<br>275 BL | 25 SMA 2000<br>40 GAB 0 2000<br>65 GAB I 2000<br>170 SG<br>300 BL | 25 SMA 3000<br>50 GAB 0 3000<br>70 GAB I 3000<br>220 SG<br>335 BL | 30 SMA 3000<br>50 ABB 3000<br>85 GAB I 3000<br>250 SG<br>350 BL |
+
+1) Som materiale til ubundet bærelag og bundsikringslag kan anvendes egnede genbrugsmaterialer, såfremt materialernes E-værdi som minimum er den samme eller højere end E-værdierne for hhv. SG og BL.
+
+*Figur 8.1 Befæstelser med varmblandet asfalt for 20 års trafik på frosttvivlsom underbund (40 MPa) for trafikklasse T0–T5 og hastigheder større end 60 km/h. Hvor der er angivet SG, er det tilstrækkeligt at anvende SG II, og hvor der er angivet BL, er det tilstrækkeligt at anvende BL I eller BL II med U ≤ 3.*
+
+**Rettelse af 1. august 2025, slut**
+
+### 8.2 Befæstelser med betonbelægningssten
+
+Befæstelser med betonbelægningssten til 20 års trafik (lagtykkelse i mm) 1) og 3). Opbygningerne er grupperet efter type af bærelag (SG, HBB eller GAB). For T0 anvendes kun SG-varianten.
+
+| Bærelagsvariant | T0 | T1 | T2 | T3 | T4 | T5 |
+|---|---|---|---|---|---|---|
+| **Tunge køretøjer pr. døgn** | Ingen | < 1 | ≤ 65 | 65–120 | 120–560 | 560–1.200 |
+| **Æ10-belastning** | – | 0,5 | 0,5–20 | 20–50 | 50–200 | 200–500 |
+| **SG-bærelag** | 60 BBS<br>30 AG<br>120 SG<br>190 BL 2) | 60 BBS<br>30 AG<br>120 SG<br>190 BL 2) | 80 BBS<br>30 AG<br>240 SG<br>150 BL 2) | 80 BBS<br>30 AG<br>270 SG<br>220 BL | 80 BBS<br>30 AG<br>330 SG<br>260 BL | 90 BBS<br>30 AG<br>370 SG<br>210 BL |
+| **HBB-bærelag** | – | 60 BBS<br>30 AG<br>130 HBB<br>180 BL 2) | 80 BBS<br>30 AG<br>165 HBB<br>225 BL | 80 BBS<br>30 AG<br>180 HBB<br>310 BL | 80 BBS<br>30 AG<br>205 HBB<br>385 BL | 90 BBS<br>30 AG<br>245 HBB<br>335 BL |
+| **GAB-bærelag** | – | 60 BBS<br>30 AG<br>80 GAB I 2000<br>230 BL | 80 BBS<br>30 AG<br>110 GAB I 2000<br>280 BL | 80 BBS<br>30 AG<br>125 GAB I 2000<br>365 BL | 80 BBS<br>30 AG<br>140 GAB I 2000<br>450 BL | 90 BBS<br>30 AG<br>155 GAB I 2000<br>425 BL |
+| **Anbefalet BBS stentype** | A, B, C | A, B, C | A, B, C | A, B | A | A |
+
+Vælges andre stentyper end de anbefalede, bør relevant rådgivning indhentes for at sikre befæstelsens funktionsegenskaber. Se endvidere afsnittet om materialeparametre.
+
+1) Som materiale til ubundet bærelag og bundsikringslag kan anvendes egnede genbrugsmaterialer, såfremt materialernes E-værdi som minimum er den samme eller højere end E-værdierne for hhv. SG og BL.
+2) Tykkelsen er mindre end den anbefalede minimumslagtykkelse, men er erfaringsmæssigt tilstrækkelig.
+3) Tykkelsen af afretningsgruslaget (AG) er 20–40 mm, som angivet i DS 1136. I kataloget er afretningslagets tykkelse angivet som 30 mm.
+
+*Figur 8.2 Befæstelser med betonbelægningssten til 20 års trafik på frosttvivlsom underbund (40 MPa) for trafikklasse T0–T5. Hvor der er angivet SG, er det tilstrækkeligt at anvende SG II, og hvor der er angivet BL, er det tilstrækkeligt at anvende BL I eller BL II med U ≤ 3.*
+
+### 8.3 Befæstelser med bitumenstabiliseret materiale
+
+> **Note:** Dette katalog er udgået ved rettelsen af 1. august 2025 **uden erstatning** — "Kataloger for dimensionering af befæstelser med … bitumenstabiliseret materialer (BSM) er udgået". Indholdet er bevaret her for fuldstændighedens skyld.
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+Befæstelser med bitumenstabiliseret materiale til 20 års trafik (lagtykkelse i mm). Opbygningerne er grupperet efter slidlagstype (AB- eller SMA-løsning).
+
+| Slidlagsvariant | T0 | T1 | T2 | T3 | T4 | T5 |
+|---|---|---|---|---|---|---|
+| **Tunge køretøjer pr. døgn** | Ingen | < 1 | ≤ 65 | 65–120 | 120–560 | 560–1.200 |
+| **Æ10-belastning** | – | 0,5 | 0,5–20 | 20–50 | 50–200 | 200–500 |
+| **AB-løsning** | 15 OB 500<br>125 BSM<br>100 SG<br>160 BL 2) | 25 AB 1000<br>125 BSM<br>100 SG<br>150 BL 2) | 30 AB 2000 3)<br>150 BSM<br>100 SG<br>250 BL | 35 AB 3000 3)<br>160 BSM<br>150 SG<br>255 BL | 40 AB 3000 3)<br>190 BSM<br>200 SG<br>270 BL | 30 AB 3000<br>40 ABB 3000<br>250 BSM<br>200 SG<br>220 BL |
+| **SMA-løsning** | 25 PA 500<br>125 BSM<br>100 SG<br>150 BL 2) | 25 SMA 1000<br>125 BSM<br>100 SG<br>150 BL 2) | 30 SMA 3000<br>160 BSM<br>110 SG<br>200 BL | 35 SMA 3000<br>160 BSM<br>150 SG<br>255 BL | 40 SMA 3000<br>190 BSM<br>200 SG<br>270 BL | 30 SMA 3000<br>40 ABB 3000<br>250 BSM<br>200 SG<br>220 BL |
+
+1) Som materiale til ubundet bærelag og bundsikringslag kan anvendes egnede genbrugsmaterialer, såfremt materialernes E-værdi som minimum er den samme eller højere end E-værdierne for hhv. SG og BL.
+2) Tykkelsen er mindre end de generelt anbefalede minimumslagtykkelser, men er erfaringsmæssigt tilstrækkelig.
+3) Traditionelt anbefales AB 2000 hhv. AB 3000 for trafikklasse T4–T5 hhv. T5. Her er vist AB 2000 og AB 3000 for opnåelse af tilstrækkelig bæreevne.
+
+*Figur 8.3 Befæstelser med bitumenstabiliseret materiale for 20 års trafik på frosttvivlsom underbund (40 MPa) for trafikklasse T0–T5. Hvor der er angivet SG, er det tilstrækkeligt at anvende SG II, og hvor der er angivet BL, er det tilstrækkeligt at anvende BL I eller BL II med U ≤ 3.*
+
+**Rettelse af 1. august 2025, slut**
+
+---
+
+## 9 Bilag
+
+### 9.1 Bilag 1
+
+**Rettelse af 1. august 2025, start**
+
+**Følgende udgår:**
+
+| Asfaltmateriale | Bindemiddelbetegnelse | Anbefalet interval for lagtykkelse [mm] | Interval for trafik [NÆ10/døgn] | Trafikklasse |
+|---|---|---|---|---|
+| **Slidlag** | | | | |
+| OB 500 | Alle typer | 10–15 | 0–500 | T0–T5 |
+| TB k 1000 | 160/220 | 20–25 | 21–200 | T3–T4 |
+| TB k 1000 | 100/150 | 20–25 | 21–500 | T4 |
+| TB k 1500 | 70/100 | 20–25 | 51–500 | T4–T5 |
+| TB k 2500 | 40/60 | 20–25 | 501–800 | T6 |
+| TB k 2500 | Modificeret | 20–25 | 501–800 | T6 |
+| PA 500 | 330/440 | 15–35 | 0–20 | T0–T2 |
+| PA 500 | 250/330 | 15–35 | 0–200 | T0–T3 |
+| AB 1000 | 160/220 | 20–40 | 0–200 | T0–T4 |
+| AB 1500 | 100/150 | 25–40 | 51–200 | T4 |
+| AB 2000 | 70/100 | 25–40 | 51–500 | T4–T5 |
+| AB 3000 | 40/60 | 30–40 | 201–500 | T5 |
+| SMA 1000 | 160/220 | 20–30 | 0–50 | T0–T3 |
+| SMA 1500 | 100/150 | 20–30 | 0–50 | T0–T3 |
+| SMA 2000 | 70/100 | 20–35 | 0–200 | T0–T4 |
+| SMA 3000 | 40/60 | 20–40 | 0–800 | T0–T6 |
+| SMA 3000 | Modificeret | 25–40 | ≥ 501 | T6–T7 |
+| SFB 8000 | 160/220 | 30–80 | ≥ 0 | T0–T7 |
+| SFB 8000 | 70/100 | 30–80 | ≥ 0 | T0–T7 |
+| **Kombilag** | | | | |
+| KBL 500 | 250/330 | 40–65 | 0–200 | T0–T4 |
+| KBL 1000 | 160/220 | 40–65 | 0–200 | T0–T4 |
+| KBL 1500 | 100/150 | 40–65 | 0–200 | T0–T4 |
+| KBL 2000 | 70/100 | 40–65 | 0–200 | T0–T4 |
+| **Bindelag** | | | | |
+| ABB 3000 | 40/60 | 40–85 | 201–500 | T5 |
+| ABB 3000 | Modificeret | 40–85 | ≥ 201 | T5–T7 |
+| **Bærelag** | | | | |
+| GAB 0 2000 | 70/100 | 40–65 | 0–200 | T0–T4 |
+| GAB 0 3000 | 40/60 | 45–70 | 51–200 | T4 |
+| GAB I 2000 | 70/100 | 50–100 | 0–200 | T0–T4 |
+| GAB I 3000 | 40/60 | 60–110 | 51–500 | T4–T5 |
+| GAB II 3000 | 40/60 | 80–180 | ≥ 51 | T4–T7 |
+
+**Følgende indsættes:**
+
+| Asfaltmateriale | Bindemiddelbetegnelse | Anbefalet interval for lagtykkelse [mm] 1) | Anbefalet interval for trafikklasse 2) |
+|---|---|---|---|
+| **Slidlag** | | | |
+| PA 500 | 330/440 | 15–35 | T0–T1 |
+| PA 500 | 250/330 | 15–35 | T0–T2 |
+| AB 1000 | 160/220 | 20–40 | T0–T3 |
+| AB 2000 | 70/100 | 25–40 | T3–T5 |
+| AB 3000 | 40/60 | 30–40 | T4–T5 |
+| SMA 1000 | 160/220 | 20–30 | T0–T3 |
+| SMA 2000 | 70/100 | 20–35 | T2–T4 |
+| SMA 3000 | 40/60 | 20–40 | T3–T6 |
+| SMA 3000 | Modificeret | 25–40 | T5–T7 |
+| TB k 1000 | 160/220 | 20–25 | T3 |
+| TB k 1500 | 70/100 | 20–25 | T4 |
+| TB k 2500 | 40/60 | 20–25 | T5 |
+| TB k 2500 | Modificeret | 20–25 | T5 |
+| OB 500 | Alle typer | 10–15 | T0–T5 |
+| **Bindelag** | | | |
+| ABB 3000 | 40/60 | 40–80 | T5 |
+| ABB 3000 | Modificeret | 40–80 | T5–T7 |
+| **Kombilag** | | | |
+| KBL 500 | 250/330 | 40–65 | T0–T2 |
+| KBL 1000 | 160/220 | 40–65 | T0–T3 |
+| KBL 2000 | 70/100 | 40–65 | T0–T4 |
+| **Bærelag** | | | |
+| GAB 0 2000 | 70/100 | 40–65 | T0–T4 |
+| GAB 0 3000 | 40/60 | 45–70 | T3–T4 |
+| GAB I 2000 | 70/100 | 50–100 | T0–T4 |
+| GAB I 3000 | 40/60 | 60–110 | T4–T5 |
+| GAB II 3000 | 40/60 | 80–160 | T4–T7 |
+
+1) De maksimale lagtykkelser er anbefalede maksimale lagtykkelse for udlægning af materialet i ét lag.
+2) Anbefalet interval for trafik. Af hensyn til typisk egnethed af materialer bør materialer alene anvendes ved trafikklasser større end anført efter nøje overvejelse, herunder vurdering af fx sporkøringsmodstand, slidstyrke mv. Materialer kan uden videre anvendes ved trafikklasser lavere end anført, idet det dog bør overvejes, om dette er hensigtsmæssigt i forhold til fx anlægsøkonomi og levetid.
+
+**Rettelse af 1. august 2025, slut**
+
+---
+
+## Kontakt
+
+**Vejdirektoratet**
+Niels Juels Gade 13
+Postboks 9018
+1022 København K
+Telefon 7244 3333
+
+vd@vd.dk · vejdirektoratet.dk
+vejregler@vd.dk · vejregler.dk
+
+*Transport-, Bygnings- og Boligministeriet*

@@ -599,8 +599,8 @@ def format_trafikkobling(klasse: int) -> str:
 # ---------------------------------------------------------------------------
 # 3. CV_TIL_EU
 #    Kilde: Excel fane 7.4 (GS-GRID Designmanual fig. 3)
-#    Liste af (cv_min, cv_max, eu) - begge grænser er inklusive øvre,
-#    eksklusive nedre (dvs. Cv=30 hører til intervallet 30–60 → Eu=10).
+#    Liste af (cv_min, cv_max, eu) - intervallerne er eksklusive forneden,
+#    inklusive foroven (dvs. Cv=30 hører til intervallet 0–30 → Eu=5).
 # ---------------------------------------------------------------------------
 
 CV_TIL_EU = [
@@ -1580,12 +1580,11 @@ def cv_til_eu(cv: float) -> float | None:
     Konverter vingestyrke Cv (kN/m²) til Eu (MPa).
     Returnerer None hvis Cv er uden for tabelområdet (0–180 kN/m²).
     """
+    if cv == 0:
+        return float(CV_TIL_EU[0][2])
     for cv_min, cv_max, eu in CV_TIL_EU:
-        if cv_min <= cv < cv_max:
+        if cv_min < cv <= cv_max:
             return float(eu)
-    # Øvre grænse er inklusiv
-    if cv == 180:
-        return 30.0
     return None
 
 
