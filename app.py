@@ -39,8 +39,6 @@ from core.data import (
     T_BASIS_TABLE,
     DESIGNDIAGRAM_RAW_TABLES,
     EO_KOLONNER,
-    TRAFIKKOBLING_NOTE,
-    format_trafikkobling,
     format_klasse_interval,
     TRAFIKKLASSER,
     TRAFIKKLASSE_NOTE,
@@ -1043,11 +1041,6 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
             f"**Klasse {valgt}** · {info['belastning']} · "
             f"Eo = {eo:.0f} MPa · _{info['anvendelse']}_"
         )
-        st.caption(
-            f"VD's trafikklassificering (vejledende): {format_trafikkobling(valgt)}"
-        )
-        with st.expander("Vejdirektoratets trafikklassificering"):
-            st.write(TRAFIKKOBLING_NOTE)
     with kol_diagram:
         diagram = next(
             (
