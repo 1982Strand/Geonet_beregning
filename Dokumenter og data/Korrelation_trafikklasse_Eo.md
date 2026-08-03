@@ -3,9 +3,9 @@
 **Status:** dokumentationsgrundlag for trafikklasse-indgangen i appen (implementeret).
 **Grundlag:** 36 VejDim-kørsler med standard E-værdier, udført af DST, juli 2026.
 **Aktuelle tal:** dette notat indeholder bevidst **ingen talttabeller** — de ville
-blive forældede, hver gang datagrundlaget rettes. Datagrundlaget er
-`VejDim_kørsler.csv`, og de afledte tal (ækvivalent Eo, reduktioner, zoner) vises
-altid aktuelt i appens sektion **🚦 Trafikklasse-korrelation**.
+blive forældede, hver gang datagrundlaget rettes. Kørslerne ligger i appens
+sektion **🚦 Trafikklasse-korrelation**, hvor de kan ses og redigeres direkte, og
+hvor de afledte tal (ækvivalent Eo, reduktioner, zoner) altid vises aktuelt.
 
 ---
 
@@ -47,7 +47,7 @@ ses i appen.
   med manuelt E=1500, som var systematisk konservativ).
 
 Fast asfaltpakke pr. klasse (bundet lag låst hvor muligt, ellers VejDim-beregnet).
-De faktiske materialer og tykkelser står i `VejDim_kørsler.csv` og vises i appen
+De faktiske materialer og tykkelser ses i appens kørselstabel og opsummeres
 under *Datagrundlag og forudsætninger*. En vigtig erfaring undervejs: BSM- og
 højklasse-GAB-lags tykkelser er programstyrede i VejDim (kan ikke låses) — de er
 derfor VejDims egne kanoniske værdier.
@@ -127,7 +127,8 @@ kriterier blandes aldrig.
 
 ## 7. Hvor funktionen bor i appen
 
-- `core/data.py` — indlæser `VejDim_kørsler.csv`, tilbageberegner Eo_ækv
+- `core/data.py` — indeholder de 36 standardkørsler
+  (`VEJDIM_KOERSLER_STANDARD_RAEKKER`), tilbageberegner Eo_ækv
   (`back_beregn_eo_aekv` / `korrelation_fra_koersler`) og slår op med
   Eu-interpolation (`trafik_eo_aekv`).
 - `core/calculator.py` — `_slaa_op_interp` interpolerer mellem Eo-kolonnerne
@@ -135,13 +136,14 @@ kriterier blandes aldrig.
 - `app.py` — valg af dimensioneringsgrundlag i begge tilstande samt sektionen
   **🚦 Trafikklasse-korrelation** med metode, forudsætninger, zoner, redigerbare
   kørsler og den afledte Eo_ækv-tabel.
-- `korrelation_final.py` — reproducerer analysen fra CSV'en uden for appen.
+- `korrelation_final.py` — reproducerer analysen uden for appen ud fra
+  standardkørslerne (dine egne redigeringer i appen indgår ikke).
 
 ---
 
 ## Appendiks A: VejDim-kørselsopskrift (til nye kørsler)
 
-Retter du `VejDim_kørsler.csv` eller tilføjer kørsler, skal de udføres med samme
+Retter du kørslerne i appen eller tilføjer nye, skal de udføres med samme
 opsætning som grundlaget, ellers bliver rækkerne ikke sammenlignelige.
 
 **Fælles indstillinger (alle celler)**
@@ -173,7 +175,8 @@ eget alternativ med standardværdier og notér det i bemærkningsfeltet.
 4. Løser VejDim kun det nederste lag: sæt SG trinvist (10 mm ad gangen), lad BL
    være fri, og find den **mindste SG**, hvor beregningen lykkes med alle
    levetider ≥ 20 år.
-5. Overfør t_SG og t_BL (samt totalen) til CSV'en.
+5. Indtast rækken i appens kørselstabel (🚦 Trafikklasse-korrelation) — SG og BL
+   samt asfaltpakken; totalerne beregnes automatisk.
 
 Rækkefølgen SG før BL følger kaskadeprincippet: SG beskytter toppen af BL, BL
 beskytter underbunden.
@@ -213,5 +216,6 @@ Responsmodellen er valideret mod lærebogens gennemregnede eksempel
 *Kilder: VejDim (Vejdirektoratet); Håndbog "Dimensionering af befæstelser og
 forstærkningsbelægninger" (jan. 2022/rev. aug. 2025); MMOPP Brugervejledning
 (2007); Bolet & Busch: "Vejbefæstelsers dimensionering" (AAU 2016) kap. 7;
-appens designdiagrammer i `core/data.py`. Datagrundlag: `VejDim_kørsler.csv`.
-Reproducerbart script: `korrelation_final.py`.*
+appens designdiagrammer i `core/data.py`. Datagrundlag: de 36 standardkørsler i
+`core/data.py`, redigerbare i appen. Reproducerbart script:
+`korrelation_final.py`.*

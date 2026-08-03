@@ -9,9 +9,6 @@ diagrammets gyldighedsområde).
 Ingen imports herfra må være UI-relaterede (Streamlit, Flask, osv.).
 """
 
-import csv
-import os
-
 # ---------------------------------------------------------------------------
 # 1. T_BASIS_TABLE
 #    Struktur: T_BASIS_TABLE[eu_mpa][eo_mpa][lag_type] → tykkelse i cm
@@ -633,114 +630,120 @@ TRAFIK_EU_PUNKTER = [5, 10, 15, 20, 30, 40]
 # ---------------------------------------------------------------------------
 # VEJDIM_KOERSLER — datagrundlaget (de rå kørsler)
 #
-#   Indlæses fra "Dokumenter og data/VejDim_kørsler.csv", som er den samlede
-#   fil med alle 36 kørsler. Redigeres CSV'en, følger appen med: både de rå
-#   lagtykkelser, asfaltpakkerne og den tilbageberegnede Eo_ækv.
+#   De 36 kørsler ligger som standardrækker herunder og redigeres direkte i
+#   appen (🚦 Trafikklasse-korrelation). Brugerens ændringer gemmes af appen;
+#   "Nulstil til standard" bringer tabellen tilbage til rækkerne herunder.
 #
-#   VEJDIM_KOERSLER:      {T: {Eu: {"sg": mm, "bl": mm}}} — kun de ubundne lag.
-#                         sg = stabilgrus (SG II), bl = bundsikring (BL II).
-#                         Ubundet total = sg + bl → Eo_ækv tilbageberegnes
-#                         herfra (se korrelation_fra_koersler).
-#   VEJDIM_KOERSLER_RAEKKER: fulde rækker (asfaltlag, E, levetid, koblingshøjde,
-#                         kilde, bemærkning) til visning af forudsætningerne.
+#   VEJDIM_KOERSLER_STANDARD_RAEKKER: én dict pr. (T, Eu) med alle rådata —
+#       asfaltpakke (navn + tykkelse pr. lag), vist asfalt-E, de ubundne lag
+#       (sg = stabilgrus SG II, bl = bundsikring BL II), styrende levetid og
+#       bemærkning. Totaler er IKKE gemt: de udledes af berig_koersel_raekker,
+#       så de aldrig kan komme i modstrid med lagtykkelserne.
 #
-#   Kan CSV'en ikke læses, bruges den indbyggede fallback nedenfor, så appen
-#   altid kan køre. Fuld dokumentation: "Korrelation_trafikklasse_Eo.md".
+#   Eo_ækv tilbageberegnes af korrelation_fra_koersler ud fra sg + bl.
+#   Fuld dokumentation: "Dokumenter og data/Korrelation_trafikklasse_Eo.md".
 # ---------------------------------------------------------------------------
 
-_REPO_ROD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VEJDIM_KOERSLER_CSV = os.path.join(
-    _REPO_ROD, "Dokumenter og data", "VejDim_kørsler.csv"
-)
-
-# Indbygget reservekopi — bruges kun hvis CSV-filen mangler eller er defekt.
-_VEJDIM_KOERSLER_FALLBACK = {
-    "T1": {5: {"sg": 110, "bl": 450}, 10: {"sg": 100, "bl": 356}, 15: {"sg": 100, "bl": 292},
-           20: {"sg": 100, "bl": 243}, 30: {"sg": 100, "bl": 200}, 40: {"sg": 100, "bl": 200}},
-    "T2": {5: {"sg": 370, "bl": 458}, 10: {"sg": 250, "bl": 458}, 15: {"sg": 190, "bl": 446},
-           20: {"sg": 160, "bl": 419}, 30: {"sg": 140, "bl": 346}, 40: {"sg": 140, "bl": 272}},
-    "T3": {5: {"sg": 430, "bl": 449}, 10: {"sg": 300, "bl": 449}, 15: {"sg": 210, "bl": 470},
-           20: {"sg": 170, "bl": 449}, 30: {"sg": 150, "bl": 364}, 40: {"sg": 150, "bl": 283}},
-    "T4": {5: {"sg": 240, "bl": 944}, 10: {"sg": 230, "bl": 740}, 15: {"sg": 220, "bl": 629},
-           20: {"sg": 220, "bl": 539}, 30: {"sg": 220, "bl": 409}, 40: {"sg": 220, "bl": 319}},
-    "T5": {5: {"sg": 270, "bl": 1042}, 10: {"sg": 260, "bl": 818}, 15: {"sg": 250, "bl": 689},
-           20: {"sg": 250, "bl": 590}, 30: {"sg": 240, "bl": 459}, 40: {"sg": 240, "bl": 360}},
-    "T6": {5: {"sg": 280, "bl": 1117}, 10: {"sg": 270, "bl": 876}, 15: {"sg": 270, "bl": 723},
-           20: {"sg": 260, "bl": 629}, 30: {"sg": 260, "bl": 478}, 40: {"sg": 260, "bl": 370}},
-}
+def _kd(T, eu, slid, t_slid, binde, t_binde, bundet, t_bundet, e_asf, sg, bl,
+        levetid, bem=""):
+    return {
+        "T": T, "eu": eu,
+        "slidlag": slid, "t_slid_mm": float(t_slid),
+        "bindelag": binde, "t_bindelag_mm": float(t_binde),
+        "bundet_baerelag": bundet, "t_bundet_mm": float(t_bundet),
+        "E_asf_vist_MPa": float(e_asf), "t_SG_mm": float(sg), "t_BL_mm": float(bl),
+        "levetid_styrende_aar": float(levetid), "bemaerkning": bem,
+    }
 
 
-def _csv_tal(vaerdi, standard=None):
-    """Konverter en CSV-celle til tal (dansk komma tilladt). None ved tom/ugyldig."""
-    if vaerdi is None:
-        return standard
-    tekst = str(vaerdi).strip().replace(",", ".")
-    if tekst in ("", "-"):
-        return standard
-    try:
-        return float(tekst)
-    except ValueError:
-        return standard
+_SG_MIN = "SGII begrænset til minimumstykkelse 100"
+_SG_BL_MIN = _SG_MIN + " og BLII begrænset til minimumstykkelse 200"
+_VEJDIM_BEREGNER = "VejDim beregner tykkelsen af det bundne bærelag"
+
+VEJDIM_KOERSLER_STANDARD_RAEKKER = [
+    _kd("T1",  5, "AB 1000", 40, "-", 0, "-", 0, 1000, 110, 450, 20.2),
+    _kd("T1", 10, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 356, 20.0, _SG_MIN),
+    _kd("T1", 15, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 292, 20.2, _SG_MIN),
+    _kd("T1", 20, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 243, 20.1, _SG_MIN),
+    _kd("T1", 30, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 200, 29.6, _SG_BL_MIN),
+    _kd("T1", 40, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 200, 30.1, _SG_BL_MIN),
+    _kd("T2",  5, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 160, 758, 20.1),
+    _kd("T2", 10, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 250, 590, 20.0),
+    _kd("T2", 15, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 150, 506, 20.1),
+    _kd("T2", 20, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 160, 419, 20.1),
+    _kd("T2", 30, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 160, 316, 20.2),
+    _kd("T2", 40, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 150, 257, 20.1),
+    _kd("T3",  5, "AB 1000", 40, "-", 0, "GAB 0 2000", 95, 1862, 200, 818, 20.0),
+    _kd("T3", 10, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 190, 649, 20.1),
+    _kd("T3", 15, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 190, 539, 20.1),
+    _kd("T3", 20, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 190, 460, 20.0),
+    _kd("T3", 30, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 200, 334, 20.0),
+    _kd("T3", 40, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 200, 255, 20.1),
+    _kd("T4",  5, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 240, 944, 20.0, _VEJDIM_BEREGNER),
+    _kd("T4", 10, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 230, 739, 20.0, _VEJDIM_BEREGNER),
+    _kd("T4", 15, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 220, 629, 20.1, _VEJDIM_BEREGNER),
+    _kd("T4", 20, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 220, 537, 20.0, _VEJDIM_BEREGNER),
+    _kd("T4", 30, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 230, 392, 20.1, _VEJDIM_BEREGNER),
+    _kd("T4", 40, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 230, 301, 20.0, _VEJDIM_BEREGNER),
+    _kd("T5",  5, "AB 2000", 40, "-", 0, "GAB I 3000", 132, 3456, 270, 1042, 20.0, _VEJDIM_BEREGNER),
+    _kd("T5", 10, "AB 2000", 40, "-", 0, "GAB I 3000", 131, 3448, 260, 818, 20.1, _VEJDIM_BEREGNER),
+    _kd("T5", 15, "AB 2000", 40, "-", 0, "GAB I 3000", 131, 3448, 250, 689, 20.0, _VEJDIM_BEREGNER),
+    _kd("T5", 20, "AB 2000", 40, "-", 0, "GAB I 3000", 130, 3440, 250, 590, 20.1, _VEJDIM_BEREGNER),
+    _kd("T5", 30, "AB 2000", 40, "-", 0, "GAB I 3000", 130, 3440, 240, 459, 20.1, _VEJDIM_BEREGNER),
+    _kd("T5", 40, "AB 2000", 40, "-", 0, "GAB I 3000", 129, 3432, 240, 360, 20.1, _VEJDIM_BEREGNER),
+    _kd("T6",  5, "SMA 3000", 40, "-", 0, "GAB II 3000", 142, 3817, 280, 1117, 20.0, _VEJDIM_BEREGNER),
+    _kd("T6", 10, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 270, 876, 20.0, _VEJDIM_BEREGNER),
+    _kd("T6", 15, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 270, 723, 20.0, _VEJDIM_BEREGNER),
+    _kd("T6", 20, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 260, 629, 20.0, _VEJDIM_BEREGNER),
+    _kd("T6", 30, "SMA 3000", 40, "-", 0, "GAB II 3000", 140, 3805, 260, 478, 20.0, _VEJDIM_BEREGNER),
+    _kd("T6", 40, "SMA 3000", 40, "-", 0, "GAB II 3000", 140, 3805, 260, 370, 20.1, _VEJDIM_BEREGNER),
+]
 
 
-def indlaes_vejdim_koersler(
-    sti: str | None = None,
-) -> tuple[dict, list[dict]]:
-    """Indlæs de samlede VejDim-kørsler fra CSV.
+def berig_koersel_raekker(raekker: list[dict]) -> list[dict]:
+    """Tilføj de afledte totaler til hver række.
 
-    Returnerer (koersler, raekker):
-        koersler = {T: {Eu(int): {"sg": float, "bl": float}}}
-        raekker  = liste af fulde rækker (tal konverteret) inkl. de afledte
-                   totaler "t_ubundet_total_mm" (SG+BL) og
-                   "t_befaestelse_total_mm" (alle lag). Totalerne beregnes her
-                   og står derfor ikke i CSV'en — den indeholder kun rådata, så
-                   der ikke kan opstå uoverensstemmelser.
-    Ved manglende/defekt fil returneres (fallback, []).
+    "t_ubundet_total_mm" = SG + BL (indgår i tilbageberegningen af Eo_ækv)
+    "t_befaestelse_total_mm" = alle lag (asfaltpakke + SG + BL) — relevant for
+    frostkontrollen. Begge udledes altid, så de ikke kan blive forældede.
     """
-    sti = sti or VEJDIM_KOERSLER_CSV
-    koersler: dict = {}
-    raekker: list[dict] = []
-    try:
-        with open(sti, encoding="utf-8-sig", newline="") as f:
-            for r in csv.DictReader(f, delimiter=";"):
-                t = (r.get("T") or "").strip()
-                eu = _csv_tal(r.get("Eu_MPa"))
-                sg = _csv_tal(r.get("t_SG_mm"))
-                bl = _csv_tal(r.get("t_BL_mm"))
-                if not t or eu is None or sg is None or bl is None:
-                    continue
-                koersler.setdefault(t, {})[int(eu)] = {"sg": sg, "bl": bl}
-                t_slid = _csv_tal(r.get("t_slid_mm"), 0.0)
-                t_binde = _csv_tal(r.get("t_bindelag_mm"), 0.0)
-                t_bundet = _csv_tal(r.get("t_bundet_mm"), 0.0)
-                raekker.append({
-                    "T": t,
-                    "eu": int(eu),
-                    "slidlag": (r.get("slidlag") or "").strip(),
-                    "t_slid_mm": t_slid,
-                    "bindelag": (r.get("bindelag") or "").strip(),
-                    "t_bindelag_mm": t_binde,
-                    "bundet_baerelag": (r.get("bundet_baerelag") or "").strip(),
-                    "t_bundet_mm": t_bundet,
-                    "E_asf_vist_MPa": _csv_tal(r.get("E_asf_vist_MPa")),
-                    "t_SG_mm": sg,
-                    "t_BL_mm": bl,
-                    # Afledte totaler — beregnes altid, står ikke i CSV'en.
-                    "t_ubundet_total_mm": sg + bl,
-                    "t_befaestelse_total_mm": t_slid + t_binde + t_bundet + sg + bl,
-                    "levetid_styrende_aar": _csv_tal(r.get("levetid_styrende_aar")),
-                    "bemaerkning": (r.get("bemaerkning") or "").strip(),
-                })
-    except (OSError, csv.Error, ValueError):
-        return _VEJDIM_KOERSLER_FALLBACK, []
-    if not koersler:
-        return _VEJDIM_KOERSLER_FALLBACK, []
-    return koersler, raekker
+    ud = []
+    for r in raekker:
+        sg = float(r.get("t_SG_mm") or 0)
+        bl = float(r.get("t_BL_mm") or 0)
+        bundne = (
+            float(r.get("t_slid_mm") or 0)
+            + float(r.get("t_bindelag_mm") or 0)
+            + float(r.get("t_bundet_mm") or 0)
+        )
+        ud.append({
+            **r,
+            "t_ubundet_total_mm": sg + bl,
+            "t_befaestelse_total_mm": bundne + sg + bl,
+        })
+    return ud
 
 
-VEJDIM_KOERSLER, VEJDIM_KOERSLER_RAEKKER = indlaes_vejdim_koersler()
-# "csv" hvis grundlaget kom fra filen, ellers "indbygget" (fallback).
-VEJDIM_KOERSLER_KILDE = "csv" if VEJDIM_KOERSLER_RAEKKER else "indbygget"
+def koersler_fra_raekker(raekker: list[dict]) -> dict:
+    """Byg {T: {Eu: {"sg", "bl"}}} fra rækkerne — det korrelationen bruger."""
+    ud: dict = {}
+    for r in raekker:
+        t = str(r.get("T") or "").strip()
+        try:
+            eu = int(float(r.get("eu")))
+        except (TypeError, ValueError):
+            continue
+        if not t:
+            continue
+        ud.setdefault(t, {})[eu] = {
+            "sg": float(r.get("t_SG_mm") or 0),
+            "bl": float(r.get("t_BL_mm") or 0),
+        }
+    return ud
+
+
+VEJDIM_KOERSLER_RAEKKER = berig_koersel_raekker(VEJDIM_KOERSLER_STANDARD_RAEKKER)
+VEJDIM_KOERSLER = koersler_fra_raekker(VEJDIM_KOERSLER_RAEKKER)
 
 
 def back_beregn_eo_aekv(

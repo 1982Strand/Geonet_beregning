@@ -47,9 +47,9 @@ from core.data import (
     trafik_eo_aekv,
     eo_til_naermeste_klasse,
     format_trafikklasse,
-    VEJDIM_KOERSLER,
-    VEJDIM_KOERSLER_CSV,
-    indlaes_vejdim_koersler,
+    VEJDIM_KOERSLER_STANDARD_RAEKKER,
+    berig_koersel_raekker,
+    koersler_fra_raekker,
     korrelation_fra_koersler,
     TRAFIK_UNDER,
     TRAFIK_OVER,
@@ -509,122 +509,76 @@ def _aktiv_t_basis_table() -> dict:
 # Trafikklasse-korrelation: redigerbare VejDim-kørsler
 # ---------------------------------------------------------------------------
 
-def _csv_mtime() -> float:
-    """Ændringstidspunkt for kørsels-CSV'en (0.0 hvis filen mangler)."""
-    try:
-        return os.path.getmtime(VEJDIM_KOERSLER_CSV)
-    except OSError:
-        return 0.0
+_KOERSEL_FELTER = (
+    "T", "eu", "slidlag", "t_slid_mm", "bindelag", "t_bindelag_mm",
+    "bundet_baerelag", "t_bundet_mm", "E_asf_vist_MPa", "t_SG_mm", "t_BL_mm",
+    "levetid_styrende_aar", "bemaerkning",
+)
+_KOERSEL_TEKSTFELTER = ("T", "slidlag", "bindelag", "bundet_baerelag", "bemaerkning")
 
 
-def _live_koersler_csv() -> tuple[dict, list[dict]]:
-    """Læs kørsels-CSV'en på ny ved hver scriptkørsel.
+def _standard_koersel_raekker() -> list[dict]:
+    """Frisk kopi af de indbyggede standardkørsler (rådata uden totaler)."""
+    return [dict(r) for r in VEJDIM_KOERSLER_STANDARD_RAEKKER]
 
-    core.data læser kun filen ved import, og Streamlit importerer moduler én
-    gang pr. serverproces. Uden en frisk indlæsning her ville rettelser i CSV'en
-    først slå igennem efter en fuld genstart af serveren. Filen er lille
-    (36 rækker), så det koster reelt ingenting at læse den hver gang.
+
+def _normaliser_koersel_raekker(raekker) -> list[dict]:
+    """Saniter en liste af kørselsrækker fra JSON eller editoren.
+
+    Rækker uden trafikklasse/Eu eller uden gyldige ubundne tykkelser droppes.
+    Er der intet brugbart tilbage, bruges standardrækkerne.
     """
-    return indlaes_vejdim_koersler()
+    if not isinstance(raekker, list):
+        return _standard_koersel_raekker()
+    ud: list[dict] = []
+    for r in raekker:
+        if not isinstance(r, dict):
+            continue
+        t = str(r.get("T") or "").strip()
+        try:
+            eu = int(float(r.get("eu")))
+            sg = float(r.get("t_SG_mm"))
+            bl = float(r.get("t_BL_mm"))
+        except (TypeError, ValueError):
+            continue
+        if not t or sg < 0 or bl < 0:
+            continue
+        ny = {"T": t, "eu": eu, "t_SG_mm": sg, "t_BL_mm": bl}
+        for felt in _KOERSEL_FELTER:
+            if felt in ny:
+                continue
+            vaerdi = r.get(felt)
+            if felt in _KOERSEL_TEKSTFELTER:
+                ny[felt] = str(vaerdi or "").strip()
+            else:
+                try:
+                    ny[felt] = float(vaerdi)
+                except (TypeError, ValueError):
+                    ny[felt] = 0.0
+        ud.append(ny)
+    ud.sort(key=lambda r: (r["T"], r["eu"]))
+    return ud or _standard_koersel_raekker()
 
 
-def _standard_koersler() -> dict:
-    """Frisk kopi af standard-kørslerne som ubundet total (SG+BL) i mm pr. T×Eu.
-
-    Kun summen indgår i tilbageberegningen af Eo_ækv — fordelingen mellem
-    stabilgrus og bundsikring har ingen betydning for broen. Den originale
-    SG/BL-fordeling (dokumentation) ligger i CSV'ens rækker.
-    """
-    koersler = _live_koersler_csv()[0] or VEJDIM_KOERSLER
-    return {
-        t: {
-            int(eu): float((v.get("sg") or 0) + (v.get("bl") or 0))
-            for eu, v in raekker.items()
-        }
-        for t, raekker in koersler.items()
-    }
-
-
-def _normaliser_koersler(koersler: dict | None) -> dict:
-    """Saniter kørsels-dict til {T: {eu(int): ubundet_mm (float ≥ 0)}}.
-
-    Kun trafikklasser og Eu-punkter fra standarden bevares; manglende/ugyldige
-    værdier fyldes fra standarden, så tabellen altid er komplet og gyldig.
-    Celler i det ældre format {'sg': …, 'bl': …} migreres til deres sum.
-    """
-    std = _standard_koersler()
-    if not isinstance(koersler, dict):
-        return std
-    ud: dict = {}
-    for t, std_raekker in std.items():
-        raw_t = koersler.get(t) or {}
-        ud[t] = {}
-        for eu, std_v in std_raekker.items():
-            raw_v = raw_t.get(eu, raw_t.get(str(eu)))
-            if isinstance(raw_v, dict):
-                # Ældre gemt format med sg/bl — migrér til total.
-                sg, bl = raw_v.get("sg"), raw_v.get("bl")
-                raw_v = None if sg is None and bl is None else (
-                    (sg or 0) + (bl or 0)
-                )
-            try:
-                val = float(raw_v)
-            except (TypeError, ValueError):
-                val = std_v
-            ud[t][eu] = val if val >= 0 else std_v
-    return ud
-
-
-def _koersler_afvigelser(koersler: dict) -> dict:
-    """Kun de celler der afviger fra CSV-standarden (brugerens overstyringer)."""
-    std = _standard_koersler()
-    ud: dict = {}
-    for t, raekker in koersler.items():
-        for eu, v in raekker.items():
-            if std.get(t, {}).get(eu) != v:
-                ud.setdefault(t, {})[eu] = v
-    return ud
-
-
-def indlaes_koersler() -> dict:
-    """Indlæs kørsler: CSV-standarden med brugerens overstyringer lagt ovenpå."""
+def indlaes_koersel_raekker() -> list[dict]:
+    """Indlæs kørslerne: brugerens gemte tabel, ellers standardrækkerne."""
     if os.path.exists(KORRELATION_JSON):
         try:
-            # utf-8-sig: tolerér BOM fra håndredigerede filer (fx PowerShell).
+            # utf-8-sig: tolerér BOM fra håndredigerede filer.
             with open(KORRELATION_JSON, "r", encoding="utf-8-sig") as f:
-                raw = json.load(f)
-            fuld = _normaliser_koersler(raw)
-            # Migrér ældre filer, der gemte alle 36 celler: skriv kun
-            # afvigelserne, så senere CSV-rettelser slår igennem for resten.
-            antal_raw = sum(
-                len(v) for v in raw.values() if isinstance(v, dict)
-            ) if isinstance(raw, dict) else 0
-            if antal_raw != sum(len(v) for v in _koersler_afvigelser(fuld).values()):
-                gem_koersler(fuld)
-            return fuld
+                return _normaliser_koersel_raekker(json.load(f))
         except (OSError, json.JSONDecodeError, TypeError):
             pass
-    return _standard_koersler()
+    return _standard_koersel_raekker()
 
 
-def gem_koersler(koersler: dict) -> None:
-    """Gem kun brugerens afvigelser fra CSV-standarden.
-
-    Derved forbliver "Dokumenter og data/VejDim_kørsler.csv" grundlaget: retter
-    man en tykkelse dér, slår den igennem for alle celler, brugeren ikke selv
-    har overstyret. Er der ingen afvigelser, fjernes filen helt.
-    """
-    afvigelser = _koersler_afvigelser(koersler)
-    if not afvigelser:
+def gem_koersel_raekker(raekker: list[dict]) -> None:
+    """Gem kørselstabellen. Er den identisk med standarden, fjernes filen."""
+    if raekker == _standard_koersel_raekker():
         slet_koersler_json_og_nulstil()
         return
-    # JSON-nøgler skal være strenge — Eu gemmes som str, læses tilbage via _normaliser.
-    serialiserbar = {
-        t: {str(eu): v for eu, v in raekker.items()}
-        for t, raekker in afvigelser.items()
-    }
     with open(KORRELATION_JSON, "w", encoding="utf-8") as f:
-        json.dump(serialiserbar, f, ensure_ascii=False, indent=2)
+        json.dump(raekker, f, ensure_ascii=False, indent=2)
 
 
 def slet_koersler_json_og_nulstil() -> None:
@@ -632,14 +586,19 @@ def slet_koersler_json_og_nulstil() -> None:
         os.remove(KORRELATION_JSON)
 
 
-def _aktiv_koersler() -> dict:
-    return st.session_state.get("vejdim_koersler", VEJDIM_KOERSLER)
+def _aktiv_koersel_raekker() -> list[dict]:
+    """De aktive kørsler (rådata) — grundlaget for hele trafikklasse-flowet."""
+    return st.session_state.get(
+        "vejdim_koersel_raekker", VEJDIM_KOERSLER_STANDARD_RAEKKER
+    )
 
 
 def _aktiv_korrelation() -> dict:
     """Den aktive korrelationstabel (T → Eu → Eo_ækv/zone), tilbageberegnet fra
-    de aktive VejDim-kørsler mod det aktive designdiagram."""
-    return korrelation_fra_koersler(_aktiv_koersler(), _aktiv_t_basis_table())
+    de aktive kørsler mod det aktive designdiagram."""
+    return korrelation_fra_koersler(
+        koersler_fra_raekker(_aktiv_koersel_raekker()), _aktiv_t_basis_table()
+    )
 
 
 def _diagrammer_har_aktuel_schema(diagrammer: list[dict]) -> bool:
@@ -668,19 +627,8 @@ if (
     diagrammer_genindlaest = True
 if "aktiv_t_basis_table" not in st.session_state or diagrammer_genindlaest:
     _opdater_aktiv_t_basis_table()
-# Genindlæs kørslerne når CSV-filen er ændret, så rettelser i
-# "Dokumenter og data/VejDim_kørsler.csv" slår igennem ved en simpel
-# genindlæsning af siden. Brugerens egne overstyringer ligger i JSON-filen
-# og lægges ovenpå igen af indlaes_koersler().
-if (
-    "vejdim_koersler" not in st.session_state
-    or st.session_state.get("_koersler_csv_mtime") != _csv_mtime()
-):
-    st.session_state["vejdim_koersler"] = indlaes_koersler()
-    st.session_state["_koersler_csv_mtime"] = _csv_mtime()
-    # Ryd editor-widgetens egen tilstand, så den ikke genanvender gamle
-    # cellerettelser oven på det nye grundlag.
-    st.session_state.pop("koersel_editor", None)
+if "vejdim_koersel_raekker" not in st.session_state:
+    st.session_state["vejdim_koersel_raekker"] = indlaes_koersel_raekker()
 
 # ---------------------------------------------------------------------------
 # Farvepalette
@@ -4202,23 +4150,6 @@ def render_designdiagrammer() -> None:
         _opdater_aktiv_t_basis_table()
 
 
-def _koersler_fra_records(records: list[dict]) -> dict:
-    """Byg kørsels-dict fra data_editor-rækker (ubundet total pr. T×Eu)."""
-    ud: dict = {}
-    for r in records:
-        t = r.get("Trafikklasse")
-        try:
-            eu = int(r.get("Eu (MPa)"))
-        except (TypeError, ValueError):
-            continue
-        try:
-            vaerdi = max(float(r.get("Ubundet opbygning (mm)")), 0.0)
-        except (TypeError, ValueError):
-            vaerdi = None  # tom/ugyldig celle → standardværdi via normaliser
-        ud.setdefault(t, {})[eu] = vaerdi
-    return _normaliser_koersler(ud)
-
-
 def _korrelation_pivot_rows(korr: dict) -> list[dict]:
     """Eo_ækv-tabellen som rækker til st.dataframe (T × Eu → tekst)."""
     rows = []
@@ -4364,7 +4295,7 @@ def _tykkelse_interval(vaerdier: list[float]) -> str:
 
 
 def _asfaltpakke_rows(raekker: list[dict]) -> list[dict]:
-    """Byg asfaltpakke-tabellen dynamisk ud fra kørslerne (CSV)."""
+    """Byg asfaltpakke-tabellen dynamisk ud fra de aktive kørsler."""
     ud: list[dict] = []
     for t in TRAFIKKLASSER:
         t_raekker = [r for r in raekker if r["T"] == t]
@@ -4452,174 +4383,125 @@ def render_trafikklasse_korrelation() -> None:
         "i beregningen."
     )
 
-    # Frisk indlæsning af CSV'en, så rettelser i filen ses ved genindlæsning.
-    csv_koersler, csv_raekker = _live_koersler_csv()
-    csv_koersler = csv_koersler or VEJDIM_KOERSLER
+    raekker = berig_koersel_raekker(_aktiv_koersel_raekker())
 
     with st.expander("Metode og fremgangsmåde", expanded=True):
         st.markdown(_KORR_METODE_MD)
     with st.expander("Datagrundlag og forudsætninger"):
-        st.markdown(_KORR_DATA_INTRO_MD.format(antal=len(csv_raekker) or 36))
+        st.markdown(_KORR_DATA_INTRO_MD.format(antal=len(raekker) or 36))
         st.dataframe(
-            _asfaltpakke_rows(csv_raekker),
+            _asfaltpakke_rows(raekker),
             width="content",
             hide_index=True,
         )
         st.markdown(_KORR_DATA_NOTE_MD)
-        st.markdown(
-            "**Rå kørsler — original fordeling på stabilgrus (SG) og "
-            "bundsikring (BL), mm:**"
-        )
-        st.dataframe(
-            [
-                {
-                    "Trafikklasse": t,
-                    **{
-                        f"Eu {eu}": (
-                            f"{v['sg']:.0f} + {v['bl']:.0f} = {v['sg'] + v['bl']:.0f}"
-                        )
-                        for eu, v in csv_koersler.get(t, {}).items()
-                    },
-                }
-                for t in TRAFIKKLASSER
-            ],
-            width="content",
-            hide_index=True,
-        )
-        st.caption(
-            "Kun summen (SG + BL) indgår i tilbageberegningen — fordelingen "
-            "mellem lagene har ingen betydning for Eo_ækv."
-        )
-
-        st.markdown(
-            "**Samlet befæstelseshøjde inkl. asfalt (mm)** — asfaltpakke + SG + BL:"
-        )
-        total_pr_celle = {
-            (r["T"], r["eu"]): r["t_befaestelse_total_mm"] for r in csv_raekker
-        }
-        st.dataframe(
-            [
-                {
-                    "Trafikklasse": t,
-                    **{
-                        f"Eu {eu}": (
-                            f"{total_pr_celle[(t, eu)]:.0f}"
-                            if (t, eu) in total_pr_celle else "—"
-                        )
-                        for eu in TRAFIK_EU_PUNKTER
-                    },
-                }
-                for t in TRAFIKKLASSER
-            ],
-            width="content",
-            hide_index=True,
-        )
-        st.caption(
-            "Beregnes af appen ud fra lagtykkelserne i CSV'en — de afledte "
-            "totaler står derfor ikke i filen og kan ikke blive forældede. "
-            "Højden er relevant for frostkontrollen (koblingshøjde), som ligger "
-            "uden for korrelationen."
-        )
     with st.expander("Hvorfor vi ved at koblingen holder"):
         st.markdown(_KORR_CHECKS_MD)
     with st.expander("Zoner og forbehold"):
         st.markdown(_KORR_ZONER_MD)
-    if csv_raekker:
-        st.caption(
-            f"Datagrundlag: **Dokumenter og data/VejDim_kørsler.csv** — alle "
-            f"{len(csv_raekker)} kørsler samlet. Redigeres filen, slår "
-            f"ændringerne igennem her og i dimensioneringen, når du "
-            f"genindlæser siden (browserens opdatér-knap). "
-            f"Fuld dokumentation: *Korrelation_trafikklasse_Eo.md* · "
-            f"reproducerbart script: *korrelation_final.py*."
-        )
-    else:
-        st.warning(
-            "⚠️ **VejDim_kørsler.csv kunne ikke læses** — der vises indbyggede "
-            "reserveværdier. Kontrollér filen i *Dokumenter og data*."
-        )
+    st.caption(
+        "Fuld dokumentation: *Dokumenter og data/Korrelation_trafikklasse_Eo.md*."
+    )
 
     st.divider()
 
     import pandas as pd
 
-    koersler = st.session_state["vejdim_koersler"]
-
-    st.subheader("VejDim-kørsler — ubundet opbygning (redigerbar)")
+    st.subheader("VejDim-kørsler (redigerbar)")
     st.caption(
-        "For hver trafikklasse og underbund (Eu): den samlede ubundne opbygning "
-        "VejDim krævede. Værdierne kommer fra VejDim_kørsler.csv, indtil du "
-        "selv retter en celle. Rediger tykkelsen — Eo_ækv-tabellen nedenfor "
-        "genberegnes og gemmes automatisk. Kun totalen indgår i broen; den "
-        "originale SG/BL-fordeling ses under *Datagrundlag og forudsætninger*."
+        "De oprindelige kørsler, præcis som de blev indtastet i VejDim — og "
+        "samtidig det grundlag, dimensioneringen regner på. Ret en værdi, og "
+        "Eo_ækv-tabellen nedenfor og trafikklasse-beregningen følger med med "
+        "det samme. **Ubundet** og **Samlet højde** beregnes automatisk og kan "
+        "ikke redigeres."
     )
 
-    # Nulstilling hører til her, hvor overstyringerne laves: den fjerner de
-    # manuelle værdier, så alle celler igen følger CSV'en.
     if st.button(
         "Nulstil til standardværdier",
         type="secondary",
-        help="Fjerner dine manuelle overstyringer, så alle celler igen "
-             "matcher værdierne i VejDim_kørsler.csv.",
+        help="Kasserer dine ændringer og gendanner de oprindelige 36 kørsler.",
     ):
         slet_koersler_json_og_nulstil()
-        st.session_state["vejdim_koersler"] = _standard_koersler()
+        st.session_state["vejdim_koersel_raekker"] = _standard_koersel_raekker()
         st.session_state.pop("koersel_editor", None)
         st.rerun()
 
     editor_rows = [
         {
-            "Trafikklasse": t,
-            "Eu (MPa)": eu,
-            "Ubundet opbygning (mm)": koersler[t][eu],
+            "Trafikklasse": r["T"],
+            "Eu (MPa)": r["eu"],
+            "Slidlag": r["slidlag"],
+            "t slidlag (mm)": r["t_slid_mm"],
+            "Bindelag": r["bindelag"],
+            "t bindelag (mm)": r["t_bindelag_mm"],
+            "Bundet bærelag": r["bundet_baerelag"],
+            "t bundet (mm)": r["t_bundet_mm"],
+            "Asfalt-E (MPa)": r["E_asf_vist_MPa"],
+            "SG (mm)": r["t_SG_mm"],
+            "BL (mm)": r["t_BL_mm"],
+            "Ubundet (mm)": r["t_ubundet_total_mm"],
+            "Samlet højde (mm)": r["t_befaestelse_total_mm"],
+            "Levetid (år)": r["levetid_styrende_aar"],
+            "Bemærkning": r["bemaerkning"],
         }
-        for t in TRAFIKKLASSER
-        for eu in TRAFIK_EU_PUNKTER
+        for r in raekker
     ]
+    _mm = dict(min_value=0.0, step=10.0, format="%.0f")
     redigeret = st.data_editor(
         pd.DataFrame(editor_rows),
-        width="content",
+        width="stretch",
         height=700,
         hide_index=True,
-        # Ingen width pr. kolonne: Streamlit auto-tilpasser da bredden til det
-        # bredeste af indhold og overskrift, så overskrifter ikke klippes af.
         column_config={
-            "Trafikklasse": st.column_config.TextColumn(
-                "Trafikklasse", disabled=True,
-            ),
-            "Eu (MPa)": st.column_config.NumberColumn(
-                "Eu (MPa)", disabled=True, format="%.0f",
-            ),
-            "Ubundet opbygning (mm)": st.column_config.NumberColumn(
-                "Ubundet opbygning (mm)",
-                min_value=0.0, step=10.0, format="%.0f",
-            ),
+            "Trafikklasse": st.column_config.TextColumn("Trafikklasse", disabled=True),
+            "Eu (MPa)": st.column_config.NumberColumn("Eu (MPa)", disabled=True, format="%.0f"),
+            "t slidlag (mm)": st.column_config.NumberColumn("t slidlag (mm)", **_mm),
+            "t bindelag (mm)": st.column_config.NumberColumn("t bindelag (mm)", **_mm),
+            "t bundet (mm)": st.column_config.NumberColumn("t bundet (mm)", **_mm),
+            "Asfalt-E (MPa)": st.column_config.NumberColumn(
+                "Asfalt-E (MPa)", min_value=0.0, step=100.0, format="%.0f"),
+            "SG (mm)": st.column_config.NumberColumn("SG (mm)", **_mm),
+            "BL (mm)": st.column_config.NumberColumn("BL (mm)", **_mm),
+            # Afledte kolonner — beregnes, kan ikke redigeres.
+            "Ubundet (mm)": st.column_config.NumberColumn(
+                "Ubundet (mm)", disabled=True, format="%.0f",
+                help="SG + BL — det tal Eo_ækv beregnes ud fra."),
+            "Samlet højde (mm)": st.column_config.NumberColumn(
+                "Samlet højde (mm)", disabled=True, format="%.0f",
+                help="Asfaltpakke + SG + BL. Relevant for frostkontrollen."),
+            "Levetid (år)": st.column_config.NumberColumn(
+                "Levetid (år)", min_value=0.0, step=0.1, format="%.1f"),
         },
         key="koersel_editor",
     )
 
-    ny_koersler = _koersler_fra_records(redigeret.to_dict("records"))
-    if ny_koersler != koersler:
-        st.session_state["vejdim_koersler"] = ny_koersler
-        gem_koersler(ny_koersler)
-        koersler = ny_koersler
+    nye_raekker = _normaliser_koersel_raekker([
+        {
+            "T": r["Trafikklasse"], "eu": r["Eu (MPa)"],
+            "slidlag": r["Slidlag"], "t_slid_mm": r["t slidlag (mm)"],
+            "bindelag": r["Bindelag"], "t_bindelag_mm": r["t bindelag (mm)"],
+            "bundet_baerelag": r["Bundet bærelag"], "t_bundet_mm": r["t bundet (mm)"],
+            "E_asf_vist_MPa": r["Asfalt-E (MPa)"],
+            "t_SG_mm": r["SG (mm)"], "t_BL_mm": r["BL (mm)"],
+            "levetid_styrende_aar": r["Levetid (år)"],
+            "bemaerkning": r["Bemærkning"],
+        }
+        for r in redigeret.to_dict("records")
+    ])
+    if nye_raekker != _aktiv_koersel_raekker():
+        st.session_state["vejdim_koersel_raekker"] = nye_raekker
+        gem_koersel_raekker(nye_raekker)
+        raekker = berig_koersel_raekker(nye_raekker)
 
-    # Vis hvilke celler der er overstyret i forhold til CSV-grundlaget.
-    afvigelser = _koersler_afvigelser(koersler)
-    if afvigelser:
-        std = _standard_koersler()
-        detaljer = ", ".join(
-            f"{t}/Eu {eu}: {std[t][eu]:.0f} → **{v:.0f}** mm"
-            for t, raekker in afvigelser.items()
-            for eu, v in sorted(raekker.items())
+    if nye_raekker != _standard_koersel_raekker():
+        antal = sum(
+            1 for ny, std in zip(nye_raekker, _standard_koersel_raekker())
+            if ny != std
         )
-        antal = sum(len(v) for v in afvigelser.values())
         _boks(
             "boks-adv", "✏️",
-            f"<b>{antal} celle(r) er manuelt overstyret</b> og afviger fra "
-            f"VejDim_kørsler.csv: {detaljer}. Øvrige celler følger CSV'en. "
-            f"Brug <i>Nulstil kørsler til standard</i> for at fjerne "
-            f"overstyringerne.",
+            f"<b>{antal} kørsel(er) er ændret</b> i forhold til de oprindelige "
+            f"værdier. Brug <i>Nulstil til standardværdier</i> for at gendanne dem.",
         )
 
     st.divider()
@@ -4651,7 +4533,9 @@ def render_trafikklasse_korrelation() -> None:
         "det *aktive* designdiagram — redigeres diagramdata (eller kørslerne "
         "ovenfor), kan celler flytte zone."
     )
-    korr = korrelation_fra_koersler(koersler, _aktiv_t_basis_table())
+    korr = korrelation_fra_koersler(
+        koersler_fra_raekker(raekker), _aktiv_t_basis_table()
+    )
     # Uden width pr. kolonne auto-tilpasses bredden til indhold/overskrift.
     st.dataframe(
         _korrelation_pivot_rows(korr),

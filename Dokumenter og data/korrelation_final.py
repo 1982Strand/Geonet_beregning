@@ -4,34 +4,39 @@
 Reproducerer Fase B (Korrelation_trafikklasse_Eo.md). Koeres fra repo-roden med
 projektets .venv:  .venv\\Scripts\\python.exe "Dokumenter og data\\korrelation_final.py"
 
-Laeser: VejDim_kørsler.csv (alle 36 koersler samlet) og appens live T_BASIS_TABLE
-(core/data.py). Ingen skrivning; printer korrelations- og reduktionstabellen samt
-konsistenschecks.
+Laeser standardkoerslerne (VEJDIM_KOERSLER_STANDARD_RAEKKER) og appens live
+T_BASIS_TABLE fra core/data.py. Bemaerk: scriptet bruger de INDBYGGEDE
+standardkoersler — aendringer, du har lavet i appens redigerbare tabel, ligger i
+appens egen gemte fil og indgaar ikke her. Ingen skrivning; printer
+korrelations- og reduktionstabellen samt konsistenschecks.
 """
-import csv, math, sys, os
+import math, sys, os
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
-from core.data import T_BASIS_TABLE, EO_KOLONNER
+from core.data import (
+    T_BASIS_TABLE, EO_KOLONNER, VEJDIM_KOERSLER_STANDARD_RAEKKER,
+)
 
-DOK = os.path.join(REPO, "Dokumenter og data")
-KOERSLER_CSV = os.path.join(DOK, "VejDim_kørsler.csv")
 NU = 0.35
 A = 150.0                 # pladeradius mm (Ø300)
 P = 0.20                  # MPa (Eo lineaer i p)
 E_BASE_DIAGRAM = 300.0    # antaget granulaer basemodul i diagrammet (MSL/SG-kvalitet)
 
-def load(path):
-    with open(path, encoding="utf-8-sig") as f:
-        return list(csv.DictReader(f, delimiter=";"))
+def num(v):
+    if v in (None, ""):
+        return None
+    return float(str(v).replace(",", "."))
 
-def num(s):
-    return float(s.replace(",", ".")) if s not in (None, "") else None
-
-# Samlet datasaet: alle koersler fra den fælles CSV
-data = {}
-for r in load(KOERSLER_CSV):
-    data[(r["T"], int(r["Eu_MPa"]))] = r
+# Samlet datasaet: standardkoerslerne, opslag paa (T, Eu)
+data = {
+    (r["T"], int(r["eu"])): {
+        "t_SG_mm": r["t_SG_mm"],
+        "t_BL_mm": r["t_BL_mm"],
+        "t_bundet_mm": r["t_bundet_mm"],
+    }
+    for r in VEJDIM_KOERSLER_STANDARD_RAEKKER
+}
 
 def interp_eo(eu, tyk, felt="uarmeret"):
     row = T_BASIS_TABLE[eu]
