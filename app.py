@@ -48,9 +48,8 @@ from core.data import (
     eo_til_naermeste_klasse,
     format_trafikklasse,
     VEJDIM_KOERSLER,
-    VEJDIM_KOERSLER_RAEKKER,
-    VEJDIM_KOERSLER_KILDE,
-    VEJDIM_KOERSLER_ADVARSLER,
+    VEJDIM_KOERSLER_CSV,
+    indlaes_vejdim_koersler,
     korrelation_fra_koersler,
     TRAFIK_UNDER,
     TRAFIK_OVER,
@@ -510,19 +509,39 @@ def _aktiv_t_basis_table() -> dict:
 # Trafikklasse-korrelation: redigerbare VejDim-kørsler
 # ---------------------------------------------------------------------------
 
+def _csv_mtime() -> float:
+    """Ændringstidspunkt for kørsels-CSV'en (0.0 hvis filen mangler)."""
+    try:
+        return os.path.getmtime(VEJDIM_KOERSLER_CSV)
+    except OSError:
+        return 0.0
+
+
+def _live_koersler_csv() -> tuple[dict, list[dict], list[str]]:
+    """Læs kørsels-CSV'en på ny ved hver scriptkørsel.
+
+    core.data læser kun filen ved import, og Streamlit importerer moduler én
+    gang pr. serverproces. Uden en frisk indlæsning her ville rettelser i CSV'en
+    først slå igennem efter en fuld genstart af serveren. Filen er lille
+    (36 rækker), så det koster reelt ingenting at læse den hver gang.
+    """
+    return indlaes_vejdim_koersler()
+
+
 def _standard_koersler() -> dict:
     """Frisk kopi af standard-kørslerne som ubundet total (SG+BL) i mm pr. T×Eu.
 
     Kun summen indgår i tilbageberegningen af Eo_ækv — fordelingen mellem
     stabilgrus og bundsikring har ingen betydning for broen. Den originale
-    SG/BL-fordeling (dokumentation) står i VEJDIM_KOERSLER.
+    SG/BL-fordeling (dokumentation) ligger i CSV'ens rækker.
     """
+    koersler = _live_koersler_csv()[0] or VEJDIM_KOERSLER
     return {
         t: {
             int(eu): float((v.get("sg") or 0) + (v.get("bl") or 0))
             for eu, v in raekker.items()
         }
-        for t, raekker in VEJDIM_KOERSLER.items()
+        for t, raekker in koersler.items()
     }
 
 
@@ -649,8 +668,19 @@ if (
     diagrammer_genindlaest = True
 if "aktiv_t_basis_table" not in st.session_state or diagrammer_genindlaest:
     _opdater_aktiv_t_basis_table()
-if "vejdim_koersler" not in st.session_state:
+# Genindlæs kørslerne når CSV-filen er ændret, så rettelser i
+# "Dokumenter og data/VejDim_kørsler.csv" slår igennem ved en simpel
+# genindlæsning af siden. Brugerens egne overstyringer ligger i JSON-filen
+# og lægges ovenpå igen af indlaes_koersler().
+if (
+    "vejdim_koersler" not in st.session_state
+    or st.session_state.get("_koersler_csv_mtime") != _csv_mtime()
+):
     st.session_state["vejdim_koersler"] = indlaes_koersler()
+    st.session_state["_koersler_csv_mtime"] = _csv_mtime()
+    # Ryd editor-widgetens egen tilstand, så den ikke genanvender gamle
+    # cellerettelser oven på det nye grundlag.
+    st.session_state.pop("koersel_editor", None)
 
 # ---------------------------------------------------------------------------
 # Farvepalette
@@ -4404,14 +4434,16 @@ def render_trafikklasse_korrelation() -> None:
         st.session_state["vejdim_koersler"] = _standard_koersler()
         st.rerun()
 
+    # Frisk indlæsning af CSV'en, så rettelser i filen ses ved genindlæsning.
+    csv_koersler, csv_raekker, csv_advarsler = _live_koersler_csv()
+    csv_koersler = csv_koersler or VEJDIM_KOERSLER
+
     with st.expander("Metode og fremgangsmåde", expanded=True):
         st.markdown(_KORR_METODE_MD)
     with st.expander("Datagrundlag og forudsætninger"):
-        st.markdown(
-            _KORR_DATA_INTRO_MD.format(antal=len(VEJDIM_KOERSLER_RAEKKER) or 36)
-        )
+        st.markdown(_KORR_DATA_INTRO_MD.format(antal=len(csv_raekker) or 36))
         st.dataframe(
-            _asfaltpakke_rows(VEJDIM_KOERSLER_RAEKKER),
+            _asfaltpakke_rows(csv_raekker),
             width="content",
             hide_index=True,
         )
@@ -4428,7 +4460,7 @@ def render_trafikklasse_korrelation() -> None:
                         f"Eu {eu}": (
                             f"{v['sg']:.0f} + {v['bl']:.0f} = {v['sg'] + v['bl']:.0f}"
                         )
-                        for eu, v in VEJDIM_KOERSLER[t].items()
+                        for eu, v in csv_koersler.get(t, {}).items()
                     },
                 }
                 for t in TRAFIKKLASSER
@@ -4442,13 +4474,14 @@ def render_trafikklasse_korrelation() -> None:
         )
     with st.expander("Zoner og forbehold"):
         st.markdown(_KORR_ZONER_MD)
-    if VEJDIM_KOERSLER_KILDE == "csv":
+    if csv_raekker:
         st.caption(
-            "Datagrundlag: **Dokumenter og data/VejDim_kørsler.csv** — alle 36 "
-            "kørsler samlet. Redigeres filen, opdateres forudsætningerne og "
-            "kørslerne herunder automatisk ved næste genindlæsning. "
-            "Fuld dokumentation: *Korrelation_trafikklasse_Eo.md* · "
-            "reproducerbart script: *korrelation_final.py*."
+            f"Datagrundlag: **Dokumenter og data/VejDim_kørsler.csv** — alle "
+            f"{len(csv_raekker)} kørsler samlet. Redigeres filen, slår "
+            f"ændringerne igennem her og i dimensioneringen, når du "
+            f"genindlæser siden (browserens opdatér-knap). "
+            f"Fuld dokumentation: *Korrelation_trafikklasse_Eo.md* · "
+            f"reproducerbart script: *korrelation_final.py*."
         )
     else:
         st.warning(
@@ -4456,12 +4489,12 @@ def render_trafikklasse_korrelation() -> None:
             "reserveværdier. Kontrollér filen i *Dokumenter og data*."
         )
 
-    if VEJDIM_KOERSLER_ADVARSLER:
+    if csv_advarsler:
         st.warning(
             "⚠️ **Uoverensstemmelse i VejDim_kørsler.csv** — kolonnen "
             "*t_ubundet_total_mm* er kun dokumentation; beregningen bruger "
             "altid t_SG_mm + t_BL_mm:\n\n- "
-            + "\n- ".join(VEJDIM_KOERSLER_ADVARSLER)
+            + "\n- ".join(csv_advarsler)
         )
 
     st.divider()
