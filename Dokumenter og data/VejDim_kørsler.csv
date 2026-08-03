@@ -1,37 +1,37 @@
-T;Eu_MPa;slidlag;t_slid_mm;bindelag;t_bindelag_mm;bundet_baerelag;t_bundet_mm;E_asf_vist_MPa;t_SG_mm;t_BL_mm;levetid_styrende_aar;koblingshoejde_mm;bemaerkning
-T1;5;AB 1000;40;-;0;-;0;1000;110;450;20,2;600;
-T1;10;AB 1000;40;-;0;-;0;1000;100;356;20,0;496;SGII begrænset til minimumstykkelse 100
-T1;15;AB 1000;40;-;0;-;0;1000;100;292;20,2;432;SGII begrænset til minimumstykkelse 100
-T1;20;AB 1000;40;-;0;-;0;1000;100;243;20,1;383;SGII begrænset til minimumstykkelse 100
-T1;30;AB 1000;40;-;0;-;0;1000;100;200;29,6;340;SGII begrænset til minimumstykkelse 100 og BLII begrænset til minimumstykkelse 200
-T1;40;AB 1000;40;-;0;-;0;1000;100;200;30,1;340;SGII begrænset til minimumstykkelse 100 og BLII begrænset til minimumstykkelse 200
-T2;5;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;370;458;20,1;948;
-T2;10;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;250;458;20,0;828;
-T2;15;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;190;446;20,1;756;
-T2;20;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;160;419;20,1;699;
-T2;30;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;140;346;20,2;606;
-T2;40;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;140;272;20,1;532;
-T3;5;AB 1000;40;-;0;GAB 0 2000;100;2538;430;449;20,0;1019;
-T3;10;AB 1000;40;-;0;GAB 0 2000;100;2538;300;449;20,1;889;
-T3;15;AB 1000;40;-;0;GAB 0 2000;100;2538;210;470;20,1;820;
-T3;20;AB 1000;40;-;0;GAB 0 2000;100;2538;170;449;20,0;759;
-T3;30;AB 1000;40;-;0;GAB 0 2000;100;2538;150;364;20,0;654;
-T3;40;AB 1000;40;-;0;GAB 0 2000;100;2538;150;283;20,1;573;
-T4;5;AB 2000;40;-;0;GAB 0 2000;120;2593;240;944;20,0;1344;VejDim beregner tykkelsen af det bundne bærelag
-T4;10;AB 2000;40;-;0;GAB 0 2000;120;2593;230;740;20,0;1130;VejDim beregner tykkelsen af det bundne bærelag
-T4;15;AB 2000;40;-;0;GAB 0 2000;119;2591;220;629;20,1;1008;VejDim beregner tykkelsen af det bundne bærelag
-T4;20;AB 2000;40;-;0;GAB 0 2000;118;2588;220;539;20,0;917;VejDim beregner tykkelsen af det bundne bærelag
-T4;30;AB 2000;40;-;0;GAB 0 2000;118;2588;220;409;20,1;787;VejDim beregner tykkelsen af det bundne bærelag
-T4;40;AB 2000;40;-;0;GAB 0 2000;117;2586;220;319;20,0;696;VejDim beregner tykkelsen af det bundne bærelag
-T5;5;AB 2000;40;-;0;GAB I 3000;132;3456;270;1042;20,0;1484;VejDim beregner tykkelsen af det bundne bærelag
-T5;10;AB 2000;40;-;0;GAB I 3000;131;3448;260;818;20,1;1249;VejDim beregner tykkelsen af det bundne bærelag
-T5;15;AB 2000;40;-;0;GAB I 3000;131;3448;250;689;20,0;1110;VejDim beregner tykkelsen af det bundne bærelag
-T5;20;AB 2000;40;-;0;GAB I 3000;130;3440;250;590;20,1;1010;VejDim beregner tykkelsen af det bundne bærelag
-T5;30;AB 2000;40;-;0;GAB I 3000;130;3440;240;459;20,1;869;VejDim beregner tykkelsen af det bundne bærelag
-T5;40;AB 2000;40;-;0;GAB I 3000;129;3432;240;360;20,1;769;VejDim beregner tykkelsen af det bundne bærelag
-T6;5;SMA 3000;40;-;0;GAB II 3000;142;3817;280;1117;20,0;1579;VejDim beregner tykkelsen af det bundne bærelag
-T6;10;SMA 3000;40;-;0;GAB II 3000;141;3811;270;876;20,0;1327;VejDim beregner tykkelsen af det bundne bærelag
-T6;15;SMA 3000;40;-;0;GAB II 3000;141;3811;270;723;20,0;1174;VejDim beregner tykkelsen af det bundne bærelag
-T6;20;SMA 3000;40;-;0;GAB II 3000;141;3811;260;629;20,0;1070;VejDim beregner tykkelsen af det bundne bærelag
-T6;30;SMA 3000;40;-;0;GAB II 3000;140;3805;260;478;20,0;918;VejDim beregner tykkelsen af det bundne bærelag
-T6;40;SMA 3000;40;-;0;GAB II 3000;140;3805;260;370;20,1;810;VejDim beregner tykkelsen af det bundne bærelag
+T;Eu_MPa;slidlag;t_slid_mm;bindelag;t_bindelag_mm;bundet_baerelag;t_bundet_mm;E_asf_vist_MPa;t_SG_mm;t_BL_mm;t_ubundet_total_mm;levetid_styrende_aar;koblingshoejde_mm;bemaerkning
+T1;5;AB 1000;40;-;0;-;0;1000;110;450;560;20,2;600;
+T1;10;AB 1000;40;-;0;-;0;1000;100;356;456;20,0;496;SGII begrænset til minimumstykkelse 100
+T1;15;AB 1000;40;-;0;-;0;1000;100;292;392;20,2;432;SGII begrænset til minimumstykkelse 100
+T1;20;AB 1000;40;-;0;-;0;1000;100;243;343;20,1;383;SGII begrænset til minimumstykkelse 100
+T1;30;AB 1000;40;-;0;-;0;1000;100;200;300;29,6;340;SGII begrænset til minimumstykkelse 100 og BLII begrænset til minimumstykkelse 200
+T1;40;AB 1000;40;-;0;-;0;1000;100;200;300;30,1;340;SGII begrænset til minimumstykkelse 100 og BLII begrænset til minimumstykkelse 200
+T2;5;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;370;458;828;20,1;948;
+T2;10;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;250;458;708;20,0;828;
+T2;15;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;190;446;636;20,1;756;
+T2;20;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;160;419;579;20,1;699;
+T2;30;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;140;346;486;20,2;606;
+T2;40;AB 1000;40;GAB 0 2000;40;GAB 0 2000;40;1744;140;272;412;20,1;532;
+T3;5;AB 1000;40;-;0;GAB 0 2000;100;2538;430;449;879;20,0;1019;
+T3;10;AB 1000;40;-;0;GAB 0 2000;100;2538;300;449;749;20,1;889;
+T3;15;AB 1000;40;-;0;GAB 0 2000;100;2538;210;470;680;20,1;820;
+T3;20;AB 1000;40;-;0;GAB 0 2000;100;2538;170;449;619;20,0;759;
+T3;30;AB 1000;40;-;0;GAB 0 2000;100;2538;150;364;514;20,0;654;
+T3;40;AB 1000;40;-;0;GAB 0 2000;100;2538;150;283;433;20,1;573;
+T4;5;AB 2000;40;-;0;GAB 0 2000;120;2593;240;944;1184;20,0;1344;VejDim beregner tykkelsen af det bundne bærelag
+T4;10;AB 2000;40;-;0;GAB 0 2000;120;2593;230;740;970;20,0;1130;VejDim beregner tykkelsen af det bundne bærelag
+T4;15;AB 2000;40;-;0;GAB 0 2000;119;2591;220;629;849;20,1;1008;VejDim beregner tykkelsen af det bundne bærelag
+T4;20;AB 2000;40;-;0;GAB 0 2000;118;2588;220;539;759;20,0;917;VejDim beregner tykkelsen af det bundne bærelag
+T4;30;AB 2000;40;-;0;GAB 0 2000;118;2588;220;409;629;20,1;787;VejDim beregner tykkelsen af det bundne bærelag
+T4;40;AB 2000;40;-;0;GAB 0 2000;117;2586;220;319;539;20,0;696;VejDim beregner tykkelsen af det bundne bærelag
+T5;5;AB 2000;40;-;0;GAB I 3000;132;3456;270;1042;1312;20,0;1484;VejDim beregner tykkelsen af det bundne bærelag
+T5;10;AB 2000;40;-;0;GAB I 3000;131;3448;260;818;1078;20,1;1249;VejDim beregner tykkelsen af det bundne bærelag
+T5;15;AB 2000;40;-;0;GAB I 3000;131;3448;250;689;939;20,0;1110;VejDim beregner tykkelsen af det bundne bærelag
+T5;20;AB 2000;40;-;0;GAB I 3000;130;3440;250;590;840;20,1;1010;VejDim beregner tykkelsen af det bundne bærelag
+T5;30;AB 2000;40;-;0;GAB I 3000;130;3440;240;459;699;20,1;869;VejDim beregner tykkelsen af det bundne bærelag
+T5;40;AB 2000;40;-;0;GAB I 3000;129;3432;240;360;600;20,1;769;VejDim beregner tykkelsen af det bundne bærelag
+T6;5;SMA 3000;40;-;0;GAB II 3000;142;3817;280;1117;1397;20,0;1579;VejDim beregner tykkelsen af det bundne bærelag
+T6;10;SMA 3000;40;-;0;GAB II 3000;141;3811;270;876;1146;20,0;1327;VejDim beregner tykkelsen af det bundne bærelag
+T6;15;SMA 3000;40;-;0;GAB II 3000;141;3811;270;723;993;20,0;1174;VejDim beregner tykkelsen af det bundne bærelag
+T6;20;SMA 3000;40;-;0;GAB II 3000;141;3811;260;629;889;20,0;1070;VejDim beregner tykkelsen af det bundne bærelag
+T6;30;SMA 3000;40;-;0;GAB II 3000;140;3805;260;478;738;20,0;918;VejDim beregner tykkelsen af det bundne bærelag
+T6;40;SMA 3000;40;-;0;GAB II 3000;140;3805;260;370;630;20,1;810;VejDim beregner tykkelsen af det bundne bærelag

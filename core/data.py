@@ -683,17 +683,22 @@ def _csv_tal(vaerdi, standard=None):
         return standard
 
 
-def indlaes_vejdim_koersler(sti: str | None = None) -> tuple[dict, list[dict]]:
+def indlaes_vejdim_koersler(
+    sti: str | None = None,
+) -> tuple[dict, list[dict], list[str]]:
     """Indlæs de samlede VejDim-kørsler fra CSV.
 
-    Returnerer (koersler, raekker):
-        koersler = {T: {Eu(int): {"sg": float, "bl": float}}}
-        raekker  = liste af fulde rækker (alle kolonner, tal konverteret)
-    Ved manglende/defekt fil returneres (fallback, []).
+    Returnerer (koersler, raekker, advarsler):
+        koersler  = {T: {Eu(int): {"sg": float, "bl": float}}}
+        raekker   = liste af fulde rækker (alle kolonner, tal konverteret)
+        advarsler = tekster hvis kolonnen t_ubundet_total_mm ikke stemmer med
+                    t_SG_mm + t_BL_mm (summen er altid den gældende værdi)
+    Ved manglende/defekt fil returneres (fallback, [], []).
     """
     sti = sti or VEJDIM_KOERSLER_CSV
     koersler: dict = {}
     raekker: list[dict] = []
+    _advarsler: list[str] = []
     try:
         with open(sti, encoding="utf-8-sig", newline="") as f:
             for r in csv.DictReader(f, delimiter=";"):
@@ -704,6 +709,15 @@ def indlaes_vejdim_koersler(sti: str | None = None) -> tuple[dict, list[dict]]:
                 if not t or eu is None or sg is None or bl is None:
                     continue
                 koersler.setdefault(t, {})[int(eu)] = {"sg": sg, "bl": bl}
+                # Valgfri totalkolonne: ren dokumentation/kontrol. SG + BL er
+                # kilden — afviger totalen, samles det op i _advarsler nedenfor.
+                total = _csv_tal(r.get("t_ubundet_total_mm"))
+                if total is not None and abs(total - (sg + bl)) > 0.5:
+                    _advarsler.append(
+                        f"{t} / Eu {int(eu)}: t_ubundet_total_mm = {total:.0f} mm "
+                        f"passer ikke med t_SG_mm + t_BL_mm = {sg + bl:.0f} mm. "
+                        f"Beregningen bruger {sg + bl:.0f} mm."
+                    )
                 raekker.append({
                     "T": t,
                     "eu": int(eu),
@@ -716,18 +730,23 @@ def indlaes_vejdim_koersler(sti: str | None = None) -> tuple[dict, list[dict]]:
                     "E_asf_vist_MPa": _csv_tal(r.get("E_asf_vist_MPa")),
                     "t_SG_mm": sg,
                     "t_BL_mm": bl,
+                    "t_ubundet_total_mm": sg + bl,
                     "levetid_styrende_aar": _csv_tal(r.get("levetid_styrende_aar")),
                     "koblingshoejde_mm": _csv_tal(r.get("koblingshoejde_mm")),
                     "bemaerkning": (r.get("bemaerkning") or "").strip(),
                 })
     except (OSError, csv.Error, ValueError):
-        return _VEJDIM_KOERSLER_FALLBACK, []
+        return _VEJDIM_KOERSLER_FALLBACK, [], []
     if not koersler:
-        return _VEJDIM_KOERSLER_FALLBACK, []
-    return koersler, raekker
+        return _VEJDIM_KOERSLER_FALLBACK, [], []
+    return koersler, raekker, _advarsler
 
 
-VEJDIM_KOERSLER, VEJDIM_KOERSLER_RAEKKER = indlaes_vejdim_koersler()
+(
+    VEJDIM_KOERSLER,
+    VEJDIM_KOERSLER_RAEKKER,
+    VEJDIM_KOERSLER_ADVARSLER,
+) = indlaes_vejdim_koersler()
 # "csv" hvis grundlaget kom fra filen, ellers "indbygget" (fallback).
 VEJDIM_KOERSLER_KILDE = "csv" if VEJDIM_KOERSLER_RAEKKER else "indbygget"
 

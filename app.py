@@ -50,6 +50,7 @@ from core.data import (
     VEJDIM_KOERSLER,
     VEJDIM_KOERSLER_RAEKKER,
     VEJDIM_KOERSLER_KILDE,
+    VEJDIM_KOERSLER_ADVARSLER,
     korrelation_fra_koersler,
     TRAFIK_UNDER,
     TRAFIK_OVER,
@@ -4453,6 +4454,14 @@ def render_trafikklasse_korrelation() -> None:
         st.warning(
             "⚠️ **VejDim_kørsler.csv kunne ikke læses** — der vises indbyggede "
             "reserveværdier. Kontrollér filen i *Dokumenter og data*."
+        )
+
+    if VEJDIM_KOERSLER_ADVARSLER:
+        st.warning(
+            "⚠️ **Uoverensstemmelse i VejDim_kørsler.csv** — kolonnen "
+            "*t_ubundet_total_mm* er kun dokumentation; beregningen bruger "
+            "altid t_SG_mm + t_BL_mm:\n\n- "
+            + "\n- ".join(VEJDIM_KOERSLER_ADVARSLER)
         )
 
     st.divider()

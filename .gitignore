@@ -4,3 +4,9 @@ __pycache__/
 .streamlit/config.toml
 *.pyc
 .claude
+
+# Lokal brugertilstand — gemmes af appen, hører ikke til i repoet
+materialer_brugerdefineret.json
+designdiagrammer_brugerdefineret.json
+trafikklasse_korrelation_brugerdefineret.json
+rapport_metadata_brugerdefineret.json
