@@ -43,6 +43,7 @@ from core.data import (
     TRAFIKKLASSER,
     TRAFIKKLASSE_NOTE,
     trafik_eo_aekv,
+    trafik_eu_interval,
     eo_til_naermeste_klasse,
     format_trafikklasse,
     VEJDIM_KOERSLER_STANDARD_RAEKKER,
@@ -554,6 +555,16 @@ def _normaliser_koersel_raekker(raekker) -> list[dict]:
                 except (TypeError, ValueError):
                     ny[felt] = 0.0
         ud.append(ny)
+
+    # Migrering: tilføj (T, Eu)-celler der findes i standarden, men mangler i
+    # den gemte tabel — fx nye Eu-punkter. Uden dette ville en gemt tabel fra
+    # før udvidelsen blokere for de nye rækker.
+    if ud:
+        kendte = {(r["T"], r["eu"]) for r in ud}
+        for std_r in _standard_koersel_raekker():
+            if (std_r["T"], std_r["eu"]) not in kendte:
+                ud.append(std_r)
+
     ud.sort(key=lambda r: (r["T"], r["eu"]))
     return ud or _standard_koersel_raekker()
 
@@ -589,6 +600,11 @@ def _aktiv_koersel_raekker() -> list[dict]:
     return st.session_state.get(
         "vejdim_koersel_raekker", VEJDIM_KOERSLER_STANDARD_RAEKKER
     )
+
+
+def _aktiv_koersler() -> dict:
+    """De aktive kørsler som {T: {Eu: {"sg", "bl"}}} — bruges til opslaget."""
+    return koersler_fra_raekker(_aktiv_koersel_raekker())
 
 
 def _aktiv_korrelation() -> dict:
@@ -1126,7 +1142,8 @@ def _vis_korrelationstabel(
         note = "Den markerede celle er den, dimensioneringen slår op i."
     st.caption(
         f"{note} **under** = VejDim kræver en tyndere opbygning end "
-        f"diagrammets område · **over** = tykkere end diagrammets område. "
+        f"diagrammets område · **over** = tykkere end diagrammets område · "
+        f"**mangler** = kørslen er ikke udfyldt endnu. "
         f"Se *Trafikklasse-korrelation* i menuen for metode og datagrundlag."
     )
 
@@ -1161,7 +1178,11 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
                     st.rerun()
 
     valgt_t = st.session_state[state_key]
-    eo_aekv, zone = trafik_eo_aekv(valgt_t, eu, korrelation=_aktiv_korrelation())
+    eo_aekv, zone = trafik_eo_aekv(
+        valgt_t, eu,
+        koersler=_aktiv_koersler(),
+        t_basis_table=_aktiv_t_basis_table(),
+    )
     naermeste = eo_til_naermeste_klasse(eo_aekv)
 
     with kol_info:
@@ -1209,11 +1230,17 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
                 f"tykkelsesområde. En konkret VejDim-beregning er nødvendig.",
             )
         else:  # udenfor
+            interval = trafik_eu_interval(valgt_t, _aktiv_koersler())
+            interval_txt = (
+                f"{interval[0]}–{interval[1]} MPa" if interval
+                else "ingen kørsler endnu"
+            )
             _boks(
                 "boks-adv", "⚠️",
-                f"<b>Eu = {eu:.0f} MPa er uden for korrelationens interval "
-                f"(5–40 MPa).</b> Vælg et Eu i intervallet, eller brug "
-                f"<b>Belastningsklasse</b>-grundlaget.",
+                f"<b>Eu = {eu:.0f} MPa er uden for de kørte punkter for "
+                f"{valgt_t} ({interval_txt}).</b> Vælg et Eu i intervallet, "
+                f"udfyld kørslen under <b>Trafikklasse-korrelation</b>, eller "
+                f"brug <b>Belastningsklasse</b>-grundlaget.",
             )
     with st.expander("Om trafikklasse-grundlaget"):
         st.markdown(_TRAFIK_GRUNDLAG_MD)
@@ -4600,10 +4627,17 @@ def render_trafikklasse_korrelation() -> None:
         "Eo=150-kurven slutter ved 1.100 mm. At forlænge kurverne ud over "
         "feltforsøgenes område ville være et gæt → appen afviser og henviser "
         "til en **konkret VejDim-beregning**.\n\n"
+        "- **mangler** — cellen har endnu ingen VejDim-kørsel (ubundet "
+        "tykkelse = 0). Den indgår hverken i opslaget eller i "
+        "Eu-interpolationen, før du udfylder den i tabellen ovenfor.\n\n"
         "Vælges en 'under'/'over'-celle i dimensioneringen, vises den "
         "tilsvarende besked i stedet for resultater. Bemærk at zonerne følger "
         "det *aktive* designdiagram — redigeres diagramdata (eller kørslerne "
-        "ovenfor), kan celler flytte zone."
+        "ovenfor), kan celler flytte zone.\n\n"
+        "**Mellem to kørte Eu-punkter** interpoleres VejDims krævede tykkelse "
+        "lineært i log(Eu), hvorefter Eo_ækv tilbageberegnes eksakt ved dit "
+        "Eu. Tykkelsen aftager tilnærmelsesvis retlinet med log(Eu), så det "
+        "rammer bedre end at interpolere på Eo_ækv selv."
     )
     korr = korrelation_fra_koersler(
         koersler_fra_raekker(raekker), _aktiv_t_basis_table()

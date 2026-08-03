@@ -9,6 +9,8 @@ diagrammets gyldighedsområde).
 Ingen imports herfra må være UI-relaterede (Streamlit, Flask, osv.).
 """
 
+import math
+
 # ---------------------------------------------------------------------------
 # 1. T_BASIS_TABLE
 #    Struktur: T_BASIS_TABLE[eu_mpa][eo_mpa][lag_type] → tykkelse i cm
@@ -560,9 +562,13 @@ BELASTNINGSKLASSER = {
 
 TRAFIK_UNDER = "under"
 TRAFIK_OVER = "over"
+# Cellen har ingen kørselsdata endnu (ubundet tykkelse = 0).
+TRAFIK_MANGLER = "mangler"
 
-# De Eu-værdier (MPa) korrelationen er tabuleret ved.
-TRAFIK_EU_PUNKTER = [5, 10, 15, 20, 30, 40]
+# De Eu-værdier (MPa) korrelationen er tabuleret ved. Eu = 3 og 4 er medtaget,
+# fordi designdiagrammerne dækker dem (ved Eu ≤ 2 findes ingen uarmeret kurve,
+# så en tilbageberegning er umulig dér uanset kørsler).
+TRAFIK_EU_PUNKTER = [3, 4, 5, 10, 15, 20, 30, 40]
 
 # ---------------------------------------------------------------------------
 # VEJDIM_KOERSLER — datagrundlaget (de rå kørsler)
@@ -635,6 +641,31 @@ VEJDIM_KOERSLER_STANDARD_RAEKKER = [
     _kd("T6", 30, "SMA 3000", 40, "-", 0, "GAB II 3000", 140, 3805, 260, 478, 20.0, _VEJDIM_BEREGNER),
     _kd("T6", 40, "SMA 3000", 40, "-", 0, "GAB II 3000", 140, 3805, 260, 370, 20.1, _VEJDIM_BEREGNER),
 ]
+
+
+def _tomme_raekker(eu_vaerdier: list[int]) -> list[dict]:
+    """Pladsholder-rækker for Eu-punkter, der endnu ikke er kørt i VejDim.
+
+    Asfaltpakken kopieres fra klassens Eu=5-kørsel (den er fast pr. klasse), så
+    kun de ubundne lag mangler. SG = BL = 0 markerer "ikke udfyldt": cellen
+    indgår hverken i korrelationen eller i interpolationen, før den er udfyldt.
+    """
+    skabelon = {r["T"]: r for r in VEJDIM_KOERSLER_STANDARD_RAEKKER if r["eu"] == 5}
+    ud = []
+    for t, r in skabelon.items():
+        for eu in eu_vaerdier:
+            ud.append(_kd(
+                t, eu, r["slidlag"], r["t_slid_mm"], r["bindelag"],
+                r["t_bindelag_mm"], r["bundet_baerelag"], r["t_bundet_mm"],
+                r["E_asf_vist_MPa"], 0, 0, 0,
+                "Udfyldes — VejDim-kørsel mangler",
+            ))
+    return ud
+
+
+# Eu = 3 og 4 er endnu ikke kørt; rækkerne står klar til udfyldning i appen.
+VEJDIM_KOERSLER_STANDARD_RAEKKER += _tomme_raekker([3, 4])
+VEJDIM_KOERSLER_STANDARD_RAEKKER.sort(key=lambda r: (r["T"], r["eu"]))
 
 
 def berig_koersel_raekker(raekker: list[dict]) -> list[dict]:
@@ -736,6 +767,10 @@ def korrelation_fra_koersler(
                 ub = (v.get("sg") or 0) + (v.get("bl") or 0)
             else:
                 ub = float(v or 0)
+            if ub <= 0:
+                # Ingen kørsel endnu — cellen indgår ikke i broen.
+                korr[t_klasse][int(eu)] = TRAFIK_MANGLER
+                continue
             eo, zone = back_beregn_eo_aekv(float(eu), float(ub), t_basis_table)
             korr[t_klasse][int(eu)] = eo if zone == "ok" else zone
     return korr
@@ -767,48 +802,81 @@ TRAFIKKLASSE_NOTE = (
 )
 
 
-def trafik_eo_aekv(
-    t_klasse: str, eu: float, korrelation: dict | None = None
-) -> tuple[float | None, str]:
-    """Ækvivalent Eo (MPa) for en trafikklasse ved given Eu, med Eu-interpolation.
+def trafik_ubundet_tykkelse(
+    t_klasse: str, eu: float, koersler: dict | None = None
+) -> float | None:
+    """VejDims krævede ubundne tykkelse (SG+BL, mm) ved vilkårligt Eu.
 
-    korrelation overstyrer korrelationstabellen (fx en brugerredigeret tabel fra
-    session-state). None = standardtabellen KORRELATION_T_EO.
+    Mellem to kørte Eu-punkter interpoleres **lineært i log(Eu)**. Tykkelsen
+    aftager tilnærmelsesvis retlinet med log(Eu) i hele datasættet, så det
+    rammer markant bedre end lineær interpolation i Eu (målt: middelfejl i
+    Eo_ækv 2,9 mod 5,5 MPa i en udeladelsestest).
+
+    Punkter uden kørselsdata (SG+BL = 0) springes over — hverken som endepunkt
+    eller som interpolationsgrænse. Returnerer None uden for de kørte punkter.
+    """
+    kk = koersler if koersler is not None else VEJDIM_KOERSLER
+    rk = kk.get(t_klasse)
+    if not rk:
+        return None
+
+    def _total(v) -> float:
+        if isinstance(v, dict):
+            return float((v.get("sg") or 0) + (v.get("bl") or 0))
+        return float(v or 0)
+
+    kendte = sorted(p for p in rk if _total(rk[p]) > 0)
+    if not kendte or eu < kendte[0] or eu > kendte[-1] or eu <= 0:
+        return None
+    if eu in kendte:
+        return _total(rk[eu])
+
+    lav = max(p for p in kendte if p <= eu)
+    hoej = min(p for p in kendte if p >= eu)
+    t_lav, t_hoej = _total(rk[lav]), _total(rk[hoej])
+    frac = (math.log(eu) - math.log(lav)) / (math.log(hoej) - math.log(lav))
+    return t_lav + frac * (t_hoej - t_lav)
+
+
+def trafik_eo_aekv(
+    t_klasse: str,
+    eu: float,
+    koersler: dict | None = None,
+    t_basis_table: dict | None = None,
+) -> tuple[float | None, str]:
+    """Ækvivalent Eo (MPa) for en trafikklasse ved given Eu.
+
+    Fremgangsmåde: find VejDims krævede ubundne tykkelse ved netop dette Eu
+    (interpoleret i log(Eu), se trafik_ubundet_tykkelse) og tilbageberegn
+    Eo_ækv **eksakt** mod designdiagrammets række for samme Eu. Zonen bestemmes
+    dermed også ved brugerens eget Eu i stedet for at blive arvet fra et
+    nabopunkt.
 
     Returnerer (eo_aekv, zone):
-        zone == "ok":      eo_aekv er et tal — dimensionér via diagrammet.
-        zone == "under":   VejDim under diagrammets område (blød bund × lav klasse).
-        zone == "over":    VejDim over diagrammets område (stiv bund × høj klasse).
-        zone == "udenfor": Eu uden for korrelationens interval (5–40 MPa) eller
-                           ukendt trafikklasse.
+        "ok"      — eo_aekv er et tal; dimensionér via diagrammet.
+        "under"   — VejDim kræver mindre end diagrammets tyndeste kurve.
+        "over"    — VejDim kræver mere end diagrammets tykkeste kurve.
+        "udenfor" — Eu uden for de kørte punkter, eller ukendt trafikklasse.
     Ved zone != "ok" er eo_aekv None.
-
-    Eo_ækv interpoleres lineært mellem de tabulerede Eu-punkter
-    {5,10,15,20,30,40}. Falder et af de omkringliggende punkter i en
-    UNDER/OVER-zone, arver mellemliggende Eu samme zone (konservativt — der
-    interpoleres ikke hen over en zonegrænse).
     """
-    tabel = korrelation if korrelation is not None else KORRELATION_T_EO
-    rk = tabel.get(t_klasse)
-    if rk is None:
+    tykkelse = trafik_ubundet_tykkelse(t_klasse, eu, koersler)
+    if tykkelse is None:
         return None, "udenfor"
-    punkter = TRAFIK_EU_PUNKTER
-    if eu < punkter[0] or eu > punkter[-1]:
-        return None, "udenfor"
+    return back_beregn_eo_aekv(float(eu), tykkelse, t_basis_table)
 
-    if eu in rk:  # præcist tabelpunkt (5,10,15,20,30,40)
-        v = rk[eu]
-        return (None, v) if isinstance(v, str) else (float(v), "ok")
 
-    lav = max(p for p in punkter if p <= eu)
-    hoej = min(p for p in punkter if p >= eu)
-    v_lav, v_hoej = rk[lav], rk[hoej]
-    if isinstance(v_lav, str):
-        return None, v_lav
-    if isinstance(v_hoej, str):
-        return None, v_hoej
-    frac = (eu - lav) / (hoej - lav)
-    return v_lav + frac * (v_hoej - v_lav), "ok"
+def trafik_eu_interval(
+    t_klasse: str, koersler: dict | None = None
+) -> tuple[int, int] | None:
+    """Mindste og største Eu med kørselsdata for en trafikklasse (til beskeder)."""
+    kk = koersler if koersler is not None else VEJDIM_KOERSLER
+    rk = kk.get(t_klasse) or {}
+    kendte = sorted(
+        p for p, v in rk.items()
+        if (float((v.get("sg") or 0) + (v.get("bl") or 0))
+            if isinstance(v, dict) else float(v or 0)) > 0
+    )
+    return (kendte[0], kendte[-1]) if kendte else None
 
 
 def eo_til_naermeste_klasse(eo: float | None) -> int | None:
