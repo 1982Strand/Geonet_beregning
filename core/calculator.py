@@ -13,6 +13,8 @@ from .data import (
     T_BASIS_TABLE,
     EU_RAEKKER,
     EO_KOLONNER,
+    EO_MIN,
+    EO_MAX,
     GEONET_DB,
     K_PHI,
     PHI_BASIS,
@@ -73,6 +75,46 @@ def _slaa_op(
     return val
 
 
+def _slaa_op_interp(
+    eu_raekke: float,
+    eo: float,
+    lag_type: str,
+    t_basis_table: dict | None = None,
+) -> float | None:
+    """Som ``_slaa_op``, men interpolerer lineært mellem Eo-kolonner når ``eo``
+    ikke er en præcis tabelkolonne.
+
+    Bruges af trafikklasse-tilstanden, hvor den ækvivalente Eo (Eo_ækv) typisk
+    falder mellem to kolonner. For en præcis kolonne er resultatet identisk med
+    ``_slaa_op`` — belastningsklasse-tilstanden er derfor uændret. Returnerer
+    tykkelse i cm, eller None hvis eo er uden for [30,150] eller en af de to
+    omkringliggende kolonner mangler data ("—") for lag_type.
+    """
+    table = t_basis_table or T_BASIS_TABLE
+    eu_data = table.get(eu_raekke)
+    if eu_data is None:
+        return None
+
+    # Præcis kolonne → uændret opslag (bevarer belastningsklasse-adfærd).
+    if eo in EO_KOLONNER:
+        eo_data = eu_data.get(eo)
+        return eo_data.get(lag_type) if eo_data else None
+
+    kols = sorted(EO_KOLONNER)
+    if eo < kols[0] or eo > kols[-1]:
+        return None
+    lav = max(k for k in kols if k <= eo)
+    hoej = min(k for k in kols if k >= eo)
+    v_lav = (eu_data.get(lav) or {}).get(lag_type)
+    v_hoej = (eu_data.get(hoej) or {}).get(lag_type)
+    if v_lav is None or v_hoej is None:
+        return None
+    if hoej == lav:
+        return float(v_lav)
+    frac = (eo - lav) / (hoej - lav)
+    return v_lav + frac * (v_hoej - v_lav)
+
+
 # ---------------------------------------------------------------------------
 # Hoved-beregningsfunktion
 # ---------------------------------------------------------------------------
@@ -101,9 +143,17 @@ def beregn(
     dict med alle mellemresultater og slutresultater.
     Ved fejl indeholder dict'en nøglen "fejl" med en tekstbesked.
     """
-    # -- Validér Eo er en af de 6 gyldige kolonner --
-    if eo not in EO_KOLONNER:
-        return {"fejl": f"Eo={eo} MPa er ikke en gyldig tabelværdi. Gyldige: {EO_KOLONNER}"}
+    # -- Validér Eo ligger i tabellens interval --
+    # Belastningsklasse-tilstand sender altid en præcis kolonne (30–150).
+    # Trafikklasse-tilstand sender en ækvivalent Eo, der kan ligge mellem
+    # kolonnerne — den håndteres af _slaa_op_interp. Derfor kun interval-tjek.
+    if not (EO_MIN <= eo <= EO_MAX):
+        return {
+            "fejl": (
+                f"Eo={eo:g} MPa er uden for gyldigt interval "
+                f"({EO_MIN:g}–{EO_MAX:g} MPa)."
+            )
+        }
 
     # -- Trin 1 & 2: Eu og Eo er allerede fastlagt af kalderen --
 
@@ -114,13 +164,24 @@ def beregn(
     eu_raekker = _aktive_eu_raekker(t_basis_table)
     naboer = _find_eu_naboer(eu, t_basis_table=t_basis_table)
     if naboer is None:
-        return {"fejl": f"Eu={eu} MPa er uden for tabelområdet ({eu_raekker[0]}–{eu_raekker[-1]} MPa)"}
+        if not eu_raekker:
+            return {"fejl": "Diagramtabellen indeholder ingen Eu-rækker. Nulstil diagramdata til standard under Designdiagrammer."}
+        if eu < eu_raekker[0] or eu > eu_raekker[-1]:
+            return {"fejl": f"Eu={eu} MPa er uden for tabelområdet ({eu_raekker[0]}–{eu_raekker[-1]} MPa)"}
+        return {
+            "fejl": (
+                f"Eu={eu} MPa findes ikke som række i den aktive diagramtabel. "
+                f"Rækken kan være fjernet under Designdiagrammer — gendan den, "
+                f"eller nulstil diagramdata til standard."
+            )
+        }
 
     eu_lower, eu_upper = naboer
 
-    # Armeret (valgt lag_mode)
-    t_low_arm = _slaa_op(eu_lower, eo, lag_mode, t_basis_table=t_basis_table)
-    t_high_arm = _slaa_op(eu_upper, eo, lag_mode, t_basis_table=t_basis_table)
+    # Armeret (valgt lag_mode) — _slaa_op_interp er identisk med _slaa_op ved
+    # præcise Eo-kolonner og interpolerer kun for trafikklassens Eo_ækv.
+    t_low_arm = _slaa_op_interp(eu_lower, eo, lag_mode, t_basis_table=t_basis_table)
+    t_high_arm = _slaa_op_interp(eu_upper, eo, lag_mode, t_basis_table=t_basis_table)
 
     if t_low_arm is None or t_high_arm is None:
         return {
@@ -132,8 +193,8 @@ def beregn(
         }
 
     # Uarmeret
-    t_low_uarm = _slaa_op(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
-    t_high_uarm = _slaa_op(eu_upper, eo, "uarmeret", t_basis_table=t_basis_table)
+    t_low_uarm = _slaa_op_interp(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
+    t_high_uarm = _slaa_op_interp(eu_upper, eo, "uarmeret", t_basis_table=t_basis_table)
 
     uarmeret_mangler = t_low_uarm is None or t_high_uarm is None
 
@@ -222,12 +283,19 @@ def beregn_alle_produkter(
     lag_mode: str,
     phi: float = PHI_BASIS,
     t_basis_table: dict | None = None,
+    klasse_for_anbefaling: int | None = None,
 ) -> list[dict]:
     """
     Beregn T_armeret for alle geonet-produkter med en given friktionsvinkel.
 
     phi defaulter til 37° (Standard-tilstand). Brugerdefineret-tilstand
     kan sende en anden φ-værdi beregnet fra materialelagene.
+
+    klasse_for_anbefaling overstyrer hvilken belastningsklasse produkternes
+    anbefalings-badge tjekkes mod. Bruges af trafikklasse-tilstanden, hvor Eo
+    er en ækvivalent (mellemliggende) værdi og eo_til_klasse() derfor ikke
+    rammer en klasse — her sendes den nærmeste belastningsklasse ind. None =
+    udled klassen af Eo som hidtil (belastningsklasse-tilstand, uændret).
 
     Returnerer liste af dicts med:
         navn, serie, korrektion, t_armeret_mm, reduktion_mm, reduktion_pct,
@@ -237,7 +305,11 @@ def beregn_alle_produkter(
     """
     # Find belastningsklasse ud fra Eo — til klasse-validering
     from .data import eo_til_klasse
-    belastningsklasse = eo_til_klasse(eo)
+    belastningsklasse = (
+        klasse_for_anbefaling
+        if klasse_for_anbefaling is not None
+        else eo_til_klasse(eo)
+    )
 
     resultater = []
     for geonet in GEONET_DB:

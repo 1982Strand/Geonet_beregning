@@ -9,6 +9,9 @@ diagrammets gyldighedsområde).
 Ingen imports herfra må være UI-relaterede (Streamlit, Flask, osv.).
 """
 
+import csv
+import os
+
 # ---------------------------------------------------------------------------
 # 1. T_BASIS_TABLE
 #    Struktur: T_BASIS_TABLE[eu_mpa][eo_mpa][lag_type] → tykkelse i cm
@@ -594,6 +597,294 @@ def format_trafikkobling(klasse: int) -> str:
     else:
         dele.append(f"{tunge} tunge køretøjer/døgn")
     return " · ".join(dele)
+
+
+# ---------------------------------------------------------------------------
+# 2c. TRAFIKKLASSER + KORRELATION_T_EO
+#
+#     Dokumenteret bro fra Vejdirektoratets trafikklasser (T1–T6) til appens
+#     designdiagrammer. I MODSÆTNING til TRAFIKKOBLING ovenfor (en vejledende
+#     ekspertvurdering ud fra anvendelse) er dette en beregnet/tilbageberegnet
+#     korrelation: for hver (trafikklasse, Eu) er den ækvivalente Eo fundet
+#     som den Eo, hvis ustabiliserede diagram-tykkelse netop svarer til
+#     VejDims krævede ubundne lagtykkelse (SG + BL). Reduktionen aflæses
+#     derefter som diagrammets EGEN feltdokumenterede værdi ved (Eo_ækv, Eu).
+#     Der blandes ingen kriterier fra de to metoder — VejDim placerer kun
+#     driftspunktet, geonet-diagrammet leverer reduktionen.
+#
+#     Grundlag: 36 VejDim-kørsler (standard E-værdier), juli 2026. Fuld
+#     dokumentation: "Dokumenter og data/Korrelation_trafikklasse_Eo.md".
+#     Reproducerbart script: "Dokumenter og data/korrelation_final.py".
+#
+#     Værdier = Eo_ækv i MPa (1-decimals præcision, bag den afrundede tabel i
+#     notatets §4). Strengene UNDER/OVER = uden for diagrammets dækning:
+#       UNDER: VejDim kræver mindre end diagrammets Eo=30-kurve (blød bund ×
+#              lav klasse)  → dimensionér via belastningsklasse-grundlaget.
+#       OVER:  VejDim kræver mere end Eo=150-kurven (stiv bund × høj klasse)
+#              → en konkret VejDim-beregning er nødvendig.
+# ---------------------------------------------------------------------------
+
+TRAFIK_UNDER = "under"
+TRAFIK_OVER = "over"
+
+# De Eu-værdier (MPa) korrelationen er tabuleret ved.
+TRAFIK_EU_PUNKTER = [5, 10, 15, 20, 30, 40]
+
+# ---------------------------------------------------------------------------
+# VEJDIM_KOERSLER — datagrundlaget (de rå kørsler)
+#
+#   Indlæses fra "Dokumenter og data/VejDim_kørsler.csv", som er den samlede
+#   fil med alle 36 kørsler. Redigeres CSV'en, følger appen med: både de rå
+#   lagtykkelser, asfaltpakkerne og den tilbageberegnede Eo_ækv.
+#
+#   VEJDIM_KOERSLER:      {T: {Eu: {"sg": mm, "bl": mm}}} — kun de ubundne lag.
+#                         sg = stabilgrus (SG II), bl = bundsikring (BL II).
+#                         Ubundet total = sg + bl → Eo_ækv tilbageberegnes
+#                         herfra (se korrelation_fra_koersler).
+#   VEJDIM_KOERSLER_RAEKKER: fulde rækker (asfaltlag, E, levetid, koblingshøjde,
+#                         kilde, bemærkning) til visning af forudsætningerne.
+#
+#   Kan CSV'en ikke læses, bruges den indbyggede fallback nedenfor, så appen
+#   altid kan køre. Fuld dokumentation: "Korrelation_trafikklasse_Eo.md".
+# ---------------------------------------------------------------------------
+
+_REPO_ROD = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VEJDIM_KOERSLER_CSV = os.path.join(
+    _REPO_ROD, "Dokumenter og data", "VejDim_kørsler.csv"
+)
+
+# Indbygget reservekopi — bruges kun hvis CSV-filen mangler eller er defekt.
+_VEJDIM_KOERSLER_FALLBACK = {
+    "T1": {5: {"sg": 110, "bl": 450}, 10: {"sg": 100, "bl": 356}, 15: {"sg": 100, "bl": 292},
+           20: {"sg": 100, "bl": 243}, 30: {"sg": 100, "bl": 200}, 40: {"sg": 100, "bl": 200}},
+    "T2": {5: {"sg": 370, "bl": 458}, 10: {"sg": 250, "bl": 458}, 15: {"sg": 190, "bl": 446},
+           20: {"sg": 160, "bl": 419}, 30: {"sg": 140, "bl": 346}, 40: {"sg": 140, "bl": 272}},
+    "T3": {5: {"sg": 430, "bl": 449}, 10: {"sg": 300, "bl": 449}, 15: {"sg": 210, "bl": 470},
+           20: {"sg": 170, "bl": 449}, 30: {"sg": 150, "bl": 364}, 40: {"sg": 150, "bl": 283}},
+    "T4": {5: {"sg": 240, "bl": 944}, 10: {"sg": 230, "bl": 740}, 15: {"sg": 220, "bl": 629},
+           20: {"sg": 220, "bl": 539}, 30: {"sg": 220, "bl": 409}, 40: {"sg": 220, "bl": 319}},
+    "T5": {5: {"sg": 270, "bl": 1042}, 10: {"sg": 260, "bl": 818}, 15: {"sg": 250, "bl": 689},
+           20: {"sg": 250, "bl": 590}, 30: {"sg": 240, "bl": 459}, 40: {"sg": 240, "bl": 360}},
+    "T6": {5: {"sg": 280, "bl": 1117}, 10: {"sg": 270, "bl": 876}, 15: {"sg": 270, "bl": 723},
+           20: {"sg": 260, "bl": 629}, 30: {"sg": 260, "bl": 478}, 40: {"sg": 260, "bl": 370}},
+}
+
+
+def _csv_tal(vaerdi, standard=None):
+    """Konverter en CSV-celle til tal (dansk komma tilladt). None ved tom/ugyldig."""
+    if vaerdi is None:
+        return standard
+    tekst = str(vaerdi).strip().replace(",", ".")
+    if tekst in ("", "-"):
+        return standard
+    try:
+        return float(tekst)
+    except ValueError:
+        return standard
+
+
+def indlaes_vejdim_koersler(sti: str | None = None) -> tuple[dict, list[dict]]:
+    """Indlæs de samlede VejDim-kørsler fra CSV.
+
+    Returnerer (koersler, raekker):
+        koersler = {T: {Eu(int): {"sg": float, "bl": float}}}
+        raekker  = liste af fulde rækker (alle kolonner, tal konverteret)
+    Ved manglende/defekt fil returneres (fallback, []).
+    """
+    sti = sti or VEJDIM_KOERSLER_CSV
+    koersler: dict = {}
+    raekker: list[dict] = []
+    try:
+        with open(sti, encoding="utf-8-sig", newline="") as f:
+            for r in csv.DictReader(f, delimiter=";"):
+                t = (r.get("T") or "").strip()
+                eu = _csv_tal(r.get("Eu_MPa"))
+                sg = _csv_tal(r.get("t_SG_mm"))
+                bl = _csv_tal(r.get("t_BL_mm"))
+                if not t or eu is None or sg is None or bl is None:
+                    continue
+                koersler.setdefault(t, {})[int(eu)] = {"sg": sg, "bl": bl}
+                raekker.append({
+                    "T": t,
+                    "eu": int(eu),
+                    "slidlag": (r.get("slidlag") or "").strip(),
+                    "t_slid_mm": _csv_tal(r.get("t_slid_mm"), 0.0),
+                    "bindelag": (r.get("bindelag") or "").strip(),
+                    "t_bindelag_mm": _csv_tal(r.get("t_bindelag_mm"), 0.0),
+                    "bundet_baerelag": (r.get("bundet_baerelag") or "").strip(),
+                    "t_bundet_mm": _csv_tal(r.get("t_bundet_mm"), 0.0),
+                    "E_asf_vist_MPa": _csv_tal(r.get("E_asf_vist_MPa")),
+                    "t_SG_mm": sg,
+                    "t_BL_mm": bl,
+                    "levetid_styrende_aar": _csv_tal(r.get("levetid_styrende_aar")),
+                    "koblingshoejde_mm": _csv_tal(r.get("koblingshoejde_mm")),
+                    "bemaerkning": (r.get("bemaerkning") or "").strip(),
+                })
+    except (OSError, csv.Error, ValueError):
+        return _VEJDIM_KOERSLER_FALLBACK, []
+    if not koersler:
+        return _VEJDIM_KOERSLER_FALLBACK, []
+    return koersler, raekker
+
+
+VEJDIM_KOERSLER, VEJDIM_KOERSLER_RAEKKER = indlaes_vejdim_koersler()
+# "csv" hvis grundlaget kom fra filen, ellers "indbygget" (fallback).
+VEJDIM_KOERSLER_KILDE = "csv" if VEJDIM_KOERSLER_RAEKKER else "indbygget"
+
+
+def back_beregn_eo_aekv(
+    eu: float, ubundet_mm: float, t_basis_table: dict | None = None
+) -> tuple[float | None, str]:
+    """Tilbageberegn den ækvivalente Eo for en ubundet tykkelse ved given Eu.
+
+    Finder den Eo, hvis ustabiliserede diagram-tykkelse (uarmeret) ved eu netop
+    svarer til ``ubundet_mm``, ved lineær interpolation mellem Eo-kolonnerne.
+    Returnerer (eo_aekv, zone):
+        "ok":   eo_aekv er et tal.
+        "under": ubundet < diagrammets Eo=30-kurve (blød bund × lav klasse).
+        "over":  ubundet > Eo=150-kurven (stiv bund × høj klasse).
+        "udenfor": Eu-rækken findes ikke / ingen uarmeret-data.
+    """
+    table = t_basis_table or T_BASIS_TABLE
+    row = table.get(eu)
+    if not row:
+        return None, "udenfor"
+    pts = sorted(
+        [(eo, row[eo]["uarmeret"] * 10.0)
+         for eo in EO_KOLONNER
+         if row.get(eo, {}).get("uarmeret") is not None],
+        key=lambda p: p[1],
+    )
+    if not pts:
+        return None, "udenfor"
+    if ubundet_mm < pts[0][1]:
+        return None, TRAFIK_UNDER
+    if ubundet_mm > pts[-1][1]:
+        return None, TRAFIK_OVER
+    for (e1, t1), (e2, t2) in zip(pts, pts[1:]):
+        if t1 <= ubundet_mm <= t2:
+            return (e1 + (ubundet_mm - t1) / (t2 - t1) * (e2 - e1)) if t2 > t1 else float(e1), "ok"
+    return None, "udenfor"
+
+
+def korrelation_fra_koersler(
+    koersler: dict, t_basis_table: dict | None = None
+) -> dict:
+    """Byg korrelationstabellen (T → Eu → Eo_ækv/'under'/'over') fra de rå
+    VejDim-kørsler ved tilbageberegning mod designdiagrammet.
+
+    Celleværdien kan være enten den ubundne total i mm (tal) eller en dict med
+    "sg"/"bl" (som VEJDIM_KOERSLER). Kun summen SG+BL indgår i broen —
+    fordelingen mellem lagene har ingen betydning for Eo_ækv.
+    """
+    korr: dict = {}
+    for t_klasse, raekker in koersler.items():
+        korr[t_klasse] = {}
+        for eu, v in raekker.items():
+            if isinstance(v, dict):
+                ub = (v.get("sg") or 0) + (v.get("bl") or 0)
+            else:
+                ub = float(v or 0)
+            eo, zone = back_beregn_eo_aekv(float(eu), float(ub), t_basis_table)
+            korr[t_klasse][int(eu)] = eo if zone == "ok" else zone
+    return korr
+
+
+# Standard-korrelationen, tilbageberegnet fra VEJDIM_KOERSLER mod diagrammet.
+# (Reproducerer de dokumenterede Eo_ækv-værdier i notatets §4.)
+KORRELATION_T_EO = korrelation_fra_koersler(VEJDIM_KOERSLER, T_BASIS_TABLE)
+
+# Metadata pr. trafikklasse. naae10_mio_20aar = NÆ10 over 20 års
+# dimensioneringsperiode (mio.), som brugt i VejDim-kørslerne (jf. notatets §2).
+TRAFIKKLASSER = {
+    "T1": {"ikon": "🚲", "naae10_mio_20aar": 0.002, "beskrivelse": "Meget let trafik (stier, boligveje med minimal tung trafik)"},
+    "T2": {"ikon": "🚜", "naae10_mio_20aar": 0.15,  "beskrivelse": "Let trafik"},
+    "T3": {"ikon": "🚗", "naae10_mio_20aar": 0.37,  "beskrivelse": "Let–middel trafik"},
+    "T4": {"ikon": "🚛", "naae10_mio_20aar": 1.46,  "beskrivelse": "Middel trafik"},
+    "T5": {"ikon": "🏗️", "naae10_mio_20aar": 3.6,   "beskrivelse": "Tung trafik"},
+    "T6": {"ikon": "✈️", "naae10_mio_20aar": 6.0,   "beskrivelse": "Meget tung trafik"},
+}
+
+TRAFIKKLASSE_NOTE = (
+    "Trafikklasse-grundlaget kobler Vejdirektoratets trafikklasser til "
+    "designdiagrammerne via en dokumenteret tilbageberegning: VejDim fastlægger "
+    "den krævede ubundne lagtykkelse (SG + BL) for (trafikklasse, Eu), og "
+    "geonet-reduktionen aflæses som diagrammets egen feltdokumenterede værdi ved "
+    "den ækvivalente Eo. Grundlaget er rent bæreevne (frostsikker underbund) — "
+    "frost/koblingshøjde skal kontrolleres separat. Se "
+    "'Korrelation_trafikklasse_Eo.md' for fuld dokumentation og forbehold."
+)
+
+
+def trafik_eo_aekv(
+    t_klasse: str, eu: float, korrelation: dict | None = None
+) -> tuple[float | None, str]:
+    """Ækvivalent Eo (MPa) for en trafikklasse ved given Eu, med Eu-interpolation.
+
+    korrelation overstyrer korrelationstabellen (fx en brugerredigeret tabel fra
+    session-state). None = standardtabellen KORRELATION_T_EO.
+
+    Returnerer (eo_aekv, zone):
+        zone == "ok":      eo_aekv er et tal — dimensionér via diagrammet.
+        zone == "under":   VejDim under diagrammets område (blød bund × lav klasse).
+        zone == "over":    VejDim over diagrammets område (stiv bund × høj klasse).
+        zone == "udenfor": Eu uden for korrelationens interval (5–40 MPa) eller
+                           ukendt trafikklasse.
+    Ved zone != "ok" er eo_aekv None.
+
+    Eo_ækv interpoleres lineært mellem de tabulerede Eu-punkter
+    {5,10,15,20,30,40}. Falder et af de omkringliggende punkter i en
+    UNDER/OVER-zone, arver mellemliggende Eu samme zone (konservativt — der
+    interpoleres ikke hen over en zonegrænse).
+    """
+    tabel = korrelation if korrelation is not None else KORRELATION_T_EO
+    rk = tabel.get(t_klasse)
+    if rk is None:
+        return None, "udenfor"
+    punkter = TRAFIK_EU_PUNKTER
+    if eu < punkter[0] or eu > punkter[-1]:
+        return None, "udenfor"
+
+    if eu in rk:  # præcist tabelpunkt (5,10,15,20,30,40)
+        v = rk[eu]
+        return (None, v) if isinstance(v, str) else (float(v), "ok")
+
+    lav = max(p for p in punkter if p <= eu)
+    hoej = min(p for p in punkter if p >= eu)
+    v_lav, v_hoej = rk[lav], rk[hoej]
+    if isinstance(v_lav, str):
+        return None, v_lav
+    if isinstance(v_hoej, str):
+        return None, v_hoej
+    frac = (eu - lav) / (hoej - lav)
+    return v_lav + frac * (v_hoej - v_lav), "ok"
+
+
+def eo_til_naermeste_klasse(eo: float | None) -> int | None:
+    """Belastningsklasse hvis Eo-kolonne ligger tættest på eo.
+
+    Bruges KUN til produkt-anbefalingsbadges i trafikklasse-tilstand, hvor
+    Eo_ækv sjældent rammer en præcis kolonne. Det er en indeks-tilnærmelse til
+    visning, IKKE en fysisk klasse-lighed.
+    """
+    if eo is None:
+        return None
+    bedst, bedst_diff = None, None
+    for klasse, data in BELASTNINGSKLASSER.items():
+        diff = abs(data["eo"] - eo)
+        if bedst_diff is None or diff < bedst_diff:
+            bedst, bedst_diff = klasse, diff
+    return bedst
+
+
+def format_trafikklasse(t_klasse: str) -> str:
+    """Én-linjes streng for en trafikklasse, fx
+    'T4 · NÆ10 ≈ 1,46 mio. (20 år) · Middel trafik'."""
+    d = TRAFIKKLASSER.get(t_klasse)
+    if not d:
+        return t_klasse
+    naae10 = f"{d['naae10_mio_20aar']:g}".replace(".", ",")
+    return f"{t_klasse} · NÆ10 ≈ {naae10} mio. (20 år) · {d['beskrivelse']}"
 
 
 # ---------------------------------------------------------------------------

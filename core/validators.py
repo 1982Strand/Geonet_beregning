@@ -38,7 +38,7 @@ from .data import (
     eo_til_klasse,
     format_klasse_interval,
 )
-from .calculator import beregn, _slaa_op, _find_eu_naboer
+from .calculator import beregn, _slaa_op, _slaa_op_interp, _find_eu_naboer
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +54,7 @@ def valider_input(
     materialer: list[dict] | None,
     t_armeret_mm: float | None = None,
     t_basis_table: dict | None = None,
+    tillad_interpoleret_eo: bool = False,
 ) -> dict:
     """
     Valider alle inputs og returner fejl, advarsler og anbefalinger.
@@ -69,6 +70,10 @@ def valider_input(
     t_armeret_mm    Allerede beregnet T_armeret i mm — sendes ind for at
                     undgå dobbelt beregning. Hvis None, beregnes den internt
                     (kræver at der ikke er hårde fejl i eu/eo/lag_mode).
+    tillad_interpoleret_eo
+                    True i trafikklasse-tilstand: Eo er en ækvivalent værdi
+                    mellem kolonnerne, så kravet om en præcis tabelkolonne (F3)
+                    springes over og diagram-opslag interpoleres.
 
     Returnerer
     ----------
@@ -111,7 +116,12 @@ def valider_input(
         )
 
     # F3: Eo er ikke en af de 6 gyldige tabelkolonner
-    if EO_MIN <= eo <= EO_MAX and eo not in EO_KOLONNER:
+    # (springes over i trafikklasse-tilstand, hvor Eo_ækv er interpoleret)
+    if (
+        not tillad_interpoleret_eo
+        and EO_MIN <= eo <= EO_MAX
+        and eo not in EO_KOLONNER
+    ):
         fejl.append(
             f"Eo={eo} MPa svarer ikke til en belastningsklasse. "
             f"Gyldige Eo-værdier: {EO_KOLONNER} MPa. "
@@ -127,11 +137,13 @@ def valider_input(
     # F5: T_basis-opslag returnerer None (kombination uden for diagrammet)
     # Kun tjekket hvis de foregående input-fejl ikke allerede blokerer
     if not fejl and lag_mode in ("1_lag", "2_lag"):
+        # Interpolerende opslag i trafikklasse-tilstand (Eo_ækv mellem kolonner).
+        _opslag = _slaa_op_interp if tillad_interpoleret_eo else _slaa_op
         naboer = _find_eu_naboer(eu, t_basis_table=t_basis_table)
         if naboer is not None:
             eu_lower, eu_upper = naboer
-            t_lower = _slaa_op(eu_lower, eo, lag_mode, t_basis_table=t_basis_table)
-            t_upper = _slaa_op(eu_upper, eo, lag_mode, t_basis_table=t_basis_table)
+            t_lower = _opslag(eu_lower, eo, lag_mode, t_basis_table=t_basis_table)
+            t_upper = _opslag(eu_upper, eo, lag_mode, t_basis_table=t_basis_table)
             if t_lower is None or t_upper is None:
                 fejl.append(
                     f"Kombinationen Eu={eu} MPa / Eo={eo} MPa / {lag_mode.replace('_', ' ')} "
@@ -139,8 +151,8 @@ def valider_input(
                 )
             # Tjek også uarmeret (til resultatvisning), men lad ikke
             # manglende uarmeret blokere armerede resultater.
-            t_u_lower = _slaa_op(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
-            t_u_upper = _slaa_op(eu_upper, eo, "uarmeret", t_basis_table=t_basis_table)
+            t_u_lower = _opslag(eu_lower, eo, "uarmeret", t_basis_table=t_basis_table)
+            t_u_upper = _opslag(eu_upper, eo, "uarmeret", t_basis_table=t_basis_table)
             if t_u_lower is None or t_u_upper is None:
                 advarsler.append(
                     f"Der er ikke defineret nogen ustabiliseret bærelagstykkelse "

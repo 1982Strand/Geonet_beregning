@@ -592,11 +592,13 @@ def render_personligt_designdiagram_png(
     geonet: dict | None,
     t_indtastet_mm: float | None,
     t_basis_table: dict,
+    grundlag_label: str | None = None,
     t_1_lag_mm: float | None = None,
     t_2_lag_mm: float | None = None,
     t_1_lag_best_mm: float | None = None,
     t_2_lag_best_mm: float | None = None,
     dpi: int = 300,
+    figsize: tuple[float, float] = (9.0, 5.5),
 ) -> bytes:
     """Designdiagram tilpasset brugerens opbygning + geonet.
 
@@ -614,6 +616,7 @@ def render_personligt_designdiagram_png(
 
     # Lokal import for at undgå cirkulær afhængighed
     from .data import K_PHI, PHI_BASIS
+    from .calculator import _slaa_op_interp
 
     phi_kor = K_PHI * (phi - PHI_BASIS)
 
@@ -628,13 +631,16 @@ def render_personligt_designdiagram_png(
         xs: list[float] = []
         ys: list[float] = []
         for eu_v in eu_vals:
-            v = t_basis_table.get(eu_v, {}).get(eo, {}).get(lag_mode)
+            # Interpolerende opslag: tegner også kurven ved en ækvivalent Eo
+            # (Eo_ækv) mellem kolonnerne i trafikklasse-tilstand. Ved en præcis
+            # Eo-kolonne er resultatet identisk med et direkte opslag.
+            v = _slaa_op_interp(eu_v, eo, lag_mode, t_basis_table=t_basis_table)
             if v is not None:
                 xs.append(v * faktor)  # cm
                 ys.append(eu_v)
         return xs, ys
 
-    fig, ax = plt.subplots(figsize=(9.0, 5.5), dpi=dpi)
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
 
     # Farveskema matcher de originale diagrambilleder
     farve_uarm = "#E0BB00"   # gul
@@ -750,7 +756,10 @@ def render_personligt_designdiagram_png(
     ax.set_xlabel("Bærelagstykkelse [cm]", fontsize=11, fontweight="bold")
     ax.set_ylabel(r"Bundmodul $E_u$ [MN/m²]", fontsize=11, fontweight="bold")
 
-    klasse_str = f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:g}"
+    if grundlag_label:
+        klasse_str = grundlag_label
+    else:
+        klasse_str = f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:g}"
     phi_str = f"{phi:.1f}".replace(".", ",")
     ax.set_title(
         f"Designdiagram for Eo = {eo:g} MN/m² · {klasse_str}\n"
@@ -779,14 +788,11 @@ def _materiale_resume(materialer: list[dict]) -> str:
     for i, m in enumerate(materialer, start=1):
         navn = m.get("navn", "?")
         phi = m.get("phi")
-        korn = m.get("max_korn")
         tyk = m.get("tykkelse_mm")
         pct = m.get("pct")
         dele = [f"Lag {i}: {navn}"]
         if phi is not None:
             dele.append(f"φ = {phi}°")
-        if korn is not None:
-            dele.append(f"max korn = {korn} mm")
         if tyk is not None:
             dele.append(f"{tyk:.0f} mm")
         elif pct is not None:
@@ -808,13 +814,27 @@ def formatér_dimensioneringsgrundlag(
     valg = valg or {}
     from .data import PHI_BASIS
     materialer = dim.get("materialer") or []
+    er_trafikklasse = dim.get("grundlag_type") == "trafikklasse"
+
     rows: list[tuple[str, str]] = [
         ("Underbundens E-modul (Eu)", f"{dim.get('eu', 0):g} MPa"),
-        ("Belastningsklasse", str(dim.get("valgt_klasse", "—"))),
-        ("Materialeopbygning", _materiale_resume(materialer)),
-        ("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', PHI_BASIS):.1f}°"),
     ]
-    if valg.get("trafikkobling"):
+    if er_trafikklasse:
+        # Trafikklasse-grundlag: vis T-klasse + den ækvivalente Eo (Eo_ækv),
+        # ikke en belastningsklasse (der er ikke valgt nogen).
+        t_klasse = dim.get("t_klasse", "—")
+        eo_aekv = dim.get("eo_aekv")
+        rows.append(("Dimensioneringsgrundlag", f"Trafikklasse {t_klasse} (VejDim)"))
+        if isinstance(eo_aekv, (int, float)):
+            rows.append(("Ækvivalent Eo (Eo_ækv)", f"{eo_aekv:.0f} MPa"))
+    else:
+        rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
+    rows.append(("Materialeopbygning", _materiale_resume(materialer)))
+    rows.append(("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', PHI_BASIS):.1f}°"))
+
+    # VD-trafikkoblingen (vejledende) hører til belastningsklasse-grundlaget;
+    # den giver ikke mening oveni et trafikklasse-grundlag.
+    if valg.get("trafikkobling") and not er_trafikklasse:
         klasse = dim.get("valgt_klasse")
         if klasse:
             from .data import format_trafikkobling
@@ -1036,7 +1056,7 @@ def byg_rapport_docx(data: dict) -> bytes:
     """Byg Word-rapporten ud fra det fælles data-dict.
 
     data:
-      metadata: dict med projekt/beskrivelse/omfang/udfoeres_for/sagsbehandler/sagsbehandler_mail/dato
+      metadata: dict med projekt/beskrivelse/omfang/udfoeres_for/sagsbehandler/sagsbehandler_mail/kontrol/dato
       dim:      dict fra st.session_state["sidste_dim"]
       tekster:  dict[str, str] — redigerede skabelon-tekster pr. SECTION_KEYS-nøgle
       visualisering_png: bytes  (opbygnings-snittene)
@@ -1103,6 +1123,7 @@ def byg_rapport_docx(data: dict) -> bytes:
         "udfoeres_for": (md.get("udfoeres_for") or "").strip(),
         "sagsbehandler": (md.get("sagsbehandler") or "").strip(),
         "sagsbehandler_mail": (md.get("sagsbehandler_mail") or "").strip(),
+        "kontrol": (md.get("kontrol") or "").strip(),
         "dato": _format_dato_dk(md.get("dato", "")),
 
         # Tabeller (rendered af {%tr for r in ... %}-løkker i skabelonen)

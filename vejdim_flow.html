@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VejDim — dimensioneringsflow (redigerbar)</title>
+
+<!--
+==================================================================================
+  VEJDIM — FLOWDIAGRAM FOR DIMENSIONERING AF BEFÆSTELSER
+  Selvstændig, redigerbar HTML-fil. Ingen internetforbindelse nødvendig.
+  Åbn filen i en browser for at se den. Rediger i en teksteditor for at ændre.
+==================================================================================
+
+  SÅDAN ÆNDRER DU FARVER
+  ----------------------
+  Der er to måder:
+
+  1) ÆNDRE ÉN FARVE OVERALT
+     Alle farver er defineret ét sted: i ":root { ... }" lige nedenfor (afsnittet
+     "FARVEPALET"). Hver farvegruppe har 3 værdier:
+        --xxx-bg      = baggrundsfarven i kassen
+        --xxx-border  = kantens farve
+        --xxx-text    = overskriftens farve
+     Skift hex-koden (fx #e4f1e3) til en anden, så ændres ALLE kasser med den
+     farve på én gang. Hex-koder kan slås op på fx https://htmlcolorcodes.com
+
+  2) ÆNDRE FARVEN PÅ ÉN ENKELT KASSE
+     Hver kasse i diagrammet (nederst i filen) har en "klasse" der bestemmer dens
+     farve, fx:  <div class="step green">
+     Skift ordet "green" til en af disse:
+        green   (grøn)     purple (lilla)    amber (orange)
+        gray    (grå)      blue   (blå)      red    (rød)
+     Så skifter netop den kasse farve — resten er uændret.
+
+  SÅDAN ÆNDRER DU PILE OG LAYOUT
+  ------------------------------
+  - De lodrette pile mellem kasserne er <div class="arrow">…</div>. Fjern én for
+    at fjerne en pil; kopiér én for at indsætte en ekstra.
+  - Romberne (beslutninger) er <svg class="dia">. Teksten står i <text>-linjerne
+    inde i SVG'en. Formen ændres i "points=…" (hjørnernes x,y-koordinater).
+  - Løkken tilbage ("gentag fra Trin 2") er den orange kasse i sidste beslutning.
+  - Bredden på hele diagrammet styres af "max-width" i "body" nedenfor.
+
+  SÅDAN ÆNDRER DU TABELLER
+  ------------------------
+  Hver tabelrække er en <tr>…</tr> med celler i <td>…</td>. Kopiér en <tr> for at
+  tilføje en række; ret tallene direkte i cellerne.
+
+  SÅDAN ÆNDRER DU TEKST
+  ---------------------
+  Al tekst står som almindelig tekst mellem tags nederst i filen. Ret bare direkte.
+
+  SÅDAN ÆNDRER DU FORKLARINGSAFSNITTENE (nederst i filen)
+  -------------------------------------------------------
+  Forklaringsboksene er <div class="summary">. Hvert trin har en <h4>-overskrift
+  med farveklasse (fx <span class="t-purple">), der følger kassernes farver, og
+  almindelige <p>-afsnit. Formler står i <p class="formula">. Ret teksten direkte.
+==================================================================================
+-->
+
+<style>
+  /* ======================= FARVEPALET (ret farver her) ======================= */
+  /* Farverne er taget fra det oprindelige flowdiagram (pastel-toner).            */
+  :root {
+    /* GRØN — bruges til: Input, Facit, "Ingen ekstra bundsikring" */
+    --green-bg:     #e4f1e3;
+    --green-border: #a7cda3;
+    --green-text:   #3f7d44;
+
+    /* LILLA — bruges til: Trin 1 (asfaltlag) */
+    --purple-bg:     #eae7f7;
+    --purple-border: #b4addd;
+    --purple-text:   #574d9e;
+
+    /* ORANGE/AMBER — bruges til: Trin 2 (ubundet bærelag) og løkke-kassen "gentag" */
+    --amber-bg:     #fbe9d4;
+    --amber-border: #e8b675;
+    --amber-text:   #8a5312;
+
+    /* GRÅ — bruges til: Trin 3 og Trin 6 (neutrale kasser) */
+    --gray-bg:     #efece4;
+    --gray-border: #cfcabb;
+    --gray-text:   #4a473f;
+
+    /* BLÅ — bruges til: Trin 4 (frostsikring/koblingshøjde) */
+    --blue-bg:     #dde9f7;
+    --blue-border: #a2bfe5;
+    --blue-text:   #2b5c9c;
+
+    /* RØD — bruges til: Trin 5 (bundsikringslag) */
+    --red-bg:     #fbe5e4;
+    --red-border: #e7a8a6;
+    --red-text:   #a83734;
+
+    /* KHAKI — bruges til: romberne (beslutninger) */
+    --khaki-bg:     #e9e6cf;
+    --khaki-border: #c9c597;
+    --khaki-text:   #4a473f;
+
+    /* Generelle farver (brødtekst, pile, tabellinjer) */
+    --body-text:   #33322d;
+    --muted:       #6b6b64;
+    --arrow:       #9a988e;
+    --line:        #d8d4c8;
+    --line-strong: #bdb9ab;
+  }
+
+  /* ============================ GENEREL LAYOUT ============================ */
+  /* Ret "max-width" for at gøre hele diagrammet bredere/smallere.           */
+  body {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+    background: #ffffff;
+    color: var(--body-text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  /* ============================ KASSER (STEP) ============================ */
+  /* Grundform for alle trin-kasser. Ret padding/hjørner her hvis ønsket.    */
+  .step {
+    border: 1px solid;
+    border-radius: 12px;
+    padding: 14px 20px;
+    text-align: center;
+  }
+  .step h3 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+  .step p  { margin: 3px 0; font-size: 13.5px; }
+  .step .desc  { color: var(--muted); }         /* dæmpet undertekst */
+  .formula {                                     /* formler i "skrivemaskine"-skrift */
+    font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+    font-size: 12.5px;
+  }
+
+  /* FARVE-KLASSER — kobler hver farvegruppe til baggrund, kant og overskrift.
+     For at ændre en enkelt kasses farve: skift dens klasse (fx "green" -> "blue"). */
+  .green  { background: var(--green-bg);  border-color: var(--green-border);  }
+  .green  h3 { color: var(--green-text); }
+  .purple { background: var(--purple-bg); border-color: var(--purple-border); }
+  .purple h3 { color: var(--purple-text); }
+  .amber  { background: var(--amber-bg);  border-color: var(--amber-border);  }
+  .amber  h3 { color: var(--amber-text); }
+  .gray   { background: var(--gray-bg);   border-color: var(--gray-border);   }
+  .gray   h3 { color: var(--gray-text); }
+  .blue   { background: var(--blue-bg);   border-color: var(--blue-border);   }
+  .blue   h3 { color: var(--blue-text); }
+  .red    { background: var(--red-bg);    border-color: var(--red-border);    }
+  .red    h3 { color: var(--red-text); }
+
+  /* ============================ PILE (LODRET FLOW) ============================ */
+  /* Én pil = én .arrow-blok. "ja"/"nej"-mærkater sættes med data-label (se HTML). */
+  .arrow { display: flex; flex-direction: column; align-items: center; margin: 7px 0; }
+  .arrow svg { width: 26px; height: 26px; }
+  .arrow svg path { fill: none; stroke: var(--arrow); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .arrow .lbl { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+
+  /* ============================ BESLUTNINGER (ROMBER) ============================ */
+  /* Rombens FORM ændres i "points" i <svg>. Rombens FARVE ændres via .dia-shape.    */
+  .branch { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+  .dia { width: 250px; height: 132px; flex: none; }
+  .dia-shape { fill: var(--khaki-bg); stroke: var(--khaki-border); stroke-width: 1.5; }
+  .dia-text  { fill: var(--khaki-text); font-size: 13px;
+               font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .branch-side { display: flex; align-items: center; gap: 8px; }
+  .branch-side .lbl { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .step.small { padding: 10px 14px; }
+  .step.small p { margin: 0; font-size: 12.5px; }
+
+  /* ============================ TABELLER ============================ */
+  /* Tilføj en række: kopiér en <tr>. Ret tal direkte i <td>-cellerne.  */
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; text-align: left; }
+  th { font-weight: 600; padding: 6px 8px; border-bottom: 1.5px solid var(--line-strong); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .note { font-size: 11.5px; color: var(--muted); margin: 8px 2px 0; text-align: left; line-height: 1.45; }
+
+  /* lille "gentag"-ikon i løkke-kassen */
+  .ico { width: 15px; height: 15px; vertical-align: -2px; }
+  .ico path { fill: none; stroke: var(--amber-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ============================ OPSUMMERING (tekstboks) ============================ */
+  /* Punktopsummering af alle trin. Ret teksten i <li>-punkterne nederst i filen.     */
+  /* Farven på en trin-overskrift ændres via klassen "t-FARVE" (følger kassernes farver). */
+  .summary { background: var(--gray-bg); border: 1px solid var(--gray-border); border-radius: 12px; padding: 18px 22px; margin-top: 26px; }
+  .summary h3 { margin: 0 0 4px; font-size: 17px; font-weight: 600; color: var(--gray-text); }
+  .summary .intro { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+  .summary h4 { margin: 13px 0 3px; font-size: 14px; font-weight: 600; }
+  .summary ul { margin: 0; padding-left: 20px; }
+  .summary li { font-size: 13px; line-height: 1.55; margin: 2px 0; }
+  .summary .rule { font-size: 13px; line-height: 1.5; margin: 16px 0 0; padding: 10px 14px; background: #ffffff; border-radius: 8px; border: 1px solid var(--line); }
+  .summary p { font-size: 13px; line-height: 1.55; margin: 4px 0; text-align: left; }
+  .summary p.formula { font-size: 12.5px; margin: 6px 0 8px; }
+  .t-green { color: var(--green-text); }  .t-purple { color: var(--purple-text); }
+  .t-amber { color: var(--amber-text); }  .t-blue { color: var(--blue-text); }
+  .t-red { color: var(--red-text); }      .t-gray { color: var(--gray-text); }
+</style>
+</head>
+
+<body>
+
+<!-- =====================================================================
+     HERUNDER STARTER SELVE DIAGRAMMET.
+     Hvert trin er en <div class="step FARVE"> … </div>.
+     Mellem trinene ligger pilene <div class="arrow"> … </div>.
+     ===================================================================== -->
+
+<!-- INPUT (farve: grøn) -->
+<div class="step green">
+  <h3>Input til VejDim</h3>
+  <p>Trafikklasse / N<sub>Æ10</sub> · underbund (jordart, E-modul) · frosthævningsrisiko</p>
+  <p class="desc">Valgte materialer: slidlag · bindelag · bundet bærelag · ubundet bærelag · bundsikring</p>
+  <p class="desc">Æ10-last: tvillinghjul, 0,7 MPa kontakttryk</p>
+</div>
+
+<!-- pil ned -->
+<div class="arrow"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- TRIN 1 (farve: lilla) -->
+<div class="step purple">
+  <h3>Trin 1 — asfaltlag dimensioneres</h3>
+  <p>Kriterium: største tilladelige træktøjning i undersiden af den samlede asfaltpakke (slidlag + bindelag + bundet bærelag)</p>
+  <p class="formula">ε<sub>h</sub> = −0,000250 × (N<sub>Æ10</sub> / 10<sup>6</sup>)<sup>−0,191</sup></p>
+</div>
+
+<div class="arrow"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- TRIN 2 (farve: orange/amber) -->
+<div class="step amber">
+  <h3>Trin 2 — ubundet bærelag: bæreevnekriterium</h3>
+  <p>Tilladelig lodret trykspænding på oversiden af laget:</p>
+  <p class="formula">σ<sub>z,till</sub> = 0,086 MPa × (E / 160 MPa)<sup>1,06</sup> × (N<sub>Æ10</sub> / 10<sup>6</sup>)<sup>−0,25</sup></p>
+  <p class="desc">Lineærelastisk multilagsberegning · kontrol σ<sub>z,akt</sub> ≤ σ<sub>z,till</sub></p>
+  <p class="desc">Hvert lags tykkelse dimensioneres, så snittet under laget overholder sin grænse</p>
+</div>
+
+<div class="arrow"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- TRIN 3 (farve: grå) -->
+<div class="step gray">
+  <h3>Trin 3 — min/maks lagtykkelser (Fig. 6.5)</h3>
+  <table>
+    <tr><th>Ubundet bærelag</th><th>E [MPa]</th><th>Min [mm]</th><th>Maks/lag [mm]</th></tr>
+    <tr><td>SKM</td><td>1.000</td><td>70</td><td>130</td></tr>
+    <tr><td>SIM</td><td>600</td><td>70</td><td>130</td></tr>
+    <tr><td>SG I / SG II</td><td>350 / 300</td><td>100</td><td>250</td></tr>
+    <tr><td>KB / KBT I–II / KAS / KBA</td><td>150–400</td><td>100</td><td>250</td></tr>
+  </table>
+</div>
+
+<div class="arrow"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- TRIN 4 (farve: blå) -->
+<!-- RETTET: kolonnen "Frostsikker" har intet fast frostkrav (bestemmes af Trin 1-2),
+     og T0-T1 har faste krav for frosttvivlsom (400) og frostfarlig (500). -->
+<div class="step blue">
+  <h3>Trin 4 — frostsikring: koblingshøjde (Fig. 5.3)</h3>
+  <p>Mindste koblingshøjde efter frosthævningsrisiko og trafikklasse:</p>
+  <table>
+    <tr><th>Trafikklasse</th><th>Frostsikker</th><th>Frosttvivlsom</th><th>Frostfarlig</th></tr>
+    <tr><td>T0 – T1</td><td>A-E-dim. †</td><td>400 mm *</td><td>500 mm *</td></tr>
+    <tr><td>T2</td><td>A-E-dim. †</td><td>500 mm *</td><td>700 mm *</td></tr>
+    <tr><td>T3</td><td>A-E-dim. †</td><td>600 mm *</td><td>800 mm *</td></tr>
+    <tr><td>T4 – T7</td><td>A-E-dim. †</td><td>700 mm *</td><td>900 mm *</td></tr>
+  </table>
+  <p class="note">† A-E-dim. = intet fast frostkrav; tykkelsen bestemmes alene ud fra analytisk-empirisk beregning (Trin 1–2).<br>
+     * Kan reduceres 100 mm ved kantsten / rørlagt afløb med befæstet fortov eller rabat.</p>
+</div>
+
+<div class="arrow"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- BESLUTNING 1: total højde < koblingshøjde? -->
+<!-- Rombens tekst står i <text>-linjerne. Formen ligger i "points" (x,y-hjørner). -->
+<div class="branch">
+  <svg class="dia" viewBox="0 0 250 132" role="img" aria-label="Beslutning: total befæstelseshøjde mindre end koblingshøjde?">
+    <polygon class="dia-shape" points="125,5 245,66 125,127 5,66"/>
+    <text class="dia-text" x="125" y="60" text-anchor="middle">Total befæstelseshøjde</text>
+    <text class="dia-text" x="125" y="78" text-anchor="middle">&lt; koblingshøjde?</text>
+  </svg>
+  <!-- "nej"-gren: springer bundsikring over -->
+  <div class="branch-side">
+    <span class="lbl">nej →</span>
+    <div class="step green small"><p>Ingen ekstra bundsikring</p></div>
+  </div>
+</div>
+
+<!-- "ja" ned til Trin 5 -->
+<div class="arrow"><span class="lbl">ja</span><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- TRIN 5 (farve: rød) -->
+<!-- RETTET: FS (forbrændingsslagge) har min. 100 mm (tallet 150 er E-værdien, ikke tykkelsen). -->
+<div class="step red">
+  <h3>Trin 5 — bundsikringslag dimensioneres</h3>
+  <p>Tykkelse = koblingshøjde − (asfalt + bærelag), dog ≥ mindstetykkelsen</p>
+  <table>
+    <tr><th>Bundsikring</th><th>E [MPa]</th><th>Min [mm]</th><th>Maks/lag [mm]</th></tr>
+    <tr><td>BL I / II (U &gt; 3)</td><td>150</td><td>200</td><td>250</td></tr>
+    <tr><td>BL I / II (U ≤ 3)</td><td>100</td><td>200</td><td>300</td></tr>
+    <tr><td>FS I / FS II (slagge)</td><td>150</td><td>100</td><td>250</td></tr>
+  </table>
+</div>
+
+<div class="arrow"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- TRIN 6 (farve: grå) -->
+<div class="step gray">
+  <h3>Trin 6 — underbundskontrol</h3>
+  <p class="desc">σ<sub>z,akt</sub> på underbundens overflade ≤ σ<sub>z,till</sub> for underbunden (samme kriterium som bærelag)</p>
+</div>
+
+<div class="arrow"><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- BESLUTNING 2 (LØKKEN): kriterium opfyldt på underbund? -->
+<!-- RETTET/TILFØJET: "nej" fører tilbage (gentag beregningen). Denne løkke manglede
+     i det oprindelige diagram. Løkke-kassen er orange (amber). -->
+<div class="branch">
+  <svg class="dia" viewBox="0 0 250 132" role="img" aria-label="Beslutning: kriterium opfyldt på underbund?">
+    <polygon class="dia-shape" points="125,5 245,66 125,127 5,66"/>
+    <text class="dia-text" x="125" y="60" text-anchor="middle">Kriterium opfyldt</text>
+    <text class="dia-text" x="125" y="78" text-anchor="middle">på underbund?</text>
+  </svg>
+  <div class="branch-side">
+    <span class="lbl">nej →</span>
+    <div class="step amber small">
+      <p><svg class="ico" viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4M5 10h9a5 5 0 0 1 0 10h-3"/></svg>
+      øg bundsikring / bærelag → gentag fra Trin 2</p>
+    </div>
+  </div>
+</div>
+
+<div class="arrow"><span class="lbl">ja</span><svg viewBox="0 0 24 24"><path d="M5 9l7 7 7-7"/></svg></div>
+
+<!-- FACIT (farve: grøn) -->
+<div class="step green">
+  <h3>Dimensioneret befæstelse — alle tykkelser godkendt</h3>
+</div>
+
+<!-- =====================================================================
+     UDDYBNING TRIN FOR TRIN ("under hjelmen").
+     Hvert trin har en <h4>-overskrift med farveklasse (fx t-purple), der
+     følger kassernes farver, efterfulgt af almindelige <p>-afsnit.
+     Formler står i <p class="formula">. Ret teksten direkte.
+     ===================================================================== -->
+<div class="summary">
+  <h3>Uddybning trin for trin — hvad sker der under hjelmen</h3>
+  <p class="intro">Diagrammet ovenfor viser rækkefølgen; her forklares hvad der reelt beregnes. Den røde tråd: for hvert kriterium findes et <b>tilladeligt</b> tal (formel eller tabelopslag) og et <b>aktuelt</b> tal (beregnet i en elastisk lagmodel) — og lagtykkelserne justeres, til aktuel ≤ tilladelig overalt. Der sikres mod tre fejlmåder: revnedannelse i asfalten (udmattelse), blivende deformation af ubundne lag og underbund, samt frosthævning.</p>
+
+  <h4><span class="t-green">Input — alt oversættes til tal</span></h4>
+  <p>Trafikken udtrykkes som den dimensionsgivende trafikbelastning N<sub>Æ10</sub>: enten trafikklassens standardværdi (Fig. 4.1, fx T4 = 73.000 Æ10 pr. år) ganget med dimensioneringsperioden, eller beregnet fra trafiktællinger:</p>
+  <p class="formula">N<sub>Æ10</sub> = P × KF × KK × KR × FSS × Σ(FÆ10 × L)</p>
+  <p>hvor P er vækstfaktoren, og KF/KK/KR/FSS/FÆ10 korrigerer for tværfordeling, kanalisering, rundkørsler/kryds, supersingledæk og køretøjstype. Materialevalgene oversættes til regningsmæssige E-moduler (Fig. 6.2 og 6.5), og underbunden får en frostklasse og et E-modul (Fig. 5.1/5.2; standardværdier 100/40/20 MPa for frostsikker/frosttvivlsom/frostfarlig). Poisson's forhold er 0,35 for alle materialer. Når input er låst, er lagtykkelserne de eneste frie variable.</p>
+
+  <h4><span class="t-gray">Belastningsmodellen — hvad "Æ10" er i selve beregningen</span></h4>
+  <p>Æ10 er defineret som en 10 t aksel med tvillingmonterede dæk, dæktryk 0,7 MPa og 350 mm mellem dækcentrene. I beregningen påføres den ene halvdel af akslen: et <b>tvillinghjul på 5 t</b> = to cirkulære trykflader à 25 kN (radius ≈ 107 mm) med 350 mm centerafstand. MMOPP lagde som standard <b>20 % stødtillæg</b> oveni, så der reelt blev regnet med 2 × 30 kN (radius ≈ 117 mm) — VejDim forventes at regne tilsvarende. Responsen fra de to cirkler lægges sammen (superposition), og der aflæses i det mest ugunstige vandrette punkt (under et dæk eller midt imellem dem). Historisk blev Æ10 repræsenteret som én enkelt cirkel på 6 t (radius ≈ 165 mm); den form møder man stadig i håndregneeksempler.</p>
+
+  <h4><span class="t-gray">Beregningsmotoren — lagmodellen bag alle "aktuelle" tal</span></h4>
+  <p>Alle aktuelle spændinger og tøjninger kommer fra én <b>lineærelastisk lagmodel</b>: en stak homogene, elastiske lag (hvert med E, ν = 0,35 og tykkelse h) med uendelig vandret udstrækning, fuld binding i grænsefladerne og underbunden som uendeligt dybt halvrum. MMOPP løste modellen med programmet <b>WESDEF</b> (samme familie som BISAR, ELSYM5 og CHEVRON): den fulde flerlagsløsning af spændings- og tøjningsfeltet. Én kørsel giver responsen i alle relevante punkter på én gang.</p>
+  <p>Håndalternativet er <b>Odemarks ækvivalente tykkelsers metode</b>: lagene over et snit omregnes til én ækvivalent tykkelse af det underliggende materiale,</p>
+  <p class="formula">h<sub>e</sub> = f × Σ hᵢ × (Eᵢ / E<sub>n</sub>)<sup>1/3</sup></p>
+  <p>hvorefter Boussinesqs lukkede formler bruges i den korrigerede dybde. Korrektionsfaktoren f er empirisk (MMOPP Tabel 3: f1 = 1 + 0,6·(a/z)² eller 0,8 ved første skilleflade; 1,0 eller 0,92 ved dybere skilleflader afhængigt af stivhedsforholdet mellem lagene; 0,82–1,0 mod underbunden). Vigtig afgrænsning: modellen er statisk og kender hverken tid, revner eller blivende deformation — al nedbrydning ligger i de <b>empiriske kriterier</b>. Deraf navnet analytisk-empirisk metode.</p>
+
+  <h4><span class="t-purple">Trin 1 — asfaltpakken: tøjningskriteriet</span></h4>
+  <p>Den tilladelige træktøjning er en ren udmattelseslov, der kun afhænger af trafikmængden:</p>
+  <p class="formula">ε<sub>h,till</sub> = −0,000250 × (N<sub>Æ10</sub> / 10⁶)<sup>−0,191</sup>&nbsp;&nbsp;&nbsp;(fx N<sub>Æ10</sub> = 1,46 mio. → 233 µstrain)</p>
+  <p>Den aktuelle tøjning aflæses i <b>undersiden af den samlede asfaltpakke</b> — slidlag, evt. bindelag og bundet bærelag regnes som ét lag, fordi pakken bøjer som én plade, og den største trækfiber derfor sidder nederst. Pakkens E-modul er et vægtet gennemsnit efter ækvivalente tykkelsers princip (vægtning med tredjeroden af E), hvor materiale i de øverste 100 mm bruger E-værdien ved 30 °C og dybere materiale værdien ved 25 °C (de to kolonner i Fig. 6.2). Ved hastigheder under 60 km/t reduceres asfaltens E med faktoren (V/60)<sup>0,37</sup>. Iterationen: slidlag (og evt. bindelag) ligger fast ud fra funktionskrav; det bundne bærelags tykkelse justeres, og pakkens vægtede E genberegnes løbende, indtil ε<sub>akt</sub> netop overholder ε<sub>till</sub>.</p>
+
+  <h4><span class="t-amber">Trin 2 — ubundne lag: bæreevnekriteriet og kaskadeprincippet</span></h4>
+  <p>For hvert ubundet lag (og underbunden) beregnes den tilladelige lodrette trykspænding på lagets <b>overside</b> med lagets eget E:</p>
+  <p class="formula">σ<sub>z,till</sub> = 0,086 MPa × (E / 160 MPa)<sup>1,06</sup> × (N<sub>Æ10</sub> / 10⁶)<sup>−0,25</sup></p>
+  <p>Fx ved N<sub>Æ10</sub> = 1,46 mio.: SG II (E = 300) → 0,152 MPa; bundsikring/underbund (E = 100) → 0,047 MPa. Den aktuelle spænding σ<sub>z,akt</sub> aflæses direkte i lagmodellen på hver grænseflade. Spændingen er kontinuert henover en grænseflade — "bund af stabilgrus" og "top af bundsikring" er samme tal — og tallet sammenlignes med grænsen for laget <b>nedenunder</b>.</p>
+  <p><b>Kaskadeprincippet:</b> et lags tykkelse styrer spændingen ved lagets egen <b>bund</b>, altså snittet under det. Mål og skrue er dermed forskudt ét lag: grænsen på toppen af stabilgruset er asfaltens ansvar (typisk allerede opfyldt efter Trin 1); stabilgrusets tykkelse øges, til toppen af bundsikringen overholder bundsikringens grænse; bundsikringens tykkelse øges, til toppen af underbunden overholder underbundens grænse.</p>
+
+  <h4><span class="t-gray">Trin 3 — min/maks: bygbarhed, ikke styrke</span></h4>
+  <p>Minimumstykkelsen er det tyndeste lag, der kan udlægges og komprimeres som ét sammenhængende lag; maks pr. lag er, hvad der kan komprimeres i én udlægning. Kræver bæreevnen mindre end minimum, rundes op til minimum; kræver den mere end maks, udlægges materialet i flere lag af samme materiale. Disse grænser kan altså overtrumfe det strukturelle resultat — på stiv underbund er fx bundsikringens 200 mm-minimum ofte det reelt styrende.</p>
+
+  <h4><span class="t-blue">Trin 4 + beslutning — frostsikring: anden fysik, rent opslag</span></h4>
+  <p>Frostkravet handler ikke om last, men om frostens nedtrængningsdybde og jordens frostfølsomhed. Mindste koblingshøjde slås op i Fig. 5.3 ud fra frostklasse × trafikklasse og er et <b>gulv på den samlede befæstelseshøjde</b>. Forudsætningen er en tørholdt vejkasse (velfungerende afvanding af både overfladevand og grundvand); med kantsten/rørlagt afløb og befæstet fortov eller rabat kan gulvet reduceres 100 mm. Frostsikker underbund har intet gulv — dér styrer alene bæreevnen. Beslutningen i romben er reelt en max-funktion: den samlede højde bliver den største af det bæreevne-krævede og frost-gulvet.</p>
+
+  <h4><span class="t-red">Trin 5 — bundsikringslaget: dobbeltrolle</span></h4>
+  <p>Bundsikringen gør to ting på én gang: den beskytter underbunden (bæreevne, jf. kaskadeprincippet) og fylder op til frost-gulvet. Tykkelsen bliver derfor max af tre krav: det bæreevne-krævede, det frost-krævede (koblingshøjden minus alt ovenover) og minimumstykkelsen (200 mm for BL, 100 mm for FS).</p>
+
+  <h4><span class="t-gray">Trin 6 + løkken — konsistenstjek af et koblet system</span></h4>
+  <p>Til sidst kontrolleres den færdige stak: σ<sub>z,akt</sub> på underbundens overflade skal overholde underbundens σ<sub>z,till</sub>. Fejler tjekket, øges bundsikring/bærelag, og modellen køres igen. At det er en løkke og ikke en streg, skyldes at systemet er koblet: enhver tykkelsesændring flytter hele spændingsfeltet. Et lærerigt eksempel fra MMOPP-vejledningen: hæves underbundens E fra 40 til 50 MPa, kræves der <b>tykkere</b> SG-lag ved uændret totalhøjde — det stivere underlag indsnævrer "trykkeglen", så trykket på mellemlagene stiger. Intuitionen "bedre bund = mindre af alt" holder altså ikke lag for lag.</p>
+
+  <h4><span class="t-green">Facit</span></h4>
+  <p>Resultatet er den tyndeste opbygning, der samtidig opfylder alle tre fejlmåder plus bygbarhedsgrænserne. Ved det endelige valg skal der desuden tages hensyn til udførelsestolerancer og gældende udbudsforskrifter.</p>
+
+  <p class="rule"><b>Huskeregel:</b> tilladeligt = formel/opslag · aktuelt = lagmodel · tykkelse = skru op til de mødes. Hvert lag skrues efter snittet ved sin egen bund.</p>
+</div>
+
+<!-- =====================================================================
+     KILDER OG STATUS. Ret/tilføj kilder direkte i punkterne.
+     ===================================================================== -->
+<div class="summary">
+  <h3>Kilder — og hvad der er normativt vs. programdokumenteret</h3>
+  <ul>
+    <li><b>Håndbog: Dimensionering af befæstelser og forstærkningsbelægninger</b> (Vejdirektoratet, januar 2022, rettelser af 1. august 2025) — <b>normativ</b>: kriterieformlerne (afsnit 7.1), E-værdier og min/maks-tykkelser (Fig. 6.2/6.5), koblingshøjder (Fig. 5.3), trafikberegningen (afsnit 4), hastighedskorrektionen og 100 mm-temperaturopdelingen (afsnit 6.1).</li>
+    <li><b>MMOPP Brugervejledning</b> (Vejregelrådet, marts 2007) — dokumenterer regnemotoren og proceduren: WESDEF (fuld lagteori), 5 t tvillinghjul + 20 % stødtillæg som standard, løbende vægtning af asfaltens E, Odemark-korrektionsfaktorerne (Tabel 3) og kriteriernes tilblivelse.</li>
+    <li><b>Bolet &amp; Busch: Vejbefæstelsers dimensionering</b> (Aalborg Universitet, DCE Lecture Notes 52, 2016) — teorien bag metoden (Boussinesq → Odemark → lagteori) og den manuelle regnemetode med h<sub>e</sub>, f-faktorer og regneskema (kap. 7).</li>
+  </ul>
+  <p class="rule"><b>Status:</b> Formler, tabelværdier og kriterier er håndbogens gældende regler og dermed også VejDims grundlag. Detaljerne om selve regnemotoren (WESDEF, stødtillæg, vægtningsprocedure) er dokumenteret for MMOPP; VejDim afløser MMOPP's analytiske funktion og forventes at regne tilsvarende, men Vejdirektoratet har ikke offentliggjort en tilsvarende teknisk dokumentation for VejDim.</p>
+</div>
+
+</body>
+</html>
