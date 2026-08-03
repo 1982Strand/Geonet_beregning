@@ -4,13 +4,14 @@
 Reproducerer Fase B (Korrelation_trafikklasse_Eo.md). Koeres fra repo-roden med
 projektets .venv:  .venv\\Scripts\\python.exe "Dokumenter og data\\korrelation_final.py"
 
-Laeser standardkoerslerne (VEJDIM_KOERSLER_STANDARD_RAEKKER) og appens live
-T_BASIS_TABLE fra core/data.py. Bemaerk: scriptet bruger de INDBYGGEDE
-standardkoersler — aendringer, du har lavet i appens redigerbare tabel, ligger i
-appens egen gemte fil og indgaar ikke her. Ingen skrivning; printer
-korrelations- og reduktionstabellen samt konsistenschecks.
+Bruger de samme koersler som appen: har du redigeret tabellen i sektionen
+"Trafikklasse-korrelation", laeses dine gemte vaerdier fra
+trafikklasse_korrelation_brugerdefineret.json i repo-roden; ellers bruges
+standardkoerslerne i core/data.py. Designdiagrammet er appens live
+T_BASIS_TABLE. Ingen skrivning; printer korrelations- og reduktionstabellen
+samt konsistenschecks.
 """
-import math, sys, os
+import json, math, sys, os
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
@@ -18,6 +19,7 @@ from core.data import (
     T_BASIS_TABLE, EO_KOLONNER, VEJDIM_KOERSLER_STANDARD_RAEKKER,
 )
 
+KOERSLER_JSON = os.path.join(REPO, "trafikklasse_korrelation_brugerdefineret.json")
 NU = 0.35
 A = 150.0                 # pladeradius mm (Ø300)
 P = 0.20                  # MPa (Eo lineaer i p)
@@ -28,14 +30,30 @@ def num(v):
         return None
     return float(str(v).replace(",", "."))
 
-# Samlet datasaet: standardkoerslerne, opslag paa (T, Eu)
+def hent_koersler():
+    """Brugerens redigerede koersler hvis de findes, ellers standardkoerslerne.
+
+    Returnerer (raekker, kilde-tekst). Appen gemmer kun filen, naar tabellen
+    afviger fra standarden, saa fraveer af filen betyder 'urort standard'.
+    """
+    if os.path.exists(KOERSLER_JSON):
+        try:
+            with open(KOERSLER_JSON, encoding="utf-8-sig") as f:
+                raekker = json.load(f)
+            if isinstance(raekker, list) and raekker:
+                return raekker, f"redigerede koersler ({os.path.basename(KOERSLER_JSON)})"
+        except (OSError, json.JSONDecodeError):
+            pass
+    return VEJDIM_KOERSLER_STANDARD_RAEKKER, "standardkoersler (core/data.py)"
+
+raekker, KILDE = hent_koersler()
 data = {
     (r["T"], int(r["eu"])): {
         "t_SG_mm": r["t_SG_mm"],
         "t_BL_mm": r["t_BL_mm"],
-        "t_bundet_mm": r["t_bundet_mm"],
+        "t_bundet_mm": r.get("t_bundet_mm", 0),
     }
-    for r in VEJDIM_KOERSLER_STANDARD_RAEKKER
+    for r in raekker
 }
 
 def interp_eo(eu, tyk, felt="uarmeret"):
@@ -74,6 +92,7 @@ def overflademodul(lag, E_hs):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    print(f"Datagrundlag: {KILDE}\n")
     print(f"{'T':4}{'Eu':>4}{'bund':>6}{'SG':>5}{'BL':>5}{'ubund':>6}"
           f"{'Eo_aekv':>8}{'zone':>16}{'Eo_1lag':>8}{'Eo_2lag':>8}{'arm1':>6}{'red%':>6}")
     ud = []

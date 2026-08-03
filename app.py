@@ -4491,7 +4491,9 @@ def render_trafikklasse_korrelation() -> None:
     if nye_raekker != _aktiv_koersel_raekker():
         st.session_state["vejdim_koersel_raekker"] = nye_raekker
         gem_koersel_raekker(nye_raekker)
-        raekker = berig_koersel_raekker(nye_raekker)
+        # Kør siden igen: de afledte visninger (asfaltpakke, Eo_ækv) står før
+        # editoren og ville ellers vise værdierne fra før redigeringen.
+        st.rerun()
 
     if nye_raekker != _standard_koersel_raekker():
         antal = sum(
