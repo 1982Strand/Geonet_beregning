@@ -1,7 +1,10 @@
 """
 Beregningsmotor til Geonet Dimensioneringsværktøj.
 
-Implementerer den 7-trins algoritme beskrevet i Beskrivelse.md § 4.
+Implementerer opslaget i designdiagrammerne: basistykkelse fra (Eu, Eo) og
+lag-mode, korrigeret for friktionsvinkel og geonet-effektivitet
+(T = T_basis × (1 + φ-kor + net-kor)). Trinene er beskrevet for brugeren under
+"Sådan beregnes det" i app.py.
 Ingen imports herfra må være UI-relaterede.
 
 Offentlig API:

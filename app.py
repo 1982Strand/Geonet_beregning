@@ -4414,9 +4414,32 @@ og appen afviser med en besked frem for at ekstrapolere:
 3. **Frost/koblingshøjde ligger uden for korrelationen.** Kørslerne er lavet
    frostsikkert. En geonet-reduceret opbygning må ikke bringe totalhøjden under
    koblingshøjden for frostfarlig bund — separat kontrol.
-4. **Følsomhed for asfaltpakken.** Eo_ækv afhænger let af den valgte (faste)
+4. **1-net-huller i kernezonen.** Nogle celler i kernezonen mangler 1-net-data i
+   diagrammet ved den ækvivalente Eo (1-lags-kurven er tom ved høj Eo og tynd
+   opbygning). Dér kan reduktionen ikke aflæses, selvom cellen er inden for zonen.
+5. **Følsomhed for asfaltpakken.** Eo_ækv afhænger let af den valgte (faste)
    asfaltpakke pr. klasse; pakkerne her er VejDims kanoniske valg.
-5. **T7 ikke medtaget** (åben klasse) — henvis til konkret VejDim-beregning.
+6. **T7 ikke medtaget** (åben klasse) — henvis til konkret VejDim-beregning.
+"""
+
+_KORR_CHECKS_MD = """
+Koblingen er efterprøvet på tre uafhængige måder — det er dokumentationen for,
+at den er beregnet og ikke gættet:
+
+1. **Reduktionsniveauet matcher appens egen beregning.** De fundne reduktioner
+   ligger i samme bånd som belastningsklasse-dimensioneringen. Det er den samme
+   fysiske geonet-effekt, blot indekseret via trafikklasse.
+2. **Zonegrænserne matcher en uafhængig håndberegning.** Mønstret af
+   "under"/"over"-celler er praktisk talt identisk med en teoretisk beregnet
+   matrix (Odemark/Boussinesq-håndmetode, valideret mod lærebogens
+   regneeksempel) — selvom de to er fremkommet helt uafhængigt af hinanden.
+3. **Mekanisk plausibilitet.** En uafhængig tilbageberegning af overflademodulet
+   for VejDim-stakken (SG 300 / BL 100 / underbund Eu) lander i kernezonen i
+   samme størrelsesorden som Eo_ækv (middelforhold ~1,1).
+
+Bemærk til punkt 3: det er **ikke** en stram mekanisk identitet — spændet er
+stort i yderpunkterne. Netop derfor hviler reduktionen på diagrammets
+tykkelsesrelation og ikke på en Eo-lighed.
 """
 
 
@@ -4428,11 +4451,6 @@ def render_trafikklasse_korrelation() -> None:
         "Kørslerne kan redigeres — den ækvivalente Eo genberegnes og bruges live "
         "i beregningen."
     )
-
-    if st.button("Nulstil kørsler til standard", type="secondary"):
-        slet_koersler_json_og_nulstil()
-        st.session_state["vejdim_koersler"] = _standard_koersler()
-        st.rerun()
 
     # Frisk indlæsning af CSV'en, så rettelser i filen ses ved genindlæsning.
     csv_koersler, csv_raekker, csv_advarsler = _live_koersler_csv()
@@ -4472,6 +4490,8 @@ def render_trafikklasse_korrelation() -> None:
             "Kun summen (SG + BL) indgår i tilbageberegningen — fordelingen "
             "mellem lagene har ingen betydning for Eo_ækv."
         )
+    with st.expander("Hvorfor vi ved at koblingen holder"):
+        st.markdown(_KORR_CHECKS_MD)
     with st.expander("Zoner og forbehold"):
         st.markdown(_KORR_ZONER_MD)
     if csv_raekker:
@@ -4506,10 +4526,24 @@ def render_trafikklasse_korrelation() -> None:
     st.subheader("VejDim-kørsler — ubundet opbygning (redigerbar)")
     st.caption(
         "For hver trafikklasse og underbund (Eu): den samlede ubundne opbygning "
-        "VejDim krævede. Rediger tykkelsen — Eo_ækv-tabellen nedenfor "
+        "VejDim krævede. Værdierne kommer fra VejDim_kørsler.csv, indtil du "
+        "selv retter en celle. Rediger tykkelsen — Eo_ækv-tabellen nedenfor "
         "genberegnes og gemmes automatisk. Kun totalen indgår i broen; den "
         "originale SG/BL-fordeling ses under *Datagrundlag og forudsætninger*."
     )
+
+    # Nulstilling hører til her, hvor overstyringerne laves: den fjerner de
+    # manuelle værdier, så alle celler igen følger CSV'en.
+    if st.button(
+        "Nulstil til standardværdier",
+        type="secondary",
+        help="Fjerner dine manuelle overstyringer, så alle celler igen "
+             "matcher værdierne i VejDim_kørsler.csv.",
+    ):
+        slet_koersler_json_og_nulstil()
+        st.session_state["vejdim_koersler"] = _standard_koersler()
+        st.session_state.pop("koersel_editor", None)
+        st.rerun()
 
     editor_rows = [
         {
