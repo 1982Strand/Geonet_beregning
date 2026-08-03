@@ -1060,6 +1060,27 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
     return valgt, info, eo
 
 
+_TRAFIK_GRUNDLAG_MD = """
+Grundlaget lader **to uafhængige, empiriske kilder** mødes:
+
+1. **VejDim-kørslerne** (vejreglens metode) fastlægger, hvor tykt et ubundet lag
+   (stabilgrus + bundsikring) en given trafikklasse kræver ved en given
+   underbund Eu.
+2. **Geonet-designdiagrammerne** (GS-GRID/Tensar-feltforsøg) fastlægger, hvor
+   meget et geonet kan reducere netop den tykkelse.
+
+**Tilbageberegningen** binder dem sammen: den finder den diagramkurve, hvis
+ustabiliserede tykkelse netop svarer til VejDims krav ved samme Eu. Kurvens navn
+er den **ækvivalente Eo** — en adresse i diagrammet, ikke et krav du har stillet.
+Reduktionen aflæses dér og er dermed diagrammets egen, feltdokumenterede værdi.
+Der omregnes aldrig mellem de to metoders kriterier.
+
+Grundlaget er **rent bæreevne** (frostsikker underbund) — frost og koblingshøjde
+skal kontrolleres separat. Se **Trafikklasse-korrelation** i menuen for metode,
+datagrundlag og forbehold.
+"""
+
+
 def _vis_korrelationstabel(
     korr: dict,
     *,
@@ -1143,10 +1164,13 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
     eo_aekv, zone = trafik_eo_aekv(valgt_t, eu, korrelation=_aktiv_korrelation())
     naermeste = eo_til_naermeste_klasse(eo_aekv)
 
+    with kol_info:
+        _vis_korrelationstabel(
+            _aktiv_korrelation(), valgt_t=valgt_t, eu=eu, key_prefix=key_prefix
+        )
+
     with kol_knapper:
         st.caption(format_trafikklasse(valgt_t))
-
-    with kol_info:
         if zone == "ok":
             tal = _trafik_kobling_tal(eu, eo_aekv, _aktiv_t_basis_table())
             t_krav_txt = (
@@ -1191,12 +1215,8 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
                 f"(5–40 MPa).</b> Vælg et Eu i intervallet, eller brug "
                 f"<b>Belastningsklasse</b>-grundlaget.",
             )
-        with st.expander("Om trafikklasse-grundlaget"):
-            st.write(TRAFIKKLASSE_NOTE)
-
-    _vis_korrelationstabel(
-        _aktiv_korrelation(), valgt_t=valgt_t, eu=eu, key_prefix=key_prefix
-    )
+    with st.expander("Om trafikklasse-grundlaget"):
+        st.markdown(_TRAFIK_GRUNDLAG_MD)
 
     return {
         "type": "trafikklasse",
