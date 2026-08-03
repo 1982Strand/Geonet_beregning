@@ -4447,10 +4447,13 @@ def render_trafikklasse_korrelation() -> None:
         for r in raekker
     ]
     _mm = dict(min_value=0.0, step=10.0, format="%.0f")
+    # Højde nok til alle rækker, så tabellen vises i fuld længde uden scroll.
+    # Streamlit bruger ca. 35 px pr. række + 35 px til overskriftsrækken.
+    editor_hoejde = 35 * (len(editor_rows) + 1) + 3
     redigeret = st.data_editor(
         pd.DataFrame(editor_rows),
         width="stretch",
-        height=700,
+        height=editor_hoejde,
         hide_index=True,
         column_config={
             "Trafikklasse": st.column_config.TextColumn("Trafikklasse", disabled=True),
