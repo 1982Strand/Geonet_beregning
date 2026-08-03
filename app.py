@@ -517,7 +517,7 @@ def _csv_mtime() -> float:
         return 0.0
 
 
-def _live_koersler_csv() -> tuple[dict, list[dict], list[str]]:
+def _live_koersler_csv() -> tuple[dict, list[dict]]:
     """Læs kørsels-CSV'en på ny ved hver scriptkørsel.
 
     core.data læser kun filen ved import, og Streamlit importerer moduler én
@@ -4453,7 +4453,7 @@ def render_trafikklasse_korrelation() -> None:
     )
 
     # Frisk indlæsning af CSV'en, så rettelser i filen ses ved genindlæsning.
-    csv_koersler, csv_raekker, csv_advarsler = _live_koersler_csv()
+    csv_koersler, csv_raekker = _live_koersler_csv()
     csv_koersler = csv_koersler or VEJDIM_KOERSLER
 
     with st.expander("Metode og fremgangsmåde", expanded=True):
@@ -4490,6 +4490,36 @@ def render_trafikklasse_korrelation() -> None:
             "Kun summen (SG + BL) indgår i tilbageberegningen — fordelingen "
             "mellem lagene har ingen betydning for Eo_ækv."
         )
+
+        st.markdown(
+            "**Samlet befæstelseshøjde inkl. asfalt (mm)** — asfaltpakke + SG + BL:"
+        )
+        total_pr_celle = {
+            (r["T"], r["eu"]): r["t_befaestelse_total_mm"] for r in csv_raekker
+        }
+        st.dataframe(
+            [
+                {
+                    "Trafikklasse": t,
+                    **{
+                        f"Eu {eu}": (
+                            f"{total_pr_celle[(t, eu)]:.0f}"
+                            if (t, eu) in total_pr_celle else "—"
+                        )
+                        for eu in TRAFIK_EU_PUNKTER
+                    },
+                }
+                for t in TRAFIKKLASSER
+            ],
+            width="content",
+            hide_index=True,
+        )
+        st.caption(
+            "Beregnes af appen ud fra lagtykkelserne i CSV'en — de afledte "
+            "totaler står derfor ikke i filen og kan ikke blive forældede. "
+            "Højden er relevant for frostkontrollen (koblingshøjde), som ligger "
+            "uden for korrelationen."
+        )
     with st.expander("Hvorfor vi ved at koblingen holder"):
         st.markdown(_KORR_CHECKS_MD)
     with st.expander("Zoner og forbehold"):
@@ -4507,14 +4537,6 @@ def render_trafikklasse_korrelation() -> None:
         st.warning(
             "⚠️ **VejDim_kørsler.csv kunne ikke læses** — der vises indbyggede "
             "reserveværdier. Kontrollér filen i *Dokumenter og data*."
-        )
-
-    if csv_advarsler:
-        st.warning(
-            "⚠️ **Uoverensstemmelse i VejDim_kørsler.csv** — kolonnen "
-            "*t_ubundet_total_mm* er kun dokumentation; beregningen bruger "
-            "altid t_SG_mm + t_BL_mm:\n\n- "
-            + "\n- ".join(csv_advarsler)
         )
 
     st.divider()
