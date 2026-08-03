@@ -604,68 +604,55 @@ _SG_BL_MIN = _SG_MIN + " og BLII begrænset til minimumstykkelse 200"
 _VEJDIM_BEREGNER = "VejDim beregner tykkelsen af det bundne bærelag"
 
 VEJDIM_KOERSLER_STANDARD_RAEKKER = [
+    _kd("T1",  3, "AB 1000", 40, "-", 0, "-", 0, 1000, 170, 448, 0),
+    _kd("T1",  4, "AB 1000", 40, "-", 0, "-", 0, 1000, 120, 470, 0),
     _kd("T1",  5, "AB 1000", 40, "-", 0, "-", 0, 1000, 110, 450, 20.2),
-    _kd("T1", 10, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 356, 20.0, _SG_MIN),
+    _kd("T1", 10, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 356, 20, _SG_MIN),
     _kd("T1", 15, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 292, 20.2, _SG_MIN),
     _kd("T1", 20, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 243, 20.1, _SG_MIN),
     _kd("T1", 30, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 200, 29.6, _SG_BL_MIN),
     _kd("T1", 40, "AB 1000", 40, "-", 0, "-", 0, 1000, 100, 200, 30.1, _SG_BL_MIN),
-    _kd("T2",  5, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 160, 758, 20.1),
-    _kd("T2", 10, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 250, 590, 20.0),
-    _kd("T2", 15, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 150, 506, 20.1),
-    _kd("T2", 20, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 160, 419, 20.1),
-    _kd("T2", 30, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 160, 316, 20.2),
-    _kd("T2", 40, "AB 1000", 40, "GAB 0 2000", 40, "GAB 0 2000", 40, 1744, 150, 257, 20.1),
-    _kd("T3",  5, "AB 1000", 40, "-", 0, "GAB 0 2000", 95, 1862, 200, 818, 20.0),
+    _kd("T2",  3, "AB 1000", 40, "-", 0, "GAB 0 2000", 74, 1690, 180, 866, 0),
+    _kd("T2",  4, "AB 1000", 40, "-", 0, "GAB 0 2000", 74, 1690, 180, 797, 0),
+    _kd("T2",  5, "AB 1000", 40, "-", 0, "GAB 0 2000", 74, 1690, 170, 757, 20.1),
+    _kd("T2", 10, "AB 1000", 40, "-", 0, "GAB 0 2000", 74, 1690, 170, 590, 20),
+    _kd("T2", 15, "AB 1000", 40, "-", 0, "GAB 0 2000", 73, 1680, 160, 508, 20.1),
+    _kd("T2", 20, "AB 1000", 40, "-", 0, "GAB 0 2000", 73, 1680, 160, 439, 20.1),
+    _kd("T2", 30, "AB 1000", 40, "-", 0, "GAB 0 2000", 72, 1671, 160, 337, 20.2),
+    _kd("T2", 40, "AB 1000", 40, "-", 0, "GAB 0 2000", 72, 1671, 160, 264, 20.1),
+    _kd("T3",  3, "AB 1000", 40, "-", 0, "GAB 0 2000", 95, 1862, 200, 957, 0),
+    _kd("T3",  4, "AB 1000", 40, "-", 0, "GAB 0 2000", 95, 1862, 200, 879, 0),
+    _kd("T3",  5, "AB 1000", 40, "-", 0, "GAB 0 2000", 95, 1862, 200, 818, 20),
     _kd("T3", 10, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 190, 649, 20.1),
     _kd("T3", 15, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 190, 539, 20.1),
-    _kd("T3", 20, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 190, 460, 20.0),
-    _kd("T3", 30, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 200, 334, 20.0),
+    _kd("T3", 20, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 190, 460, 20),
+    _kd("T3", 30, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 200, 334, 20),
     _kd("T3", 40, "AB 1000", 40, "-", 0, "GAB 0 2000", 94, 1854, 200, 255, 20.1),
-    _kd("T4",  5, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 240, 944, 20.0, _VEJDIM_BEREGNER),
-    _kd("T4", 10, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 230, 739, 20.0, _VEJDIM_BEREGNER),
+    _kd("T4",  3, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 240, 1107, 0, _VEJDIM_BEREGNER),
+    _kd("T4",  4, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 240, 1014, 0, _VEJDIM_BEREGNER),
+    _kd("T4",  5, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 240, 944, 20, _VEJDIM_BEREGNER),
+    _kd("T4", 10, "AB 2000", 40, "-", 0, "GAB 0 2000", 125, 2362, 230, 739, 20, _VEJDIM_BEREGNER),
     _kd("T4", 15, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 220, 629, 20.1, _VEJDIM_BEREGNER),
-    _kd("T4", 20, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 220, 537, 20.0, _VEJDIM_BEREGNER),
+    _kd("T4", 20, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 220, 537, 20, _VEJDIM_BEREGNER),
     _kd("T4", 30, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 230, 392, 20.1, _VEJDIM_BEREGNER),
-    _kd("T4", 40, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 230, 301, 20.0, _VEJDIM_BEREGNER),
-    _kd("T5",  5, "AB 2000", 40, "-", 0, "GAB I 3000", 132, 3456, 270, 1042, 20.0, _VEJDIM_BEREGNER),
+    _kd("T4", 40, "AB 2000", 40, "-", 0, "GAB 0 2000", 123, 2355, 230, 301, 20, _VEJDIM_BEREGNER),
+    _kd("T5",  3, "AB 2000", 40, "-", 0, "GAB I 3000", 132, 3456, 270, 1224, 0, _VEJDIM_BEREGNER),
+    _kd("T5",  4, "AB 2000", 40, "-", 0, "GAB I 3000", 132, 3456, 270, 1119, 0, _VEJDIM_BEREGNER),
+    _kd("T5",  5, "AB 2000", 40, "-", 0, "GAB I 3000", 132, 3456, 270, 1042, 20, _VEJDIM_BEREGNER),
     _kd("T5", 10, "AB 2000", 40, "-", 0, "GAB I 3000", 131, 3448, 260, 818, 20.1, _VEJDIM_BEREGNER),
-    _kd("T5", 15, "AB 2000", 40, "-", 0, "GAB I 3000", 131, 3448, 250, 689, 20.0, _VEJDIM_BEREGNER),
+    _kd("T5", 15, "AB 2000", 40, "-", 0, "GAB I 3000", 131, 3448, 250, 689, 20, _VEJDIM_BEREGNER),
     _kd("T5", 20, "AB 2000", 40, "-", 0, "GAB I 3000", 130, 3440, 250, 590, 20.1, _VEJDIM_BEREGNER),
     _kd("T5", 30, "AB 2000", 40, "-", 0, "GAB I 3000", 130, 3440, 240, 459, 20.1, _VEJDIM_BEREGNER),
     _kd("T5", 40, "AB 2000", 40, "-", 0, "GAB I 3000", 129, 3432, 240, 360, 20.1, _VEJDIM_BEREGNER),
-    _kd("T6",  5, "SMA 3000", 40, "-", 0, "GAB II 3000", 142, 3817, 280, 1117, 20.0, _VEJDIM_BEREGNER),
-    _kd("T6", 10, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 270, 876, 20.0, _VEJDIM_BEREGNER),
-    _kd("T6", 15, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 270, 723, 20.0, _VEJDIM_BEREGNER),
-    _kd("T6", 20, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 260, 629, 20.0, _VEJDIM_BEREGNER),
-    _kd("T6", 30, "SMA 3000", 40, "-", 0, "GAB II 3000", 140, 3805, 260, 478, 20.0, _VEJDIM_BEREGNER),
+    _kd("T6",  3, "SMA 3000", 40, "-", 0, "GAB II 3000", 144, 3829, 290, 1290, 0, _VEJDIM_BEREGNER),
+    _kd("T6",  4, "SMA 3000", 40, "-", 0, "GAB II 3000", 143, 3823, 280, 1199, 0, _VEJDIM_BEREGNER),
+    _kd("T6",  5, "SMA 3000", 40, "-", 0, "GAB II 3000", 142, 3817, 280, 1117, 20, _VEJDIM_BEREGNER),
+    _kd("T6", 10, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 270, 876, 20, _VEJDIM_BEREGNER),
+    _kd("T6", 15, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 270, 723, 20, _VEJDIM_BEREGNER),
+    _kd("T6", 20, "SMA 3000", 40, "-", 0, "GAB II 3000", 141, 3811, 260, 629, 20, _VEJDIM_BEREGNER),
+    _kd("T6", 30, "SMA 3000", 40, "-", 0, "GAB II 3000", 140, 3805, 260, 478, 20, _VEJDIM_BEREGNER),
     _kd("T6", 40, "SMA 3000", 40, "-", 0, "GAB II 3000", 140, 3805, 260, 370, 20.1, _VEJDIM_BEREGNER),
 ]
-
-
-def _tomme_raekker(eu_vaerdier: list[int]) -> list[dict]:
-    """Pladsholder-rækker for Eu-punkter, der endnu ikke er kørt i VejDim.
-
-    Asfaltpakken kopieres fra klassens Eu=5-kørsel (den er fast pr. klasse), så
-    kun de ubundne lag mangler. SG = BL = 0 markerer "ikke udfyldt": cellen
-    indgår hverken i korrelationen eller i interpolationen, før den er udfyldt.
-    """
-    skabelon = {r["T"]: r for r in VEJDIM_KOERSLER_STANDARD_RAEKKER if r["eu"] == 5}
-    ud = []
-    for t, r in skabelon.items():
-        for eu in eu_vaerdier:
-            ud.append(_kd(
-                t, eu, r["slidlag"], r["t_slid_mm"], r["bindelag"],
-                r["t_bindelag_mm"], r["bundet_baerelag"], r["t_bundet_mm"],
-                r["E_asf_vist_MPa"], 0, 0, 0,
-                "Udfyldes — VejDim-kørsel mangler",
-            ))
-    return ud
-
-
-# Eu = 3 og 4 er endnu ikke kørt; rækkerne står klar til udfyldning i appen.
-VEJDIM_KOERSLER_STANDARD_RAEKKER += _tomme_raekker([3, 4])
-VEJDIM_KOERSLER_STANDARD_RAEKKER.sort(key=lambda r: (r["T"], r["eu"]))
 
 
 def berig_koersel_raekker(raekker: list[dict]) -> list[dict]:

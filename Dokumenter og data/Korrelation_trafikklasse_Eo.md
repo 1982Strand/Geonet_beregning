@@ -1,7 +1,7 @@
 # Korrelation: VejDims trafikklasser → geonet-appens designdiagrammer
 
 **Status:** dokumentationsgrundlag for trafikklasse-indgangen i appen (implementeret).
-**Grundlag:** 36 VejDim-kørsler med standard E-værdier, udført af DST, juli 2026.
+**Grundlag:** 48 VejDim-kørsler med standard E-værdier, udført af DST, juli–august 2026.
 **Aktuelle tal:** dette notat indeholder bevidst **ingen talttabeller** — de ville
 blive forældede, hver gang datagrundlaget rettes. Kørslerne ligger i appens
 sektion **🚦 Trafikklasse-korrelation**, hvor de kan ses og redigeres direkte, og
@@ -36,7 +36,7 @@ ses i appen.
 
 ## 2. Datagrundlag
 
-36 kørsler = T1–T6 × Eu {5, 10, 15, 20, 30, 40 MPa}, alle med:
+48 kørsler = T1–T6 × Eu {3, 4, 5, 10, 15, 20, 30, 40 MPa}, alle med:
 
 - Belastningsmodel Æ10 tvillingehjul (standard), 60–80 km/t, afvanding "Nej".
 - Underbund "Frostsikker" med **manuelt overskrevet E = celle-Eu** — fjerner

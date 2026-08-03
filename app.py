@@ -4358,7 +4358,7 @@ kun driftspunktet, geonet-diagrammet leverer reduktionen.
 """
 
 _KORR_DATA_INTRO_MD = """
-**{antal} kørsler** = T1–T6 × Eu {{5, 10, 15, 20, 30, 40 MPa}}, alle med:
+**{antal} kørsler** = T1–T6 × Eu {{3, 4, 5, 10, 15, 20, 30, 40 MPa}}, alle med:
 
 - Belastningsmodel Æ10 tvillingehjul (standard), 60–80 km/t, afvanding "Nej".
 - Underbund "Frostsikker" med **manuelt overskrevet E = celle-Eu** — fjerner
