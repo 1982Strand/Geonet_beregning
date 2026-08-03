@@ -806,10 +806,7 @@ def formatér_dimensioneringsgrundlag(
 ) -> list[tuple[str, str]]:
     """Returnér nøgle/værdi-rækker til Dimensioneringsgrundlag-tabellen.
 
-    valg: dict med brugerens rapport-valg fra UI'en. Pt. understøttes:
-        - "trafikkobling" (bool): hvis sand, tilføjes en linje med VD-
-          trafikkoblingen (vejledende T-klasse / NÆ10 / tunge køretøjer/døgn)
-          for den valgte belastningsklasse.
+    valg: dict med brugerens rapport-valg fra UI'en (pt. ingen).
     """
     valg = valg or {}
     from .data import PHI_BASIS
@@ -831,16 +828,6 @@ def formatér_dimensioneringsgrundlag(
         rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
     rows.append(("Materialeopbygning", _materiale_resume(materialer)))
     rows.append(("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', PHI_BASIS):.1f}°"))
-
-    # VD-trafikkoblingen (vejledende) hører til belastningsklasse-grundlaget;
-    # den giver ikke mening oveni et trafikklasse-grundlag.
-    if valg.get("trafikkobling") and not er_trafikklasse:
-        klasse = dim.get("valgt_klasse")
-        if klasse:
-            from .data import format_trafikkobling
-            rows.append(
-                ("VD-trafikkobling (vejl.)", format_trafikkobling(klasse))
-            )
     return rows
 
 

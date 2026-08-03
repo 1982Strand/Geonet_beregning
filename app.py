@@ -4984,18 +4984,6 @@ def render_rapport() -> None:
             disabled=not (vis_designdiagram and designdiagram_muligt),
         )
 
-    # --- Ekstra: VD-trafikkobling i grundlagstabellen --------------------
-    vis_trafikkobling = st.checkbox(
-        "VD-trafikkobling i grundlagstabellen",
-        value=False,
-        key="rap_vis_trafikkobling",
-        help=(
-            "Tilføjer en linje i Dimensioneringsgrundlag med vejledende "
-            "T-klasse, NÆ10/år og tunge køretøjer/døgn for den valgte "
-            "belastningsklasse. Bygger på anvendelsesbeskrivelsen — ikke en "
-            "normfastlagt konvertering."
-        ),
-    )
 
     def _sub_lag_skaleret(total_mm: float | None) -> list[dict]:
         """Returnér brugerens materialer skaleret så summen = total_mm.
@@ -5203,9 +5191,7 @@ def render_rapport() -> None:
         "tekster": dict(tekster_state),
         "visualisering_png": visu_png,
         "designdiagram_png": designdiagram_png,
-        "valg": {
-            "trafikkobling": vis_trafikkobling,
-        },
+        "valg": {},
     }
 
     filnavn_base = (
