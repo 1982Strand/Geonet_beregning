@@ -4840,12 +4840,17 @@ def render_rapport() -> None:
             help="Rydder alle projekt-oplysninger og glemmer de gemte værdier.",
         ):
             st.session_state["rapport_metadata"] = _standard_rapport_metadata()
+            # Sæt widget-nøglerne eksplicit til den tomme værdi i stedet for
+            # blot at fjerne dem: browseren sender ellers de gamle værdier
+            # tilbage ved næste kørsel, så felterne kom til at stå urørte.
+            # En værdi lagt i session_state før widget'en oprettes vinder.
             for _wk in (
                 "rap_projekt", "rap_omfang", "rap_sagsbehandler",
                 "rap_sagsbehandler_mail", "rap_kontrol", "rap_beskrivelse",
-                "rap_udfoeres_for", "rap_dato",
+                "rap_udfoeres_for",
             ):
-                st.session_state.pop(_wk, None)
+                st.session_state[_wk] = ""
+            st.session_state["rap_dato"] = _date.today()
             st.session_state.pop("_rapport_metadata_gemt", None)
             slet_rapport_metadata_json()
             st.rerun()
