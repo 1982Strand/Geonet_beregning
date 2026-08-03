@@ -1067,6 +1067,56 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
     return valgt, info, eo
 
 
+def _vis_korrelationstabel(
+    korr: dict,
+    *,
+    valgt_t: str | None = None,
+    eu: float | None = None,
+    key_prefix: str = "",
+) -> None:
+    """Vis Eo_ækv-tabellen (T × Eu) med den aktuelle celle markeret.
+
+    Bruges både i dimensioneringen (så man kan se hele korrelationen mens man
+    vælger trafikklasse) og i 🚦-sektionen. valgt_t/eu markerer den række og
+    celle, dimensioneringen aktuelt slår op i.
+    """
+    import pandas as pd
+
+    df = pd.DataFrame(_korrelation_pivot_rows(korr)).set_index("Trafikklasse")
+
+    # Eu markeres kun, når det rammer et af de tabulerede punkter præcist.
+    eu_kol = None
+    if eu is not None:
+        eu_rundet = int(round(eu))
+        if abs(eu - eu_rundet) < 1e-9 and eu_rundet in TRAFIK_EU_PUNKTER:
+            eu_kol = f"Eu {eu_rundet}"
+
+    def _markering(data: pd.DataFrame) -> pd.DataFrame:
+        stil = pd.DataFrame("", index=data.index, columns=data.columns)
+        if valgt_t in data.index:
+            stil.loc[valgt_t, :] = "background-color: #F5FAF1;"
+            if eu_kol in data.columns:
+                stil.loc[valgt_t, eu_kol] = (
+                    f"background-color: {LYS_GR}; color: #173404; font-weight: 700;"
+                )
+        return stil
+
+    st.markdown("**Ækvivalent Eo (MPa) — hele korrelationstabellen**")
+    st.dataframe(df.style.apply(_markering, axis=None), width="content")
+    if eu_kol is None and eu is not None:
+        note = (
+            f"Eu = {eu:.0f} MPa ligger mellem tabellens punkter — Eo_ækv "
+            f"interpoleres mellem nabokolonnerne."
+        )
+    else:
+        note = "Den markerede celle er den, dimensioneringen slår op i."
+    st.caption(
+        f"{note} **under** = VejDim kræver en tyndere opbygning end "
+        f"diagrammets område · **over** = tykkere end diagrammets område. "
+        f"Se *Trafikklasse-korrelation* i menuen for metode og datagrundlag."
+    )
+
+
 def input_trafikklasse(key_prefix: str, eu: float) -> dict:
     """Render Trafikklasse-vælger (T1–T6) + udledt ækvivalent Eo og zone.
 
@@ -1150,6 +1200,10 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
             )
         with st.expander("Om trafikklasse-grundlaget"):
             st.write(TRAFIKKLASSE_NOTE)
+
+    _vis_korrelationstabel(
+        _aktiv_korrelation(), valgt_t=valgt_t, eu=eu, key_prefix=key_prefix
+    )
 
     return {
         "type": "trafikklasse",
@@ -4541,12 +4595,7 @@ def render_trafikklasse_korrelation() -> None:
     korr = korrelation_fra_koersler(
         koersler_fra_raekker(raekker), _aktiv_t_basis_table()
     )
-    # Uden width pr. kolonne auto-tilpasses bredden til indhold/overskrift.
-    st.dataframe(
-        _korrelation_pivot_rows(korr),
-        width="content",
-        hide_index=True,
-    )
+    _vis_korrelationstabel(korr)
 
 
 def render_materialer() -> None:
