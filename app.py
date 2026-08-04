@@ -43,12 +43,13 @@ from core.data import (
     EO_KOLONNER,
     format_klasse_interval,
     TRAFIKKLASSER,
-    TRAFIKKLASSE_NOTE,
     trafik_eo_aekv,
     trafik_eu_interval,
     trafik_ubundet_tykkelse,
     eo_til_naermeste_klasse,
     format_trafikklasse,
+    format_trafikklasse_interval,
+    trafikklasser_for_belastningsklasser,
     VEJDIM_KOERSLER_STANDARD_RAEKKER,
     berig_koersel_raekker,
     koersler_fra_raekker,
@@ -107,24 +108,30 @@ materialegrænse.
 
 INFO_DESIGNDIAGRAM_MD = """**Sådan dannes diagrammet**
 
-Kurverne kommer fra designdiagram-tabellen for det valgte **Eo**: tabellen
+Kurverne kommer fra designdiagram-tabellen ved det viste **Eo**: tabellen
 giver basis-bærelagstykkelsen (cm) for hver Eu-række og lag-mode
-(ustabiliseret / 1 lag / 2 lag).
+(ustabiliseret / 1 lag / 2 lag). Rammer Eo ikke en af tabellens søjler
+(30/45/60/80/120/150 MPa), interpoleres der lineært mellem de to nabosøjler
+— det sker altid i trafikklasse-tilstand, hvor Eo er den tilbageberegnede
+**Eo_ækv**.
 
-Basis-tykkelsen ganges med en samlet faktor:
+Basis-tykkelsen ganges med en faktor:
 
 *T = T_basis × (1 + φ-korrektion + net-korrektion)*
 
-- **φ-korrektion** = −0,02 × (φ − 37°) — fra dine materialelag.
-- **net-korrektion** — fra det valgte geonet (0 % for reference,
-  negativt for stærkere net).
+- **φ-korrektion** = −0,02 × (φ − 37°) — fra dine materialelag. Gælder alle
+  tre kurver.
+- **net-korrektion** — fra det valgte geonet (0 % for reference, negativt
+  for stærkere net). Gælder kun de armerede kurver; den ustabiliserede har
+  intet net at korrigere for.
 
 For interval-produkter (fx NX750/NX850) tegnes både den konservative og
 optimale kurve med et tonet bånd imellem.
 
 **Prikker på diagrammet**:
 
-- Rød "Din opbygning"-prik sidder ved (indtastet bærelagstykkelse, dit Eu).
+- Den røde "Indtastet opbygning"-prik sidder ved (indtastet
+  bærelagstykkelse, dit Eu).
 - 1-/2-lag-prikkerne viser krævet tykkelse ved netop dit Eu for det valgte
   geonet — fyldt = konservativ, hul cirkel = optimal (kun interval-produkter).
 """
@@ -137,10 +144,11 @@ def _vis_billede_med_info(
     caption: str | None = None,
     use_container_width: bool = False,
 ) -> None:
-    """Vis PNG med et ℹ️-popover ved siden af.
+    """Vis PNG med Streamlits grå ⍰-hjælpeikon ved siden af.
 
-    Falder tilbage til st.expander hvis st.popover ikke er tilgængelig i
-    den installerede Streamlit-version.
+    Ikonet er st.markdown(help=...) — samme udseende og opførsel som
+    hjælpeikonet på widgets. Falder tilbage til et ℹ️-popover, hvis
+    den installerede Streamlit ikke understøtter help på st.markdown.
     """
     col_img, col_info = st.columns([0.95, 0.05])
     with col_img:
@@ -150,13 +158,16 @@ def _vis_billede_med_info(
         else:
             st.image(png, **kwargs)
     with col_info:
-        popover = getattr(st, "popover", None)
-        if callable(popover):
-            with popover("ℹ️", width="stretch"):
-                st.markdown(info_md)
-        else:
-            with st.expander("ℹ️", expanded=False):
-                st.markdown(info_md)
+        try:
+            st.markdown("", help=info_md)
+        except TypeError:
+            popover = getattr(st, "popover", None)
+            if callable(popover):
+                with popover("ℹ️", width="stretch"):
+                    st.markdown(info_md)
+            else:
+                with st.expander("ℹ️", expanded=False):
+                    st.markdown(info_md)
 
 
 def _vis_opbygning_med_info(png: bytes, *, caption: str | None = None) -> None:
@@ -1661,7 +1672,7 @@ def _render_trafik_kobling_forklaring(
     )
 
     if t_krav is None:
-        with st.expander("🔗 Sådan er trafikklassen koblet til diagrammet"):
+        with st.expander("Kobling imellem trafikklasse og designdiagram"):
             st.caption(
                 "Diagrammet har ingen ustabiliseret kurve i dette punkt, så "
                 "koblingen kan ikke vises trinvist her."
@@ -1687,7 +1698,7 @@ def _render_trafik_kobling_forklaring(
         f"3. På samme kurve reducerer **1 lag geonet** opbygningen til "
         f"**{t_1lag:.0f} mm"
         + (f" (−{red_1:.0%})" if red_1 is not None else "")
-        + f"** (feltdokumenteret){uarm_note}."
+        + f"** {uarm_note}."
         + (
             f" Med 2 lag: **{t_2lag:.0f} mm**"
             + (f" (−{red_2:.0%})" if red_2 is not None else "")
@@ -1703,7 +1714,6 @@ def _render_trafik_kobling_forklaring(
         f"Det er netop tallet i *Ustabiliseret bærelagstykkelse*-boksen ovenfor.\n"
         f"2. På designdiagrammet ved Eu = {eu:.0f} MPa lander de {t_krav:.0f} mm "
         f"mellem {linje2_kurver} → den kurve kaldes **Eo_ækv = {eo_aekv:.0f} MPa**. "
-        f"Det er en *koordinat* på diagrammet — ikke et mål, du har valgt "
         f"(nærmeste hele belastningsklasse: {naermeste}).\n"
         f"{linje3}"
     )
@@ -1779,28 +1789,24 @@ def _render_trafik_kobling_forklaring(
         '<div style="display:flex;flex-direction:column;align-items:center;'
         'gap:0;margin:0.5rem 0 0.9rem">'
         + _box("Dit valg", f"{t_klasse} · Eu {eu:.0f} MPa", "", tips["valg"])
-        + _arrow("VejDim (tabuleret korrelation)")
+        + _arrow("VejDims krav til ubundet lag")
         + _box("Krævet ubundet opbygning", f"{t_krav:.0f} mm",
                "bundsikring + stabilgrus", tips["krav"])
-        + _arrow("samme tykkelse findes på designdiagrammet ved dit Eu")
-        + _box(f"Driftspunkt · kurve Eo_ækv ≈ {eo_aekv:.0f} MPa",
+        + _arrow("Tykkelsen findes på designdiagrammet ved valgt Eu")
+        + _box(f"Kurve for Eo_ækv ≈ {eo_aekv:.0f} MPa bestemmes",
                f"mellem klasse {kl_lav} og {kl_hoej}", "", tips["driftspunkt"])
         + materiale_box
-        + _arrow("geonet-reduktion aflæst i punktet (feltforsøg)")
+        + _arrow("geonet-reduktion aflæst i punktet")
         + et_lag_box
         + to_lag_box
         + '</div>'
     )
     # --- Layout: forklaring til venstre, designdiagram til højre --------
-    with st.expander("🔗 Sådan er trafikklassen koblet til diagrammet"):
+    with st.expander("Kobling imellem trafikklasse og designdiagram"):
         kol_forklaring, kol_figur = st.columns([1.05, 0.95], gap="large")
         with kol_forklaring:
             st.markdown(prosa)
             st.markdown(flow, unsafe_allow_html=True)
-            if any(tips.values()):
-                st.caption(
-                    "🔍 Hold musen over en boks for at se regnestykket bag trinnet."
-                )
         with kol_figur:
             from core import rapport as rapport_mod
             try:
@@ -1826,7 +1832,7 @@ def _render_trafik_kobling_forklaring(
                 # 1 + phi_kor), så billedteksten skal nævne den korrigerede
                 # tykkelse — ikke diagrammets basisværdi.
                 st.caption(
-                    f"Driftspunktet: kurven Eo_ækv ≈ {eo_aekv:.0f} MPa krydser "
+                    f"Kurven for Eo_ækv ≈ {eo_aekv:.0f} MPa krydser "
                     f"{(t_uarm_ref or t_krav):.0f} mm ved Eu = {eu:.0f} MPa"
                     + (
                         f" (φ-korrigeret fra {t_krav:.0f} mm)"
@@ -1837,8 +1843,6 @@ def _render_trafik_kobling_forklaring(
                 )
             except Exception as e:
                 st.caption(f"Kunne ikke tegne designdiagram: {e}")
-
-        st.caption(TRAFIKKLASSE_NOTE)
 
 
 # ===========================================================================
@@ -1880,6 +1884,21 @@ def _gyldige_grupper(grupper: list[dict]) -> list[dict]:
 def _format_klasse_liste(klasser: list[int]) -> str:
     """Komprimér klasseliste til intervaller (delt helper i core.data)."""
     return format_klasse_interval(klasser)
+
+
+def _trafik_badge_tekst(klasser: list[int], eu: float) -> str:
+    """Produktets belastningsklasser oversat til trafikklasser ved dette Eu.
+
+    Rammer ingen trafikklasse produktets klasser (fx et klasse 1-3-net ved et
+    Eu, hvor alle kørte trafikklasser lander højere), vises '—'.
+    """
+    if not klasser:
+        return "—"
+    return format_trafikklasse_interval(
+        trafikklasser_for_belastningsklasser(
+            klasser, eu, _aktiv_koersler(), _aktiv_t_basis_table()
+        )
+    )
 
 
 def _korrektion_label(g: dict) -> str | None:
@@ -2320,12 +2339,17 @@ def _rt_raekke_html(
     *,
     is_ref: bool = False,
     phi: float = PHI_BASIS,
+    trafik_eu: float | None = None,
 ) -> str:
     """Byg én foldbar tabelrække (<details>) for et produkt/referencenet.
 
     Alle rækker deler details-attributten name="rt-produkt", så de opfører sig
     som en harmonika: kun én række kan være foldet ud ad gangen (native HTML
     'exclusive accordion'). Den udfoldede række markeres grønt via CSS [open].
+
+    trafik_eu ≠ None betyder trafikklasse-tilstand: klasse-badgen oversættes
+    til de trafikklasser, der slår op i produktets belastningsklasser ved
+    netop dette Eu.
     """
     v1 = _rt_gyldig(p1)
     v2 = _rt_gyldig(p2)
@@ -2334,6 +2358,8 @@ def _rt_raekke_html(
     klasser = chosen.get("klasser") or []
     klasse_ok = chosen.get("klasse_ok", True)
     kl_txt = _format_klasse_liste(klasser) if klasser else "—"
+    if trafik_eu is not None:
+        kl_txt = _trafik_badge_tekst(klasser, trafik_eu)
     badge_css = "rt-badge-ok" if klasse_ok else "rt-badge-advarsel"
     badge_pre = "" if klasse_ok else "⚠️ "
 
@@ -2374,6 +2400,7 @@ def _render_produkt_tabel(
     valgt_klasse: int,
     phi: float = PHI_BASIS,
     vis_reference: bool = True,
+    trafik_eu: float | None = None,
 ) -> None:
     """Resultattabel: én foldbar række pr. produkt. Bruges af både Standard og
     Brugerdefineret (sidstnævnte sender φ ≠ 37, som giver en φ-korrektionslinje
@@ -2385,6 +2412,9 @@ def _render_produkt_tabel(
 
     vis_reference=False udelader referencerækken (brugt af 'Vælg specifikt
     produkt', hvor kun det valgte produkt skal vises).
+
+    trafik_eu sættes i trafikklasse-tilstand og skifter klasse-kolonnen til
+    anbefalede trafikklasser ved netop dette Eu.
     """
     refp1 = ref_1["produkter"][0] if ref_1 and ref_1.get("produkter") else None
     refp2 = ref_2["produkter"][0] if ref_2 and ref_2.get("produkter") else None
@@ -2396,11 +2426,25 @@ def _render_produkt_tabel(
         if n not in p1_by:
             navne.append(n)
 
+    # I trafikklasse-tilstand oversættes klasse-kolonnen. Titlen bærer sit Eu,
+    # fordi oversættelsen kun gælder dét Eu — se
+    # data.trafikklasser_for_belastningsklasser.
+    if trafik_eu is not None:
+        kl_kol = (
+            f'<span title="Produktets anbefalede belastningsklasser oversat til '
+            f'trafikklasser ved Eu = {trafik_eu:.0f} MPa. Hver trafikklasse '
+            f'slår op i den belastningsklasse, dens Eo_ækv ligger nærmest. '
+            f'Oversættelsen gælder kun dette Eu — den er ikke en egenskab ved '
+            f'nettet." style="cursor:help">'
+            f'Anbefalet trafikklasse (ved Eu = {trafik_eu:.0f})</span>'
+        )
+    else:
+        kl_kol = '<span>Anbefalet belastningsklasse</span>'
     dele = ['<div class="rt-tabel">']
     dele.append(
         '<div class="rt-head">'
         '<span>Produkt</span>'
-        '<span>Anbefalet belastningsklasse</span>'
+        f'{kl_kol}'
         '<span class="num">Bærelagstykkelse, 1 lag geonet</span>'
         '<span class="num">Reduktion i alt, 1 lag</span>'
         '<span class="num">Bærelagstykkelse, 2 lag geonet</span>'
@@ -2409,14 +2453,15 @@ def _render_produkt_tabel(
     )
     if vis_reference:
         dele.append(
-            _rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True, phi=phi)
+            _rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True,
+                            phi=phi, trafik_eu=trafik_eu)
         )
     for n in navne:
         p1 = p1_by.get(n)
         p2 = p2_by.get(n)
         if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
             continue
-        dele.append(_rt_raekke_html(n, p1, p2, phi=phi))
+        dele.append(_rt_raekke_html(n, p1, p2, phi=phi, trafik_eu=trafik_eu))
     dele.append('</div>')
     caption = (
         "Referencenet vises øverst, derefter de mest effektive produkter "
@@ -3718,6 +3763,7 @@ def render_standard() -> None:
         _render_produkt_tabel(
             ref_1, ref_2, ref_fejl_1, ref_fejl_2,
             prod_1lag, prod_2lag, valgt_klasse,
+            trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
         )
 
     # --- Informations-expandere ----------------------------------------
@@ -4147,6 +4193,7 @@ def render_brugerdefineret() -> None:
             _render_produkt_tabel(
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
                 prod_1lag, prod_2lag, valgt_klasse, phi=phi,
+                trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
             )
 
     else:
@@ -4269,6 +4316,7 @@ def render_brugerdefineret() -> None:
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
                 prod_1, prod_2, valgt_klasse, phi=phi,
                 vis_reference=False,
+                trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
             )
 
             if geonet and geonet.get("navn"):

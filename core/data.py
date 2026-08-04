@@ -883,6 +883,57 @@ def eo_til_naermeste_klasse(eo: float | None) -> int | None:
     return bedst
 
 
+def trafikklasser_for_belastningsklasser(
+    klasser,
+    eu: float,
+    koersler: dict | None = None,
+    t_basis_table: dict | None = None,
+) -> list[str]:
+    """Hvilke trafikklasser slår op i en af de angivne belastningsklasser?
+
+    Bruges til at oversætte et geonets anbefalede belastningsklasser til
+    trafikklasser i produktlisten. Hver trafikklasse får sin Eo_ækv ved dette
+    Eu, og den afrundes til nærmeste Eo-kolonne (se eo_til_naermeste_klasse).
+
+    Oversættelsen gælder KUN det Eu, der sendes ind — den er ikke en egenskab
+    ved nettet. Den samme trafikklasse rammer vidt forskellige
+    belastningsklasser afhængigt af underbunden (T2 spænder fx klasse 1-6 hen
+    over Eu 3-40), fordi Eo_ækv stiger med Eu. Klasser uden gyldig Eo_ækv
+    ("under"/"over"/"mangler") udelades.
+    """
+    ks = {int(k) for k in (klasser or [])}
+    if not ks:
+        return []
+    fundet: list[str] = []
+    for t_klasse in TRAFIKKLASSER:
+        eo, _zone = trafik_eo_aekv(t_klasse, eu, koersler, t_basis_table)
+        if eo is not None and eo_til_naermeste_klasse(eo) in ks:
+            fundet.append(t_klasse)
+    return fundet
+
+
+def format_trafikklasse_interval(t_klasser) -> str:
+    """Komprimér trafikklasser til intervaller: ['T3','T4','T5'] → 'T3-T5',
+    ['T2','T4'] → 'T2, T4'. Tom liste → '—'. Modstykke til
+    format_klasse_interval, men med T-præfiks på begge ender.
+    """
+    numre = sorted({
+        int(str(t)[1:]) for t in (t_klasser or []) if str(t).startswith("T")
+    })
+    if not numre:
+        return "—"
+    grupper: list[str] = []
+    start = forrige = numre[0]
+    for n in numre[1:]:
+        if n == forrige + 1:
+            forrige = n
+            continue
+        grupper.append(f"T{start}" if start == forrige else f"T{start}-T{forrige}")
+        start = forrige = n
+    grupper.append(f"T{start}" if start == forrige else f"T{start}-T{forrige}")
+    return ", ".join(grupper)
+
+
 def format_trafikklasse(t_klasse: str) -> str:
     """Én-linjes streng for en trafikklasse, fx
     'T4 · NÆ10 ≈ 1,46 mio. (20 år) · Middel trafik'."""
