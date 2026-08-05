@@ -90,50 +90,63 @@ MIN_LAGTYKKELSE_MM = 200
 
 INFO_VISUALISERING_MD = """**Sådan læses søjlerne**
 
-**Indtastet opbygning** viser brugerens egne tykkelser.
+**Indtastet opbygning** viser de indtastede lagtykkelser.
 
-**Ustabiliseret basistykkelse (φ-korrigeret)** er den ustabiliserede *kravtykkelse* fra
-designdiagrammet — bestemt af Eu og Eo og korrigeret for den vægtede
-friktionsvinkel via formlen
-*T_krav = T_basis × (1 + K_PHI·(φ−37))*.
-Materialeforholdet fra det indtastede bevares, og krav-tykkelsen fordeles
-proportionalt på lagene. Tallene kan derfor være større end de indtastede
-— differencen svarer til "Mangler X mm" der vises under søjlen.
+**Ustabiliseret basistykkelse (φ-korrigeret)** er den ustabiliserede
+lagtykkelse fra designdiagrammet, bestemt ud fra Eu og Eo og korrigeret for
+den vægtede friktionsvinkel:
 
-**1 lag / 2 lag geonet** viser det stabiliserede krav med samme proportionale
-lagfordeling. Det øverste geonet ved 2 lag placeres ved den reducerede
-materialegrænse.
+```
+T_krav = T_basis × (1 + k_φ)
+```
+
+Materialeforholdet fra den indtastede opbygning bevares, og lagtykkelsen
+fordeles proportionalt på lagene. Værdierne kan derfor overstige de
+indtastede. Differencen er angivet som "Mangler X mm" under søjlen.
+
+**1 lag / 2 lag geonet** viser den stabiliserede lagtykkelse med samme
+proportionale lagfordeling. Ved 2 lag placeres det øverste geonet ved den
+reducerede materialegrænse.
 """
 
 
 INFO_DESIGNDIAGRAM_MD = """**Sådan dannes diagrammet**
 
-Kurverne kommer fra designdiagram-tabellen ved det viste **Eo**: tabellen
-giver basis-bærelagstykkelsen (cm) for hver Eu-række og lag-mode
-(ustabiliseret / 1 lag / 2 lag). Rammer Eo ikke en af tabellens søjler
-(30/45/60/80/120/150 MPa), interpoleres der lineært mellem de to nabosøjler
-— det sker altid i trafikklasse-tilstand, hvor Eo er den tilbageberegnede
-**Eo_ækv**.
+Kurverne er dannet på grundlag af designdiagram-tabellen ved det viste **Eo**.
+Tabellen angiver basis-lagtykkelsen (cm) for hver Eu-række og for hver
+opbygning (ustabiliseret, 1 lag og 2 lag geonet). Rammer Eo ikke en af
+tabellens søjler (30, 45, 60, 80, 120 og 150 MPa), bestemmes værdien ved
+lineær interpolation mellem de to nærmeste søjler. Dette er altid tilfældet
+ved dimensionering efter trafikklasse, hvor Eo er den tilbageberegnede
+**ækvivalente Eo**.
 
-Basis-tykkelsen ganges med en faktor:
+Basis-lagtykkelsen korrigeres med en samlet faktor:
 
-*T = T_basis × (1 + φ-korrektion + net-korrektion)*
+```
+T   = T_basis × (1 + k_φ + k_net)
+k_φ = −0,02 × (φ − 37°)
+```
 
-- **φ-korrektion** = −0,02 × (φ − 37°) — fra dine materialelag. Gælder alle
-  tre kurver.
-- **net-korrektion** — fra det valgte geonet (0 % for reference, negativt
-  for stærkere net). Gælder kun de armerede kurver; den ustabiliserede har
-  intet net at korrigere for.
+hvor:
 
-For interval-produkter (fx NX750/NX850) tegnes både den konservative og
-optimale kurve med et tonet bånd imellem.
+- **k_φ** = korrektion for friktionsvinklen i de valgte materialelag.
+  Anvendes på samtlige tre kurver.
+- **k_net** = korrektion for det valgte geonet. Værdien er 0 for
+  referencenettet og negativ for net med højere effektivitet. Anvendes alene
+  på de armerede kurver, idet den ustabiliserede opbygning ikke indeholder
+  geonet.
 
-**Prikker på diagrammet**:
+For produkter med et korrektionsinterval, eksempelvis NX750 og NX850, tegnes
+både den konservative og den optimale kurve med et tonet bånd imellem.
 
-- Den røde "Indtastet opbygning"-prik sidder ved (indtastet
-  bærelagstykkelse, dit Eu).
-- 1-/2-lag-prikkerne viser krævet tykkelse ved netop dit Eu for det valgte
-  geonet — fyldt = konservativ, hul cirkel = optimal (kun interval-produkter).
+**Punkter i diagrammet:**
+
+- Det røde punkt "Indtastet opbygning" angiver den indtastede bærelagstykkelse
+  ved den valgte E-værdi.
+- Punkterne for 1 og 2 lag geonet angiver den krævede lagtykkelse ved samme
+  E-værdi for det valgte geonet. Udfyldt markering angiver den konservative
+  værdi, åben markering den optimale. Åben markering forekommer alene for
+  produkter med korrektionsinterval.
 """
 
 
@@ -1091,23 +1104,25 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
 
 
 _TRAFIK_GRUNDLAG_MD = """
-Grundlaget lader **to uafhængige, empiriske kilder** mødes:
+Grundlaget bygger på to uafhængige, empiriske datasæt:
 
-1. **VejDim-kørslerne** (vejreglens metode) fastlægger, hvor tykt et ubundet lag
-   (stabilgrus + bundsikring) en given trafikklasse kræver ved en given
-   underbund Eu.
-2. **Geonet-designdiagrammerne** (GS-GRID/Tensar-feltforsøg) fastlægger, hvor
-   meget et geonet kan reducere netop den tykkelse.
+1. **VejDim-kørslerne** fastlægger den ubundne lagtykkelse (stabilgrus og
+   bundsikring), en given trafikklasse kræver ved en given underbund.
+2. **Designdiagrammerne** (feltforsøg fra GS-GRID og Tensar) fastlægger den
+   reduktion af lagtykkelsen, et geonet medfører.
 
-**Tilbageberegningen** binder dem sammen: den finder den diagramkurve, hvis
-ustabiliserede tykkelse netop svarer til VejDims krav ved samme Eu. Kurvens navn
-er den **ækvivalente Eo** — en adresse i diagrammet, ikke et krav du har stillet.
-Reduktionen aflæses dér og er dermed diagrammets egen, feltdokumenterede værdi.
-Der omregnes aldrig mellem de to metoders kriterier.
+Datasættene sammenkædes ved tilbageberegning: der bestemmes den diagramkurve,
+hvis ustabiliserede lagtykkelse ved samme underbunds-E-værdi svarer til den
+lagtykkelse, VejDim fastlægger. Kurven benævnes den **ækvivalente Eo**.
+Værdien er en indeksværdi, der angiver opslagspunktet i diagrammet, og
+udtrykker ikke et krav til overflademodulet. Reduktionen aflæses i punktet og
+er dermed designdiagrammets egen, feltbestemte værdi. Der foretages ingen
+omregning mellem de to metoders dimensioneringskriterier.
 
-Grundlaget er **rent bæreevne** (frostsikker underbund) — frost og koblingshøjde
-skal kontrolleres separat. Se **Trafikklasse-korrelation** i menuen for metode,
-datagrundlag og forbehold.
+Grundlaget er rent bæreevnemæssigt og forudsætter frostsikker underbund.
+Kravene til frostsikring og koblingshøjde bør kontrolleres særskilt, jf.
+håndbogens afsnit 5.1 og 5.3. Metode, datagrundlag og forbehold er beskrevet
+under **Trafikklasse-korrelation** i menuen.
 """
 
 
@@ -1477,19 +1492,23 @@ def _eo_aekv_tooltips(
     # Et interpoleret krav har decimaler — vis dem, så trin 2's brøk går op.
     ub_txt = _dk_num(ub, ".0f" if abs(ub - round(ub)) < 0.05 else ".1f")
 
-    # --- Boks 1: dit valg ------------------------------------------------
+    # --- Boks 1: valgt grundlag ------------------------------------------
     kendte = ", ".join(str(p) for p in t1.get("kendte", []))
     tips["valg"] = (
-        f"Trafikklasse {t_klasse} ved underbund Eu = {eu_txt} MPa.\n\n"
-        f"VejDim er kørt ved Eu = {kendte} MPa for denne klasse. "
+        f"Trafikklasse {t_klasse} ved en underbund med E-værdi "
+        f"Eu = {eu_txt} MPa.\n\n"
+        f"For denne trafikklasse er der udført VejDim-kørsler ved "
+        f"Eu = {kendte} MPa. "
         + (
-            f"Eu = {eu_txt} er et af dem, så tykkelsen aflæses direkte."
+            f"Eu = {eu_txt} MPa er et af de kørte punkter, og lagtykkelsen "
+            f"aflæses direkte."
             if t1["direkte"]
-            else f"Eu = {eu_txt} ligger imellem, så tykkelsen interpoleres."
+            else f"Eu = {eu_txt} MPa ligger mellem to kørte punkter, og "
+                 f"lagtykkelsen bestemmes ved interpolation."
         )
     )
 
-    # --- Boks 2: trin 1, VejDims krævede ubundne tykkelse ----------------
+    # --- Boks 2: trin 1, den ubundne lagtykkelse fra VejDim --------------
     if t1["direkte"]:
         aflaes = (
             f"bundsikring {_dk_num(t1['bl'], '.0f')} mm + "
@@ -1497,17 +1516,17 @@ def _eo_aekv_tooltips(
             if t1.get("sg") is not None else f"{ub_txt} mm"
         )
         tips["krav"] = (
-            f"TRIN 1 — VejDims krav\n\n"
-            f"Eu = {eu_txt} MPa er et kørt punkt, så tykkelsen aflæses direkte "
-            f"i kørselstabellen:\n\n"
+            f"1 UBUNDEN LAGTYKKELSE\n\n"
+            f"Eu = {eu_txt} MPa er et kørt punkt, og lagtykkelsen aflæses "
+            f"direkte i kørselstabellen:\n\n"
             f"    {t_klasse} / Eu {t1['eu_punkt']}:  {aflaes}"
         )
     else:
         tips["krav"] = (
-            f"TRIN 1 — VejDims krav\n\n"
-            f"Eu = {eu_txt} MPa ligger mellem to kørte punkter, så tykkelsen "
-            f"interpoleres i log(Eu) — tykkelsen aftager tilnærmelsesvis "
-            f"retlinet med log(Eu):\n\n"
+            f"1 UBUNDEN LAGTYKKELSE\n\n"
+            f"Eu = {eu_txt} MPa ligger mellem to kørte punkter. Lagtykkelsen "
+            f"bestemmes ved lineær interpolation i log(Eu), idet lagtykkelsen "
+            f"aftager tilnærmelsesvis retlinet med log(Eu):\n\n"
             f"    {t_klasse} / Eu {t1['lav']}:  "
             f"{_dk_num(t1['t_lav'], '.0f')} mm   (kørt punkt)\n"
             f"    {t_klasse} / Eu {t1['hoej']}:  "
@@ -1530,22 +1549,24 @@ def _eo_aekv_tooltips(
         kl_lav = eo_til_klasse(t2["eo_lav"])
         kl_hoej = eo_til_klasse(t2["eo_hoej"])
         tips["driftspunkt"] = (
-            f"TRIN 2 — tilbageberegning i designdiagrammet\n\n"
-            f"Hvilken Eo-kurve kræver netop {ub_txt} mm ustabiliseret opbygning "
-            f"ved Eu = {eu_txt} MPa?\n\n"
+            f"2 ÆKVIVALENT Eo\n\n"
+            f"Der bestemmes den Eo-kurve, hvis ustabiliserede lagtykkelse ved "
+            f"Eu = {eu_txt} MPa svarer til {ub_txt} mm. De ustabiliserede "
+            f"lagtykkelser ved denne E-værdi er:\n\n"
             f"{kurve_linjer}\n\n"
-            f"De {ub_txt} mm ligger mellem klasse {kl_lav} og {kl_hoej}, så der "
-            f"interpoleres lineært mellem de to nabokurver:\n\n"
-            f"    frac   = ({ub_txt} − {_dk_num(t2['t_lav'], '.0f')}) / "
+            f"Værdien ligger mellem kurverne for klasse {kl_lav} og "
+            f"{kl_hoej}, og der interpoleres lineært mellem disse:\n\n"
+            f"    f      = ({ub_txt} − {_dk_num(t2['t_lav'], '.0f')}) / "
             f"({_dk_num(t2['t_hoej'], '.0f')} − {_dk_num(t2['t_lav'], '.0f')}) "
             f"= {_dk_num(t2['frac'], '.3f')}\n"
             f"    Eo_ækv = {t2['eo_lav']} + {_dk_num(t2['frac'], '.3f')} × "
             f"({t2['eo_hoej']} − {t2['eo_lav']}) = "
             f"{_dk_num(t2['eo_aekv'], '.1f')} MPa  →  {_dk_num(eo_aekv, '.0f')}\n\n"
-            f"Eo_ækv er en adresse i diagrammet, ikke et krav til underbunden — "
-            f"dit Eu er stadig {eu_txt} MPa. Ligger tykkelsen uden for rækkens "
-            f"yderste kurver, er der intet at slå op i, og cellen vises som "
-            f"under / over."
+            f"Den ækvivalente Eo er en indeksværdi, der angiver opslagspunktet "
+            f"i diagrammet. Den udtrykker ikke et krav til underbunden, hvis "
+            f"E-værdi fortsat er {eu_txt} MPa. Ligger lagtykkelsen uden for "
+            f"rækkens yderste kurver, kan opslaget ikke foretages, og cellen "
+            f"angives som under eller over."
         )
 
     # --- Materiale-boksen: φ-korrektionen alene -------------------------
@@ -1553,20 +1574,22 @@ def _eo_aekv_tooltips(
     t_uarm_kor = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm")
     if abs(phi_kor_v) > 1e-9 and t_uarm_kor and t_krav_mm:
         tips["materiale"] = (
-            f"MATERIALEKORREKTION (φ)\n\n"
-            f"Trin 1 og 2 ovenfor er diagrammets basisværdier ved φ = "
-            f"{_dk_num(PHI_BASIS, '.1f')}°. De holdes ukorrigerede med vilje: "
-            f"Eo_ækv skal blive stående, når du skifter materiale — VejDims krav "
-            f"til trafikklassen afhænger jo ikke af dit stabilgrus.\n\n"
-            f"Herfra regnes der med dine materialer (φ = {_dk_num(phi, '.1f')}°):\n\n"
-            f"    faktor = 1 + ({_dk_num(K_PHI, '.2f')} × "
-            f"({_dk_num(phi, '.1f')} − {_dk_num(PHI_BASIS, '.1f')})) "
-            f"= {_dk_num(1 + phi_kor_v, '.3f')}\n"
-            f"    uarmeret = {_dk_num(t_krav_mm, '.0f')} × "
+            f"KORREKTION FOR FRIKTIONSVINKEL\n\n"
+            f"Afsnit 1 og 2 ovenfor angiver diagrammets basisværdier ved "
+            f"φ = {_dk_num(PHI_BASIS, '.1f')}°. Værdierne holdes ukorrigerede, "
+            f"idet den ækvivalente Eo skal være uafhængig af materialevalget. "
+            f"VejDims krav til trafikklassen afhænger ikke af de valgte "
+            f"ubundne materialer.\n\n"
+            f"Herefter regnes med de valgte materialer "
+            f"(φ = {_dk_num(phi, '.1f')}°):\n\n"
+            f"    k_φ = {_dk_num(K_PHI, '.2f')} × "
+            f"({_dk_num(phi, '.1f')} − {_dk_num(PHI_BASIS, '.1f')}) "
+            f"= {_dk_num(phi_kor_v, '.3f')}\n"
+            f"    T   = {_dk_num(t_krav_mm, '.0f')} × "
             f"{_dk_num(1 + phi_kor_v, '.3f')} = {_dk_num(t_uarm_kor, '.0f')} mm\n\n"
-            f"Det er den tykkelse, designdiagrammets gule kurve viser ved "
-            f"Eu = {eu_txt} MPa — og referencen, geonet-reduktionerne nedenfor "
-            f"måles imod."
+            f"Værdien svarer til designdiagrammets ustabiliserede kurve ved "
+            f"Eu = {eu_txt} MPa og udgør referencen for geonet-reduktionerne "
+            f"nedenfor."
         )
 
     # --- Boks 4/5: geonet-reduktionen -----------------------------------
@@ -1594,12 +1617,12 @@ def _eo_aekv_tooltips(
                 ))
 
         linjer = [
-            "GEONET-REDUKTIONEN — aflæst, ikke beregnet",
+            "3 GEONET-REDUKTION",
             "",
-            f"Diagrammet har tre feltdokumenterede kurver pr. Eo-kolonne. "
-            f"Eo_ækv ligger {pct} % inde mellem klasse {kl_lav} og "
-            f"{kl_hoej}, og præcis den vægt bruges på alle tre rækker "
-            f"(mm ved Eu = {eu_txt} MPa):",
+            f"Designdiagrammet indeholder tre feltbestemte kurver for hver "
+            f"Eo-værdi. Den ækvivalente Eo ligger {pct} % inde mellem "
+            f"klasse {kl_lav} og {kl_hoej}, og samme interpolationsfaktor "
+            f"anvendes på alle tre kurver (mm ved Eu = {eu_txt} MPa):",
             "",
             *raekker,
         ]
@@ -1613,21 +1636,23 @@ def _eo_aekv_tooltips(
         if abs(phi_kor) > 1e-9 and t_uarm_ref:
             linjer += [
                 "",
-                f"Derefter korrigeres for materialevalget "
+                f"Herefter korrigeres for friktionsvinklen "
                 f"(φ = {_dk_num(phi, '.1f')}° mod diagrammets "
                 f"{_dk_num(PHI_BASIS, '.1f')}°):",
-                f"    faktor = 1 + ({_dk_num(K_PHI, '.2f')} × "
-                f"({_dk_num(phi, '.1f')} − {_dk_num(PHI_BASIS, '.1f')})) "
-                f"= {_dk_num(1 + phi_kor, '.3f')}",
+                f"    k_φ = {_dk_num(K_PHI, '.2f')} × "
+                f"({_dk_num(phi, '.1f')} − {_dk_num(PHI_BASIS, '.1f')}) "
+                f"= {_dk_num(phi_kor, '.3f')}",
             ]
         if abs(net_kor) >= 0.005:
             navn = (geonet or {}).get("navn") or "det valgte net"
             linjer += [
                 "",
-                f"…og for nettets egen korrektion — {navn} ligger "
+                f"Der korrigeres tillige for geonettypen. {navn} ligger "
                 f"{_dk_num(net_kor * 100, '+.0f')} % i forhold til "
-                f"referencenettet. Samlet faktor på de armerede tykkelser: "
-                f"1 + ({_dk_num(phi_kor, '.3f')}) + ({_dk_num(net_kor, '.3f')}) "
+                f"referencenettet. Den samlede faktor på de armerede "
+                f"lagtykkelser bliver:",
+                f"    1 + ({_dk_num(phi_kor, '.3f')}) + "
+                f"({_dk_num(net_kor, '.3f')}) "
                 f"= {_dk_num(1 + phi_kor + net_kor, '.3f')}",
             ]
         linjer.append("")
@@ -1644,9 +1669,10 @@ def _eo_aekv_tooltips(
         if t_uarm_ref:
             linjer += [
                 "",
-                f"Procenterne måles mod de {_dk_num(t_uarm_ref, '.0f')} mm — den "
-                f"uarmerede opbygning i samme materiale — så begge sider af "
-                f"regnestykket er korrigeret ens.",
+                f"Reduktionen opgøres i forhold til de "
+                f"{_dk_num(t_uarm_ref, '.0f')} mm, som er den ustabiliserede "
+                f"opbygning i samme materiale. Begge lagtykkelser er dermed "
+                f"korrigeret på samme grundlag.",
             ]
         tips["geonet"] = "\n".join(linjer)
 
@@ -1698,8 +1724,8 @@ def _render_trafik_kobling_forklaring(
     if t_krav is None:
         with st.expander("Kobling imellem trafikklasse og designdiagram"):
             st.caption(
-                "Diagrammet har ingen ustabiliseret kurve i dette punkt, så "
-                "koblingen kan ikke vises trinvist her."
+                "Designdiagrammet indeholder ingen ustabiliseret kurve i dette "
+                "punkt, og sammenkædningen kan derfor ikke vises trinvist."
             )
         return
 
@@ -1713,32 +1739,35 @@ def _render_trafik_kobling_forklaring(
     # Reduktionen holdes op mod den φ-korrigerede uarmerede tykkelse, ikke mod
     # diagrammets rå værdi — ellers passer procenten ikke med produkttabellens.
     uarm_note = (
-        f" — målt mod {t_uarm_ref:.0f} mm, som er de {t_krav:.0f} mm korrigeret "
-        f"for dine materialer (φ = {phi:.1f}°); det er også den tykkelse, "
-        f"designdiagrammets gule kurve viser"
+        f", opgjort i forhold til {t_uarm_ref:.0f} mm, som er de "
+        f"{t_krav:.0f} mm korrigeret for de valgte materialer "
+        f"(φ = {_dk_num(phi, '.1f')}°). Det er tillige den lagtykkelse, "
+        f"designdiagrammets ustabiliserede kurve angiver"
         if t_uarm_ref is not None and abs(t_uarm_ref - t_krav) >= 1 else ""
-    ).replace(f"{phi:.1f}", f"{phi:.1f}".replace(".", ","))
+    )
     linje3 = (
-        f"3. På samme kurve reducerer **1 lag geonet** opbygningen til "
+        f"3. På samme kurve reduceres lagtykkelsen med **1 lag geonet** til "
         f"**{t_1lag:.0f} mm"
         + (f" (−{red_1:.0%})" if red_1 is not None else "")
-        + f"** {uarm_note}."
+        + f"**{uarm_note}."
         + (
-            f" Med 2 lag: **{t_2lag:.0f} mm**"
+            f" Med 2 lag geonet fås **{t_2lag:.0f} mm**"
             + (f" (−{red_2:.0%})" if red_2 is not None else "")
             + "."
             if t_2lag is not None else ""
         )
     ) if t_1lag is not None else (
-        "3. Geonet-reduktionen aflæses på samme kurve — se resultaterne ovenfor."
+        "3. Geonet-reduktionen aflæses på samme kurve, jf. resultaterne ovenfor."
     )
     prosa = (
-        f"1. **{t_klasse} ved Eu = {eu:.0f} MPa** → VejDim kræver "
-        f"**{t_krav:.0f} mm** ubundet opbygning (bundsikring + stabilgrus). "
-        f"Det er netop tallet i *Ustabiliseret bærelagstykkelse*-boksen ovenfor.\n"
-        f"2. På designdiagrammet ved Eu = {eu:.0f} MPa lander de {t_krav:.0f} mm "
-        f"mellem {linje2_kurver} → den kurve kaldes **Eo_ækv = {eo_aekv:.0f} MPa**. "
-        f"(nærmeste hele belastningsklasse: {naermeste}).\n"
+        f"1. For **{t_klasse} ved Eu = {eu:.0f} MPa** fastlægger VejDim en "
+        f"ubunden lagtykkelse på **{t_krav:.0f} mm** (bundsikring og "
+        f"stabilgrus). Værdien er angivet i feltet *Ustabiliseret "
+        f"bærelagstykkelse* ovenfor.\n"
+        f"2. Ved Eu = {eu:.0f} MPa ligger de {t_krav:.0f} mm i "
+        f"designdiagrammet mellem {linje2_kurver}. Kurven benævnes "
+        f"**Eo_ækv = {eo_aekv:.0f} MPa** (nærmeste hele belastningsklasse: "
+        f"{naermeste}).\n"
         f"{linje3}"
     )
 
@@ -1803,24 +1832,25 @@ def _render_trafik_kobling_forklaring(
     # korrigerede resultater — præcis som designdiagrammet tegner dem.
     phi_afviger = abs(phi - PHI_BASIS) > 0.05
     materiale_box = (
-        _arrow(f"korrigeret for materialevalg (φ = {phi:.1f}°)".replace(".", ","))
-        + _box("Uarmeret med dine materialer", f"{t_uarm_ref:.0f} mm",
-               "diagrammets gule kurve", tips["materiale"])
+        _arrow(f"Korrektion for friktionsvinkel (φ = {_dk_num(phi, '.1f')}°)")
+        + _box("Ustabiliseret, korrigeret", f"{t_uarm_ref:.0f} mm",
+               "designdiagrammets ustabiliserede kurve", tips["materiale"])
     ) if (phi_afviger and t_uarm_ref is not None
           and abs(t_uarm_ref - t_krav) >= 1) else ""
 
     flow = (
         '<div style="display:flex;flex-direction:column;align-items:center;'
         'gap:0;margin:0.5rem 0 0.9rem">'
-        + _box("Dit valg", f"{t_klasse} · Eu {eu:.0f} MPa", "", tips["valg"])
+        + _box("Valgt grundlag", f"{t_klasse} · Eu {eu:.0f} MPa", "",
+               tips["valg"])
         + _arrow("VejDims krav til ubundet lag")
         + _box("Krævet ubundet opbygning", f"{t_krav:.0f} mm",
-               "bundsikring + stabilgrus", tips["krav"])
+               "bundsikring og stabilgrus", tips["krav"])
         + _arrow("Tykkelsen findes på designdiagrammet ved valgt Eu")
         + _box(f"Kurve for Eo_ækv ≈ {eo_aekv:.0f} MPa bestemmes",
                f"mellem klasse {kl_lav} og {kl_hoej}", "", tips["driftspunkt"])
         + materiale_box
-        + _arrow("geonet-reduktion aflæst i punktet")
+        + _arrow("Geonet-reduktion aflæses i punktet")
         + et_lag_box
         + to_lag_box
         + '</div>'
@@ -4104,10 +4134,10 @@ def render_brugerdefineret() -> None:
         horizontal=True,
         key="bd_visning",
         help=(
-            "**Vis alle produkter:** samme oversigt som Standard-beregningen, men med "
-            "din vægtede friktionsvinkel φ fra materialelagene.  \n"
+            "**Vis alle produkter:** samme oversigt som Standard-beregningen, "
+            "men med den vægtede friktionsvinkel φ fra materialelagene.  \n"
             "**Vælg specifikt produkt:** detaljeret resultat for ét valgt "
-            "produkt, herunder dets specifikke udførelseskrav."
+            "produkt, herunder produktets specifikke udførelseskrav."
         ),
     )
     specifikt_mode = visning == "Vælg specifikt produkt"
@@ -4975,56 +5005,45 @@ def _asfaltpakke_rows(raekker: list[dict]) -> list[dict]:
     return ud
 
 _KORR_ZONER_MD = """
-Broen holder i en veldefineret **kernezone** (21 af 36 celler) — typisk T2–T4 ved
-middel underbund og de lave klasser ved stiv underbund. Her giver den reduktioner
-på **26–47 % (middel 31 %)** — samme niveau som belastningsklasse-beregningen.
+Sammenkædningen er gyldig i en veldefineret **kernezone**, som omfatter 30 af
+tabellens 48 celler — typisk T2–T4 ved middel underbund og de lave
+trafikklasser ved stiv underbund. I kernezonen ligger reduktionerne på
+**25–47 %, med en middelværdi på 30 %**, hvilket svarer til niveauet ved
+dimensionering efter belastningsklasse.
 
-Uden for kernezonen falder driftspunktet uden for diagrammernes gyldighedsområde,
-og appen afviser med en besked frem for at ekstrapolere:
+Uden for kernezonen falder opslagspunktet uden for designdiagrammernes
+gyldighedsområde. Der foretages ikke ekstrapolation; i stedet afvises cellen:
 
-- **"under"** (blød bund × lav klasse): VejDim kræver mindre end diagrammets mest
-  konservative kurve → brug **belastningsklasse**-grundlaget. (Frost-gulvet styrer
-  ofte disse celler i praksis.)
-- **"over"** (stiv bund × høj klasse): VejDims ubundne krav overstiger
-  diagrammernes tykkelsesområde → en konkret VejDim-beregning er nødvendig.
+- **"under"** (blød underbund, lav trafikklasse): den ubundne lagtykkelse fra
+  VejDim er mindre end den mest konservative kurve i diagrammet.
+  Belastningsklassegrundlaget bør anvendes. Koblingshøjden er ofte styrende for
+  disse celler i praksis.
+- **"over"** (stiv underbund, høj trafikklasse): den ubundne lagtykkelse fra
+  VejDim overstiger diagrammernes tykkelsesområde. En konkret VejDim-beregning
+  er nødvendig.
 
 **Forbehold:**
 
-1. **VejDim kender ikke geonet.** Reduktionen hviler på GS-GRID/Tensar-feltforsøg,
-   ikke på vejreglen.
-2. **MSL erstatter SG + BL samlet.** Sammenligningen sker på total ubundet tykkelse;
-   MSL-materialekravet (SG-kvalitet) er strengere end BL — konservativt.
-3. **Frost/koblingshøjde ligger uden for korrelationen.** Kørslerne er lavet
-   frostsikkert. En geonet-reduceret opbygning må ikke bringe totalhøjden under
-   koblingshøjden for frostfarlig bund — separat kontrol.
-4. **1-net-huller i kernezonen.** Nogle celler i kernezonen mangler 1-net-data i
-   diagrammet ved den ækvivalente Eo (1-lags-kurven er tom ved høj Eo og tynd
-   opbygning). Dér kan reduktionen ikke aflæses, selvom cellen er inden for zonen.
-5. **Følsomhed for asfaltpakken.** Eo_ækv afhænger let af den valgte (faste)
-   asfaltpakke pr. klasse; pakkerne her er VejDims kanoniske valg.
-6. **T7 ikke medtaget** (åben klasse) — henvis til konkret VejDim-beregning.
+1. **VejDim omfatter ikke geonet.** Reduktionen hviler på feltforsøg fra
+   GS-GRID og Tensar, ikke på vejreglen.
+2. **MSL erstatter stabilgrus og bundsikring samlet.** Sammenligningen foretages
+   på den samlede ubundne lagtykkelse. Materialekravet til MSL svarer til
+   stabilgrus og er dermed strengere end kravet til bundsikring, hvilket er
+   konservativt.
+3. **Frostsikring og koblingshøjde er ikke omfattet.** Kørslerne er udført med
+   frostsikker underbund. En geonet-reduceret opbygning bør ikke bringe
+   totalhøjden under koblingshøjden for frostfarlig underbund, jf. håndbogens
+   afsnit 5.3. Forholdet bør kontrolleres særskilt.
+4. **Manglende armerede kurver i kernezonen.** I enkelte celler mangler
+   diagrammet data for 1 lag geonet ved den ækvivalente Eo, idet kurven er tom
+   ved høj Eo og tynd opbygning. Reduktionen kan da ikke bestemmes, selv om
+   cellen ligger inden for kernezonen.
+5. **Følsomhed over for asfaltpakken.** Den ækvivalente Eo afhænger af den
+   valgte, faste asfaltpakke pr. trafikklasse. De anvendte pakker er VejDims
+   egne værdier.
+6. **Trafikklasse T7 er ikke medtaget**, idet klassen er åben. Der henvises til
+   en konkret VejDim-beregning.
 """
-
-_KORR_CHECKS_MD = """
-Koblingen er efterprøvet på tre uafhængige måder — det er dokumentationen for,
-at den er beregnet og ikke gættet:
-
-1. **Reduktionsniveauet matcher appens egen beregning.** De fundne reduktioner
-   ligger i samme bånd som belastningsklasse-dimensioneringen. Det er den samme
-   fysiske geonet-effekt, blot indekseret via trafikklasse.
-2. **Zonegrænserne matcher en uafhængig håndberegning.** Mønstret af
-   "under"/"over"-celler er praktisk talt identisk med en teoretisk beregnet
-   matrix (Odemark/Boussinesq-håndmetode, valideret mod lærebogens
-   regneeksempel) — selvom de to er fremkommet helt uafhængigt af hinanden.
-3. **Mekanisk plausibilitet.** En uafhængig tilbageberegning af overflademodulet
-   for VejDim-stakken (SG 300 / BL 100 / underbund Eu) lander i kernezonen i
-   samme størrelsesorden som Eo_ækv (middelforhold ~1,1).
-
-Bemærk til punkt 3: det er **ikke** en stram mekanisk identitet — spændet er
-stort i yderpunkterne. Netop derfor hviler reduktionen på diagrammets
-tykkelsesrelation og ikke på en Eo-lighed.
-"""
-
 
 def render_trafikklasse_korrelation() -> None:
     st.title("🚦 Trafikklasse-korrelation")
@@ -5047,8 +5066,6 @@ def render_trafikklasse_korrelation() -> None:
             hide_index=True,
         )
         st.markdown(_KORR_DATA_NOTE_MD)
-    with st.expander("Hvorfor vi ved at koblingen holder"):
-        st.markdown(_KORR_CHECKS_MD)
     with st.expander("Zoner og forbehold"):
         st.markdown(_KORR_ZONER_MD)
     st.caption(
@@ -5071,7 +5088,8 @@ def render_trafikklasse_korrelation() -> None:
     if st.button(
         "Nulstil til standardværdier",
         type="secondary",
-        help="Kasserer dine ændringer og gendanner de oprindelige 36 kørsler.",
+        help="Kasserer foretagne ændringer og gendanner de oprindelige "
+             "48 kørsler.",
     ):
         slet_koersler_json_og_nulstil()
         st.session_state["vejdim_koersel_raekker"] = _standard_koersel_raekker()
@@ -5165,37 +5183,39 @@ def render_trafikklasse_korrelation() -> None:
 
     st.subheader("Afledt: ækvivalent Eo (Eo_ækv)")
     st.markdown(
-        "Tabellen er resultatet af tilbageberegningen for hver celle: "
-        "**adressen** i designdiagrammet — den kurve, hvis ustabiliserede "
-        "tykkelse svarer til kørslens ubundne opbygning (jf. metodeforklaringen "
-        "ovenfor). Det er præcis denne tabel, dimensioneringen slår op i, når "
-        "der vælges trafikklasse.\n\n"
-        "Designdiagrammerne dækker kun kurverne **Eo = 30–150 MPa**. En celle "
-        "kan derfor kun få en adresse, hvis VejDims krævede tykkelse faktisk "
-        "ligger mellem den tyndeste og den tykkeste kurve ved det pågældende "
-        "Eu. Ellers:\n\n"
-        "- **under** — VejDims krav er *tyndere* end diagrammets mest "
-        "forsigtige kurve (Eo = 30). Eksempel: T1 ved Eu = 5 kræver kun "
-        "560 mm, men Eo=30-kurven ligger allerede på 900 mm. Diagrammet har "
-        "ingen kurve så tynd → ingen adresse → reduktionen kan ikke aflæses. "
-        "Appen henviser til **belastningsklasse**-grundlaget (i praksis styrer "
-        "frostkravet ofte totalhøjden i disse tilfælde alligevel).\n"
-        "- **over** — VejDims krav er *tykkere* end diagrammets stiveste kurve "
-        "(Eo = 150). Eksempel: T6 ved Eu = 10 kræver 1.146 mm, men "
-        "Eo=150-kurven slutter ved 1.100 mm. At forlænge kurverne ud over "
-        "feltforsøgenes område ville være et gæt → appen afviser og henviser "
-        "til en **konkret VejDim-beregning**.\n\n"
-        "- **mangler** — cellen har endnu ingen VejDim-kørsel (ubundet "
-        "tykkelse = 0). Den indgår hverken i opslaget eller i "
-        "Eu-interpolationen, før du udfylder den i tabellen ovenfor.\n\n"
-        "Vælges en 'under'/'over'-celle i dimensioneringen, vises den "
-        "tilsvarende besked i stedet for resultater. Bemærk at zonerne følger "
-        "det *aktive* designdiagram — redigeres diagramdata (eller kørslerne "
-        "ovenfor), kan celler flytte zone.\n\n"
-        "**Mellem to kørte Eu-punkter** interpoleres VejDims krævede tykkelse "
-        "lineært i log(Eu), hvorefter Eo_ækv tilbageberegnes eksakt ved dit "
-        "Eu. Tykkelsen aftager tilnærmelsesvis retlinet med log(Eu), så det "
-        "rammer bedre end at interpolere på Eo_ækv selv."
+        "Tabellen angiver resultatet af tilbageberegningen for hver celle, "
+        "det vil sige opslagspunktet i designdiagrammet — den kurve, hvis "
+        "ustabiliserede lagtykkelse svarer til kørslens ubundne opbygning, "
+        "jf. metodeafsnittet ovenfor. Det er denne tabel, dimensioneringen "
+        "slår op i ved valg af trafikklasse.\n\n"
+        "Designdiagrammerne omfatter alene kurverne **Eo = 30–150 MPa**. En "
+        "celle kan derfor kun tildeles et opslagspunkt, hvis den ubundne "
+        "lagtykkelse fra VejDim ligger mellem den tyndeste og den tykkeste "
+        "kurve ved den pågældende E-værdi. I modsat fald angives:\n\n"
+        "- **under** — den ubundne lagtykkelse er mindre end diagrammets mest "
+        "konservative kurve (Eo = 30 MPa). Eksempelvis kræver T1 ved "
+        "Eu = 5 MPa 560 mm, mens kurven for Eo = 30 MPa ligger på 900 mm. Der "
+        "findes ingen kurve med så lille en lagtykkelse, og reduktionen kan "
+        "ikke bestemmes. Belastningsklassegrundlaget bør anvendes. I praksis "
+        "er frostkravet ofte styrende for totalhøjden i disse tilfælde.\n"
+        "- **over** — den ubundne lagtykkelse overstiger diagrammets stiveste "
+        "kurve (Eo = 150 MPa). Eksempelvis kræver T6 ved Eu = 10 MPa 1.146 mm, "
+        "mens kurven for Eo = 150 MPa slutter ved 1.100 mm. Kurverne "
+        "forlænges ikke ud over feltforsøgenes gyldighedsområde, og der "
+        "henvises til en konkret VejDim-beregning.\n\n"
+        "- **mangler** — cellen indeholder endnu ingen VejDim-kørsel, idet den "
+        "ubundne lagtykkelse er 0. Cellen indgår hverken i opslaget eller i "
+        "interpolationen, før den udfyldes i tabellen ovenfor.\n\n"
+        "Vælges en celle i zonen 'under' eller 'over' ved dimensioneringen, "
+        "vises den tilsvarende meddelelse i stedet for resultater. Der gøres "
+        "opmærksom på, at zonerne følger det aktive designdiagram. Ændres "
+        "diagramdata eller kørslerne ovenfor, kan celler skifte zone.\n\n"
+        "For E-værdier mellem to kørte punkter bestemmes den ubundne "
+        "lagtykkelse ved lineær interpolation i log(Eu), hvorefter den "
+        "ækvivalente Eo tilbageberegnes ved den valgte E-værdi. Lagtykkelsen "
+        "aftager tilnærmelsesvis retlinet med log(Eu), hvorfor denne "
+        "fremgangsmåde er mere nøjagtig end interpolation på den ækvivalente "
+        "Eo."
     )
     korr = korrelation_fra_koersler(
         koersler_fra_raekker(raekker), _aktiv_t_basis_table()
@@ -5336,10 +5356,10 @@ def render_rapport() -> None:
     sd = st.session_state.get("sidste_dim")
     if not sd or not sd.get("geonet"):
         st.info(
-            "Du skal først foretage en dimensionering med et specifikt valgt "
-            "geonet, før rapporten kan genereres.\n\n"
-            "Gå til **Dimensionering → Brugerdefineret**, vælg "
-            "**Vælg specifikt produkt**, og udfyld inputtene."
+            "Der skal først foretages en dimensionering med et specifikt "
+            "valgt geonet, før rapporten kan genereres.\n\n"
+            "Dimensioneringen udføres under **Dimensionering → "
+            "Brugerdefineret** med visningen **Vælg specifikt produkt**."
         )
         if st.button("Gå til Dimensionering", type="primary"):
             st.session_state.aktiv_side = "dimensionering"
@@ -5447,8 +5467,8 @@ def render_rapport() -> None:
     # --- B. Redigerbare skabelon-sektioner ---------------------------------
     st.subheader("B. Skabelon-tekster")
     st.caption(
-        "Standardteksterne fra BG Byggros eksempelrapport er forudfyldt. "
-        "Du kan redigere dem pr. rapport — eller nulstille til standard."
+        "Standardteksterne fra BG Byggros' eksempelrapport er forudfyldt. "
+        "Teksterne kan redigeres pr. rapport eller nulstilles til standard."
     )
     tekster_state = st.session_state.setdefault("rapport_tekster", {})
     # Versionsnummer pr. sektion — bumpes når Nulstil klikkes, så text_area
@@ -5552,9 +5572,10 @@ def render_rapport() -> None:
         disabled=not designdiagram_muligt,
         key="rap_vis_designdiagram",
         help=(
-            "Tegner designkurverne (ustabiliseret, 1 lag, 2 lag) tilpasset dine "
-            "materialer og valgte geonet, med din opbygning og Eu som "
-            "referencer. Ligner de originale designdiagrammer."
+            "Tegner designkurverne (ustabiliseret, 1 lag og 2 lag) tilpasset "
+            "de valgte materialer og det valgte geonet, med den indtastede "
+            "opbygning og E-værdi som referencer. Formen svarer til de "
+            "oprindelige designdiagrammer."
             if designdiagram_muligt
             else "Vælg et specifikt geonet under Dimensionering for at få "
                  "kurverne med produktets net-korrektion."
@@ -5563,7 +5584,7 @@ def render_rapport() -> None:
     kol_dd1, kol_dd2 = st.columns(2)
     with kol_dd1:
         vis_dd_din_prik = st.checkbox(
-            "Vis 'Din opbygning'-prik i designdiagram",
+            "Vis 'Indtastet opbygning'-prik i designdiagram",
             value=True,
             key="rap_dd_vis_din_prik",
             disabled=not (vis_designdiagram and designdiagram_muligt),
@@ -5875,7 +5896,7 @@ def render_rapport() -> None:
             st.warning(
                 "PDF kunne ikke oprettes automatisk:\n\n"
                 f"`{genereret['pdf_error']}`\n\n"
-                "Du kan altid hente Word-filen herunder og bruge 'Gem som "
+                "Word-filen kan hentes herunder og konverteres via 'Gem som "
                 "PDF' i Word."
             )
 
@@ -5987,8 +6008,8 @@ if aktiv_side == "dimensionering":
         )
     else:
         st.caption(
-            "I brugerdefineret tilstand kan du selv sammensætte op til "
-            "3 materialelag, med forskellige friktionsvinkler og egenskaber."
+            "I brugerdefineret tilstand kan der sammensættes op til "
+            "3 materialelag med forskellige friktionsvinkler og egenskaber."
         )
 
     st.divider()
