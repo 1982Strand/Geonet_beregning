@@ -769,13 +769,54 @@ KORRELATION_T_EO = korrelation_fra_koersler(VEJDIM_KOERSLER, T_BASIS_TABLE)
 
 # Metadata pr. trafikklasse. naae10_mio_20aar = NÆ10 over 20 års
 # dimensioneringsperiode (mio.), som brugt i VejDim-kørslerne (jf. notatets §2).
+# Trafikklasser efter håndbogens Figur 4.1. Felterne tunge_koeretoejer,
+# naae10_doegn og naae10_aar er gengivet direkte derfra; naae10_mio_20aar er
+# naae10_aar × 20 år. Feltet anvendelse er ikke fra håndbogen, men en
+# vejledende angivelse af typiske vejtyper i klassen.
 TRAFIKKLASSER = {
-    "T1": {"ikon": "🚲", "naae10_mio_20aar": 0.002, "beskrivelse": "Meget let trafik (stier, boligveje med minimal tung trafik)"},
-    "T2": {"ikon": "🚜", "naae10_mio_20aar": 0.15,  "beskrivelse": "Let trafik"},
-    "T3": {"ikon": "🚗", "naae10_mio_20aar": 0.37,  "beskrivelse": "Let–middel trafik"},
-    "T4": {"ikon": "🚛", "naae10_mio_20aar": 1.46,  "beskrivelse": "Middel trafik"},
-    "T5": {"ikon": "🏗️", "naae10_mio_20aar": 3.6,   "beskrivelse": "Tung trafik"},
-    "T6": {"ikon": "✈️", "naae10_mio_20aar": 6.0,   "beskrivelse": "Meget tung trafik"},
+    "T1": {
+        "ikon": "🚲", "naae10_mio_20aar": 0.0015,
+        "beskrivelse": "Meget let trafik",
+        "tunge_koeretoejer": "≤ 1", "naae10_doegn": "0,5", "naae10_aar": "75",
+        "anvendelse": "Fortove, cykelstier, stisystemer og mindre boligveje "
+                      "uden bustrafik",
+    },
+    "T2": {
+        "ikon": "🚜", "naae10_mio_20aar": 0.146,
+        "beskrivelse": "Let trafik",
+        "tunge_koeretoejer": "≤ 65", "naae10_doegn": "20", "naae10_aar": "7.300",
+        "anvendelse": "Lokale boligveje og samleveje med begrænset "
+                      "servicetrafik",
+    },
+    "T3": {
+        "ikon": "🚗", "naae10_mio_20aar": 0.366,
+        "beskrivelse": "Let–middel trafik",
+        "tunge_koeretoejer": "65 til 120", "naae10_doegn": "50",
+        "naae10_aar": "18.300",
+        "anvendelse": "Lokale boligveje og samleveje med begrænset "
+                      "servicetrafik",
+    },
+    "T4": {
+        "ikon": "🚛", "naae10_mio_20aar": 1.46,
+        "beskrivelse": "Middel trafik",
+        "tunge_koeretoejer": "120 til 560", "naae10_doegn": "200",
+        "naae10_aar": "73.000",
+        "anvendelse": "Bybusruter, erhvervsveje og hovedfordelingsveje",
+    },
+    "T5": {
+        "ikon": "🏗️", "naae10_mio_20aar": 3.6,
+        "beskrivelse": "Tung trafik",
+        "tunge_koeretoejer": "560 til 1.200", "naae10_doegn": "500",
+        "naae10_aar": "180.000",
+        "anvendelse": "Bybusruter, erhvervsveje og hovedfordelingsveje",
+    },
+    "T6": {
+        "ikon": "✈️", "naae10_mio_20aar": 6.0,
+        "beskrivelse": "Meget tung trafik",
+        "tunge_koeretoejer": "1.200 til 1.500", "naae10_doegn": "800",
+        "naae10_aar": "300.000",
+        "anvendelse": "Hovedveje, motortrafikveje og motorveje",
+    },
 }
 
 TRAFIKKLASSE_NOTE = (
@@ -935,13 +976,33 @@ def format_trafikklasse_interval(t_klasser) -> str:
 
 
 def format_trafikklasse(t_klasse: str) -> str:
-    """Én-linjes streng for en trafikklasse, fx
-    'T4 · NÆ10 ≈ 1,46 mio. (20 år) · Middel trafik'."""
+    """Overskriftslinje for en trafikklasse, fx 'T4 — Middel trafik'."""
+    d = TRAFIKKLASSER.get(t_klasse)
+    return f"{t_klasse} — {d['beskrivelse']}" if d else t_klasse
+
+
+def trafikklasse_noegletal(t_klasse: str) -> list[tuple[str, str]]:
+    """Nøgletal for en trafikklasse som (betegnelse, værdi)-par.
+
+    De tre første par er gengivet efter håndbogens Figur 4.1. Det fjerde er
+    den dimensionsgivende trafikbelastning omregnet til dimensioneringsperioden
+    på 20 år, og det femte er en vejledende angivelse af typiske vejtyper, som
+    ikke indgår i håndbogen.
+    """
     d = TRAFIKKLASSER.get(t_klasse)
     if not d:
-        return t_klasse
-    naae10 = f"{d['naae10_mio_20aar']:g}".replace(".", ",")
-    return f"{t_klasse} · NÆ10 ≈ {naae10} mio. (20 år) · {d['beskrivelse']}"
+        return []
+    # Absolutte tal med dansk tusindtalsseparator, som i håndbogens Figur 4.1.
+    # "0,0015 mio." for T1 ville være svært at sammenholde med årsværdien.
+    over_20_aar = f"{d['naae10_mio_20aar'] * 1e6:,.0f}".replace(",", ".")
+    return [
+        ("Tunge køretøjer pr. døgn, begge retninger", d["tunge_koeretoejer"]),
+        ("NÆ10 pr. døgn pr. vognbane (øvre grænse)", d["naae10_doegn"]),
+        ("Dimensionsgivende trafikbelastning",
+         f"{d['naae10_aar']} NÆ10 pr. år pr. vognbane"),
+        ("Svarende til 20 år", f"{over_20_aar} NÆ10"),
+        ("Typisk anvendelse", d["anvendelse"]),
+    ]
 
 
 # ---------------------------------------------------------------------------

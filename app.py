@@ -49,6 +49,7 @@ from core.data import (
     eo_til_naermeste_klasse,
     format_trafikklasse,
     format_trafikklasse_interval,
+    trafikklasse_noegletal,
     trafikklasser_for_belastningsklasser,
     VEJDIM_KOERSLER_STANDARD_RAEKKER,
     berig_koersel_raekker,
@@ -970,6 +971,32 @@ st.markdown(f"""
 # Hjælpefunktioner til bokse
 # ---------------------------------------------------------------------------
 
+def _noegletal_tabel_html(
+    raekker: list[tuple[str, str]], *, dæmpet: bool = False
+) -> str:
+    """Tostrenget opstilling, hvor værdierne står lodret på linje.
+
+    border:none og background:none sættes på alle elementer — ellers tegner
+    Streamlits tabel-CSS rammer og stribede rækker. dæmpet=True giver mindre
+    skrift og grå betegnelser, til brug uden for en farvet boks.
+    """
+    lille = "font-size:0.82rem;" if dæmpet else ""
+    navn_farve = "color:#555;" if dæmpet else ""
+    nul = "border:none;background:none;"
+    return (
+        f'<table style="border-collapse:collapse;width:100%;{nul}{lille}">'
+        + "".join(
+            f'<tr style="{nul}">'
+            f'<td style="padding:2px 16px 2px 0;vertical-align:top;'
+            f'{nul}{navn_farve}">{navn}:</td>'
+            f'<td style="padding:2px 0;font-weight:700;vertical-align:top;'
+            f'{nul}">{vaerdi}</td></tr>'
+            for navn, vaerdi in raekker
+        )
+        + "</table>"
+    )
+
+
 def _boks(css_klasse: str, ikon: str, tekst: str):
     st.markdown(
         f'<div class="{css_klasse}">{ikon} {tekst}</div>',
@@ -1119,9 +1146,9 @@ udtrykker ikke et krav til overflademodulet. Reduktionen aflæses i punktet og
 er dermed designdiagrammets egen, feltbestemte værdi. Der foretages ingen
 omregning mellem de to metoders dimensioneringskriterier.
 
-Grundlaget er rent bæreevnemæssigt og forudsætter frostsikker underbund.
+Grundlaget er rent bæreevnemæssigt og tager ikke højde for underbundes frostfarlighed.
 Kravene til frostsikring og koblingshøjde bør kontrolleres særskilt, jf.
-håndbogens afsnit 5.1 og 5.3. Metode, datagrundlag og forbehold er beskrevet
+Vejdirektoratets dimensioneringshåndbog afsnit 5.1 og 5.3. Metode, datagrundlag og forbehold er beskrevet
 under **Trafikklasse-korrelation** i menuen.
 """
 
@@ -1219,7 +1246,20 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
         )
 
     with kol_knapper:
-        st.caption(format_trafikklasse(valgt_t))
+        # Nøgletal efter håndbogens Figur 4.1, jf. data.trafikklasse_noegletal.
+        st.markdown(
+            f'<div style="margin:0.2rem 0 0.6rem">'
+            f'<div style="font-weight:700;margin-bottom:2px">'
+            f'{format_trafikklasse(valgt_t)}</div>'
+            + _noegletal_tabel_html(
+                trafikklasse_noegletal(valgt_t), dæmpet=True
+            )
+            + '<div style="font-size:0.76rem;color:#777;margin-top:4px">'
+            'Værdierne er gengivet efter håndbogens Figur 4.1. Den typiske '
+            'anvendelse er vejledende og indgår ikke i håndbogen.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         if zone == "ok":
             tal = _trafik_kobling_tal(eu, eo_aekv, _aktiv_t_basis_table())
             # Nabokurverne, Eo_ækv er interpoleret imellem. Falder Eo_ækv
@@ -1251,20 +1291,7 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
                 f"<b>{valgt_t} ved Eu = {eu:.0f} MPa:</b>"
                 '<hr style="margin:5px 0 4px;border:none;'
                 'border-top:1px solid #90BEDF">'
-                # border:none overalt — ellers tegner Streamlits tabel-CSS
-                # rammer om cellerne.
-                '<table style="border-collapse:collapse;width:100%;'
-                'border:none;background:none">'
-                + "".join(
-                    f'<tr style="border:none;background:none">'
-                    f'<td style="padding:2px 16px 2px 0;vertical-align:top;'
-                    f'border:none;background:none">{navn}:</td>'
-                    f'<td style="padding:2px 0;font-weight:700;'
-                    f'vertical-align:top;border:none;background:none">'
-                    f'{vaerdi}</td></tr>'
-                    for navn, vaerdi in raekker
-                )
-                + "</table>",
+                + _noegletal_tabel_html(raekker),
             )
         elif zone == "under":
             _boks(
