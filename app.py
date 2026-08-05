@@ -4636,29 +4636,17 @@ def render_geonet_database() -> None:
         },
     )
 
-    # ── Kolonnebeskrivelser ────────────────────────────────────────────────
-    with st.expander("📖 Kolonnebeskrivelser", expanded=False):
-        st.markdown("""
-| Kolonne | Forklaring |
-|---|---|
-| **Effektindeks** | Relativ effektivitet ift. referenceproduktet (= 100). Højere indeks = tyndere bærelag. |
-| **Korrektionsfaktor** | Direkte korrektionsfaktor brugt i beregningen. Negativt = tykkelsen reduceres. |
-| **BK** | Anbefalede belastningsklasser (1–6) iflg. designmanualerne. |
-| **Min. dæklag** | Mindste lagtykkelse over geonet (cm) — under dette kan geonettets funktion ikke garanteres. |
-| **Maks. korn (datablad)** | Maksimal kornstørrelse angivet i produktdatabladet (mm). |
-| **Anb. tilslag (designmanual)** | Anbefalet tilslagsstørrelse iflg. dimensioneringsmanual. |
-| **Rudeåbning** | Maskestørrelse/pitch fra designmanual. |
-| **Radial stivhed** | Radial stivhed ved 0,5 % tøjning (kN/m) — kun tilgængeligt for hexagonale produkter. |
-| **GWP A1–A3** | Klimaaftryk i produktionsfasen (kg CO₂-ækvivalent pr. m²). |
-| **Min. levetid** | Teknisk minimumslevetid angivet i datablad. |
-| **Overlæg Eu ≥ 5 / < 5** | Påkrævet overlæg i samlinger (cm) afhængig af underbundens E-modul. |
-        """)
+    # Kolonnebeskrivelserne ligger som tooltips på kolonneoverskrifterne, jf.
+    # kolonne_hjaelp ovenfor. Alle 25 kolonner er dækket.
 
     # ── Vigtige noter ─────────────────────────────────────────────────────
+    # Noterne står som et samlet afsnit frem for i expandere, så forbehold og
+    # kildehenvisninger kan læses uden at skulle åbnes enkeltvis.
     st.subheader("📝 Database-noter og kildehenvisninger")
-    for note in GEONET_NOTER:
-        with st.expander(f"ℹ️ {note['titel']}", expanded=False):
-            st.markdown(note["tekst"])
+    st.markdown("\n\n".join(
+        f"##### {i} {note['titel']}\n{note['tekst']}"
+        for i, note in enumerate(GEONET_NOTER, start=1)
+    ))
 
 
 def render_designdiagrammer() -> None:

@@ -1875,6 +1875,59 @@ GEONET_NAVNE = [g["navn"] for g in GEONET_DB]
 #     Vigtige noter og kildehenvisninger fra den komplette produktdatabase.
 # ---------------------------------------------------------------------------
 
+# Kildedokumenterne bag produktdatabasen, med link til udgiverens egen
+# offentliggjorte udgave. URL'erne peger direkte på PDF-filerne.
+KILDEDOKUMENTER = [
+    {
+        "titel": "GS-GRID/E'GRID Designmanual",
+        "udgiver": "BG Byggros", "dato": "okt. 2025",
+        "url": "https://www.byggros.com/media/dxqbrimw/"
+               "dk-brochure-gs-grid-designmanual.pdf",
+    },
+    {
+        "titel": "Tensar Geonet Designmanual",
+        "udgiver": "BG Byggros", "dato": "sept. 2024",
+        "url": "https://www.byggros.com/media/c2tavgwm/"
+               "brochure-tensar-designmanual-sept-2024-1.pdf",
+    },
+    {
+        "titel": "GS-GRID Biaxial teknisk datablad (B-serien)",
+        "udgiver": "BG Byggros", "dato": "jun. 2025",
+        "url": "https://www.byggros.com/media/tlwdjvk2/"
+               "gs-grid-data-dk0625-6-100.pdf",
+    },
+    {
+        "titel": "GS-GRID SX teknisk datablad (SX160/SX170)",
+        "udgiver": "BG Byggros", "dato": "okt. 2025",
+        "url": "https://www.byggros.com/media/a31jv5rj/"
+               "gs-grid-sx-teknisk-datablad-1025.pdf",
+    },
+    {
+        "titel": "Tensar TriAx TX160 teknisk datablad",
+        "udgiver": "BG Byggros", "dato": "aug. 2024",
+        "url": "https://www.byggros.com/media/2ldmxhf0/"
+               "datablad-tensar-triax-tx-160_23-08-24-1.pdf",
+    },
+    {
+        "titel": "Tensar TriAx TX190L teknisk datablad",
+        "udgiver": "BG Byggros", "dato": "okt. 2024",
+        "url": "https://www.byggros.com/media/vydj5w24/"
+               "tensar-geonet-tx190l-10-10-2024.pdf",
+    },
+    {
+        "titel": "Tensar InterAx NX750 Product Identification Data Sheet",
+        "udgiver": "Tensar", "dato": "dec. 2024",
+        "url": "https://www.tensarcorp.com/getattachment/"
+               "a0bac181-91df-463b-b7ab-c5f642ac92b5/NX750_PIDS_DEC_2024.pdf",
+    },
+    {
+        "titel": "Tensar InterAx NX850 Product Identification Data Sheet",
+        "udgiver": "Tensar", "dato": "dec. 2024",
+        "url": "https://www.tensarcorp.com/getattachment/"
+               "63057717-50ff-4ac2-bd31-5bfe261c115c/NX850_PIDS_DEC_2024.pdf",
+    },
+]
+
 GEONET_NOTER = [
     {
         "titel": "Rettelse: E'GRID T9L effektindeks",
@@ -1930,14 +1983,9 @@ GEONET_NOTER = [
     },
     {
         "titel": "Kildedokumenter",
-        "tekst": (
-            "1) GS-GRID/E'GRID Designmanual, BG Byggros, okt. 2025  |  "
-            "2) Tensar Geonet Designmanual, BG Byggros, sept. 2024  |  "
-            "3) GS-GRID Biaxial teknisk datablad (B-serien), BG Byggros, jun. 2025  |  "
-            "4) GS-GRID SX teknisk datablad (SX160/SX170), BG Byggros, okt. 2025  |  "
-            "5) Tensar TriAx TX160 teknisk specifikation, Tensar International, aug. 2024  |  "
-            "6) Tensar InterAx NX750 Product Identification Data Sheet (PIDS), Tensar, dec. 2024  |  "
-            "7) Tensar InterAx NX850 Product Identification Data Sheet (PIDS), Tensar, dec. 2024"
+        "tekst": "\n".join(
+            f"{i}. [{d['titel']}]({d['url']}) — {d['udgiver']}, {d['dato']}"
+            for i, d in enumerate(KILDEDOKUMENTER, start=1)
         ),
     },
 ]
