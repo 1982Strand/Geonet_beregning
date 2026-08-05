@@ -1,3 +1,35 @@
+# Skrivestil for brugervendt tekst
+
+Al tekst, brugeren ser i appen — forklaringer, tooltips, info-bokse,
+kolonneoverskrifter, rapport — skrives i samme stil som Vejdirektoratets
+håndbog *Dimensionering af befæstelser og forstærkningsbelægninger*
+(`Dokumenter og data/VD/Dimensionering_befaestelser_og_forstaerkningsbelaegninger.md`).
+
+Appen er et fagligt dimensioneringsværktøj, og brugerne kender håndbogens sprog
+i forvejen. Reglen gælder både ved nye tilføjelser og ved redigering af
+eksisterende tekst.
+
+**Gør:**
+- Passiv, upersonlig form: "lagtykkelsen fastlægges", "værdien bestemmes".
+- Konstaterende fremstilling.
+- Formler i kodeblok, efterfulgt af en `hvor:`-liste der forklarer hvert symbol.
+- Figurtekst under hver tabel: `*Figur N Beskrivelse.*`
+- Nummererede afsnit: `#### 1 Ubunden lagtykkelse`.
+- Faste vendinger: "Der gøres opmærksom på, at …", "Opmærksomheden henledes på,
+  at …", "jf. afsnit X". "bør" frem for "skal" ved anbefalinger.
+- Symbolnavne som i håndbogen: `t_SG`, `t_BL`, `f`, `k_φ`, `Eo_ækv`.
+
+**Undgå:**
+- "vi", "man har valgt", direkte tiltale af læseren.
+- Retoriske spørgsmål og formuleringer som "her ligger den pointe, der er let
+  at overse".
+- Billedsprog: "adressen i diagrammet", "bor på kurven", "diagrammet baglæns".
+
+Referencemønster: `_KORR_METODE_MD` i `app.py` — sektionen "Metode og
+fremgangsmåde" under Trafikklasse-korrelation.
+
+---
+
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands
 

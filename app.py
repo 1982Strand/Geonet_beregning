@@ -1156,8 +1156,7 @@ def _vis_korrelationstabel(
         note = "Den markerede celle er den, dimensioneringen slår op i."
     st.caption(
         f"{note} **under** = VejDim kræver en tyndere opbygning end "
-        f"diagrammets område · **over** = tykkere end diagrammets område · "
-        f"**mangler** = kørslen er ikke udfyldt endnu. "
+        f"diagrammets område · **over** = tykkere end diagrammets område. "
         f"Se *Trafikklasse-korrelation* i menuen for metode og datagrundlag."
     )
 
@@ -1208,24 +1207,49 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
         st.caption(format_trafikklasse(valgt_t))
         if zone == "ok":
             tal = _trafik_kobling_tal(eu, eo_aekv, _aktiv_t_basis_table())
-            t_krav_txt = (
-                f"ca. <b>{tal['t_krav_mm']:.0f} mm</b>"
-                if tal["t_krav_mm"] is not None else "en ubundet tykkelse"
+            # Nabokurverne, Eo_ækv er interpoleret imellem. Falder Eo_ækv
+            # præcis på en kolonne, er de to ens, og der vises kun den ene.
+            if tal["kl_lav"] != tal["kl_hoej"]:
+                klasse_txt = (
+                    f"{tal['kl_lav']} (Eo = {tal['eo_lav']} MPa) og "
+                    f"{tal['kl_hoej']} (Eo = {tal['eo_hoej']} MPa)"
+                )
+            else:
+                klasse_txt = f"{tal['kl_lav']} (Eo = {tal['eo_lav']} MPa)"
+            # Ligger Eu mellem to kørte VejDim-punkter, er tykkelseskravet —
+            # og dermed Eo_ækv — interpoleret i log(Eu). Det markeres, så
+            # tallet ikke forveksles med en aflæst kørsel.
+            trin = _eo_aekv_trin_tal(valgt_t, eu, _aktiv_t_basis_table())
+            interp_txt = (
+                ' <span style="font-weight:400;color:#555">(interpoleret)</span>'
+                if trin and not trin["trin1"]["direkte"] else ""
             )
-            kurve_txt = (
-                f"kurven mellem belastningsklasse {tal['kl_lav']} og "
-                f"{tal['kl_hoej']}"
-                if tal["kl_lav"] != tal["kl_hoej"] else "en diagramkurve"
-            )
+            raekker = [
+                ("Tykkelseskrav til ubundet opbygning fra VejDim",
+                 f"{tal['t_krav_mm']:.0f} mm{interp_txt}"
+                 if tal["t_krav_mm"] is not None else "—"),
+                ("Nærmeste belastningsklasser", klasse_txt),
+                ("Ækvivalent Eo-kurve", f"{eo_aekv:.0f} MPa{interp_txt}"),
+            ]
             _boks(
                 "boks-tip", "🔗",
-                f"<b>{valgt_t} ved Eu = {eu:.0f} MPa:</b> VejDim kræver "
-                f"{t_krav_txt} ubundet opbygning (bundsikring + stabilgrus). "
-                f"Geonet-reduktionen ses i resultaterne nedenfor.<br>"
-                f"<span style='font-size:0.9em;color:#555'>Driftspunkt i "
-                f"designdiagrammet: <b>Eo_ækv = {eo_aekv:.0f} MPa</b> — "
-                f"{kurve_txt} (nærmeste: {naermeste}). Trinvis forklaring med "
-                f"figur står under resultaterne.</span>",
+                f"<b>{valgt_t} ved Eu = {eu:.0f} MPa:</b>"
+                '<hr style="margin:5px 0 4px;border:none;'
+                'border-top:1px solid #90BEDF">'
+                # border:none overalt — ellers tegner Streamlits tabel-CSS
+                # rammer om cellerne.
+                '<table style="border-collapse:collapse;width:100%;'
+                'border:none;background:none">'
+                + "".join(
+                    f'<tr style="border:none;background:none">'
+                    f'<td style="padding:2px 16px 2px 0;vertical-align:top;'
+                    f'border:none;background:none">{navn}:</td>'
+                    f'<td style="padding:2px 0;font-weight:700;'
+                    f'vertical-align:top;border:none;background:none">'
+                    f'{vaerdi}</td></tr>'
+                    for navn, vaerdi in raekker
+                )
+                + "</table>",
             )
         elif zone == "under":
             _boks(
@@ -4692,100 +4716,203 @@ def _korrelation_pivot_rows(korr: dict) -> list[dict]:
 # Metode-, datagrundlag- og forbeholds-tekster (kondenseret fra
 # "Dokumenter og data/Korrelation_trafikklasse_Eo.md").
 _KORR_METODE_MD = """
-Trafikklasse-grundlaget forbinder **Vejdirektoratets trafikklasser** med appens
-**geonet-designdiagrammer** — ikke ved at gætte, men ved at lade to uafhængige,
-empiriske kilder mødes:
+Trafikklassegrundlaget sammenkæder Vejdirektoratets trafikklasser med de
+geonet-designdiagrammer, dimensioneringen bygger på. Sammenkædningen sker uden
+teoretisk omregning mellem de to metoder, idet den alene anvender to
+uafhængige, empiriske datasæt:
 
-1. **VejDim-kørslerne** (vejreglens metode) fastlægger, hvor tykt et ubundet lag
-   (stabilgrus + bundsikring, SG + BL) en given trafikklasse kræver ved en given
-   underbund Eu.
-2. **Geonet-designdiagrammerne** (GS-GRID/Tensar-feltforsøg) fastlægger, hvor
-   meget et geonet kan reducere netop den tykkelse.
+- **VejDim-kørslerne** fastlægger den ubundne lagtykkelse, en given trafikklasse
+  kræver ved en given underbund.
+- **Designdiagrammerne** fastlægger den reduktion af lagtykkelsen, et geonet
+  medfører i det pågældende punkt.
+
+Fremgangsmåden er beskrevet i afsnit 1–4 nedenfor. Som gennemgående eksempel
+anvendes trafikklasse T4 ved en underbund med E-værdi Eu = 8 MPa.
 
 ---
 
-#### Simpelt forklaret: diagrammet bruges baglæns
+#### 1 Ubunden lagtykkelse
 
-**Forlæns** (sådan bruges diagrammet normalt) svarer det på:
+For hver kombination af trafikklasse og underbunds-E-værdi er der udført en
+VejDim-kørsel. Kørslerne fremgår af tabellen nederst på siden. Den ubundne
+lagtykkelse fastlægges som summen af de to ubundne lag:
 
-> *"Jeg har underbund Eu = 10 og skal bruge Eo = 80 (klasse 4) → hvor tykt
-> ubundet lag?"* → **900 mm**
+```
+t_ubundet = t_SG + t_BL
+```
 
-Man går ind med et **Eo** og ud med en **tykkelse**.
+hvor:
 
-**Baglæns** (det korrelationen gør): fra VejDim-kørslen kender vi allerede
-**tykkelsen** — fx kræver T4 ved Eu = 10 i alt **970 mm** ubundet lag. Så vi
-stiller det omvendte spørgsmål:
+- **t_SG** = tykkelsen af stabilgruslaget [mm].
+- **t_BL** = tykkelsen af bundsikringslaget [mm].
 
-> *"Hvilket Eo **ville have givet** præcis 970 mm ved Eu = 10?"*
+Kørslerne er udført ved Eu = 3, 4, 5, 10, 15, 20, 30 og 40 MPa. For
+mellemliggende E-værdier bestemmes lagtykkelsen ved lineær interpolation i
+log(Eu) mellem de to nærmeste kørsler:
 
-Vi slår op i diagrammets række for Eu = 10 (ustabiliserede tykkelser):
+```
+f         = (ln(Eu) − ln(Eu_1)) / (ln(Eu_2) − ln(Eu_1))
+t_ubundet = t_1 + f × (t_2 − t_1)
+```
 
-| Eo-kurve | 30 | 45 | 60 | 80 | 120 | 150 |
+hvor Eu_1 og Eu_2 er de nærmeste kørte E-værdier, og t_1 og t_2 de tilhørende
+lagtykkelser.
+
+Lagtykkelsen aftager tilnærmelsesvis retlinet med log(Eu) i hele datasættet.
+Ved en udeladelsestest er middelafvigelsen på den ækvivalente Eo bestemt til
+2,9 MPa ved interpolation i log(Eu) mod 5,5 MPa ved interpolation i Eu.
+
+For T4 ved Eu = 8 MPa fås:
+
+| Trafikklasse | Eu = 5 MPa | Eu = 8 MPa | Eu = 10 MPa |
+|---|---|---|---|
+| T4 | 1184 mm | 1038 mm | 969 mm |
+
+*Figur 1 Ubunden lagtykkelse for T4. Værdien ved Eu = 8 MPa er interpoleret
+(f = 0,678).*
+
+---
+
+#### 2 Ækvivalent Eo
+
+Ved den ækvivalente Eo forstås den Eo-værdi, hvis ustabiliserede lagtykkelse
+ved samme Eu svarer til den lagtykkelse, der er fastlagt efter afsnit 1.
+Værdien bestemmes ved lineær interpolation mellem de to nærmeste Eo-kurver i
+designdiagrammet:
+
+```
+f      = (t_ubundet − t_lav) / (t_høj − t_lav)
+Eo_ækv = Eo_lav + f × (Eo_høj − Eo_lav)
+```
+
+hvor t_lav og t_høj er de ustabiliserede lagtykkelser ved de to nærmeste
+Eo-kurver, Eo_lav og Eo_høj.
+
+De ustabiliserede lagtykkelser ved Eu = 8 MPa fremgår af Figur 2.
+
+| Eo [MPa] | 30 | 45 | 60 | 80 | 120 | 150 |
 |---|---|---|---|---|---|---|
-| Ubundet tykkelse (mm) | 600 | 700 | 800 | **900** | **1000** | 1100 |
+| Belastningsklasse | 1 | 2 | 3 | 4 | 5 | 6 |
+| Ustabiliseret lagtykkelse [mm] | 700 | 800 | 877 | 1000 | 1100 | 1200 |
 
-970 mm ligger **mellem 900 (Eo = 80) og 1000 (Eo = 120)**. Springet mellem de
-to kurver er 100 mm, og vores tykkelse ligger 70 mm inde i det spring — altså
-**70 % af vejen** fra den ene kurve til den anden:
+*Figur 2 Ustabiliserede lagtykkelser ved Eu = 8 MPa.*
 
-> (970 − 900) ÷ (1000 − 900) = 70 ÷ 100 = **0,70**
+En lagtykkelse på 1038 mm ligger mellem kurverne for Eo = 80 MPa og
+Eo = 120 MPa, og der fås f = 0,382 og Eo_ækv = 95,3 MPa.
 
-Fordi tykkelsen ligger 70 % oppe mellem kurverne, går vi tilsvarende 70 % op i
-Eo-værdien mellem dem:
+Den ækvivalente Eo er en indeksværdi, der angiver opslagspunktet i
+designdiagrammet. I modsætning til belastningsklasserne udtrykker den ikke et
+krav til eller en forventet størrelse af overflademodulet på oversiden af de
+ubundne lag. Værdien er alene et resultat af interpolationen.
 
-> Eo_ækv = 80 + 0,70 × (120 − 80) = 80 + 28 = **108 MPa**
+Opmærksomheden henledes på, at opslagspunktet afhænger af både trafikklasse og
+underbundens E-værdi. En trafikklasse kan derfor ikke henføres til ét bestemt
+designdiagram, jf. Figur 3.
 
-Havde tykkelsen været præcis 950 mm (midt imellem, 50 %), var svaret
-80 + 0,50 × 40 = 100 MPa. Det er helt almindelig lineær interpolation — vi
-finder mellemværdien mellem to tabelpunkter.
-
-Det er hele tilbageberegningen — tabellen læses blot fra højre mod venstre.
-
-**Hvad er Eo_ækv så?** Bare *navnet på det sted i diagrammet, hvor opbygningen
-ligger* — en **adresse**, ikke et krav:
-
-- Man har *ikke* valgt "Eo skal være 108".
-- Man har valgt T4 + Eu 10 → det gav 970 mm → og 970 mm *bor* på kurven "108".
-
-**Hvilket af de 6 designdiagrammer kigger vi i?** Ingen af dem er valgt på
-forhånd — **tykkelsen finder selv diagrammet**. Vi kigger i alle seks på én
-gang (rækken ovenfor er netop de seks kurver ved samme Eu) og ser, hvor
-tykkelsen lander. Man kan derfor *ikke* bare sige "T4 = diagram 4" — samme
-trafikklasse lander på forskellige diagrammer alt efter underbunden:
-
-| T4 ved Eu = | 5 | 10 | 15 | 20 |
+| T4 ved Eu = | 5 MPa | 10 MPa | 15 MPa | 20 MPa |
 |---|---|---|---|---|
-| Eo_ækv | 90 | 108 | 135 | 148 |
-| Lander nærmest | diagram 4 | ml. 4 og 5 | diagram 5 | diagram 6 |
+| Eo_ækv [MPa] | 90 | 108 | 135 | 148 |
+| Nærmeste designdiagram | 4 | mellem 4 og 5 | 5 | 6 |
 
-Ved blød bund ligner T4 klasse 4 — ved stiv bund klasse 6. Adressen afhænger
-af **både** trafikklasse **og** Eu. (Derfor kan de to klassesystemer heller
-aldrig sættes lig hinanden: belastningsklasser koder lastens *størrelse*,
-trafikklasser koder antal *gentagelser*.)
+*Figur 3 Ækvivalent Eo for T4 ved forskellige underbunds-E-værdier.*
 
-**Hvorfor gør vi det?** Fordi geonet-reduktionerne i diagrammet er knyttet til
-hver kurve. Når vi ved, at opbygningen ligger på kurve 108, kan vi aflæse
-*lige dér*, hvad feltforsøgene siger geonettet kan: 970 mm → **675 mm** med
-1 lag net.
-
-> **VejDim siger hvor tykt. Diagrammet fortæller, hvor det tykke ligger
-> (Eo_ækv = adressen). Og på den adresse står reduktionen allerede — målt i
-> felten.**
+Forholdet skyldes, at de to klassesystemer beskriver forskellige størrelser:
+belastningsklasserne beskriver lastens størrelse, mens trafikklasserne
+beskriver antallet af belastningsgentagelser.
 
 ---
 
-#### Formelt: de tre trin pr. celle
+#### 3 Geonet-reduktion
 
-1. Ubundet total fra VejDim: `t_ubundet = SG + BL`.
-2. Find den Eo, hvis **ustabiliserede** diagram-tykkelse ved samme Eu netop er
-   lig `t_ubundet` (lineær interpolation mellem Eo-kolonnerne) → den
-   **ækvivalente Eo (Eo_ækv)**. Kun en indeksværdi, ikke en fysisk påstand.
-3. **Reduktionen** aflæses ved (Eo_ækv, Eu) og er dermed **identisk med
-   diagrammets egen, feltdokumenterede reduktion** i det punkt.
+Designdiagrammerne indeholder som udgangspunkt tre kurver for hver Eo-værdi:
+én for ustabiliseret opbygning og én for henholdsvis 1 og 2 lag geonet. Alle
+tre er fastlagt ved feltforsøg.
 
-Der indgår **ingen teoretisk omregning** mellem de to metoder — VejDim placerer
-kun driftspunktet, geonet-diagrammet leverer reduktionen.
+Lagtykkelsen for armeret opbygning bestemmes ved interpolation mellem de samme
+to Eo-kurver som i afsnit 2 og med den samme interpolationsfaktor f:
+
+```
+t_armeret = t_lav,armeret + f × (t_høj,armeret − t_lav,armeret)
+```
+
+For T4 ved Eu = 8 MPa, hvor f = 0,382, fås værdierne i Figur 4.
+
+| Ved Eu = 8 MPa | Eo = 80 MPa (kl. 4) | Eo = 120 MPa (kl. 5) | Eo_ækv = 95,3 MPa |
+|---|---|---|---|
+| Ustabiliseret | 1000 mm | 1100 mm | 1038 mm |
+| 1 lag geonet | 700 mm | 800 mm | 738 mm |
+| 2 lag geonet | 600 mm | 700 mm | 638 mm |
+
+*Figur 4 Lagtykkelser ved Eo_ækv, bestemt ved interpolation mellem de to
+nærmeste Eo-kurver.*
+
+Reduktionen bestemmes som forskellen mellem den ustabiliserede og den armerede
+lagtykkelse:
+
+```
+1 lag geonet:  (1038 − 738) / 1038 = 28,9 %
+2 lag geonet:  (1038 − 638) / 1038 = 38,5 %
+```
+
+Reduktionen interpoleres ikke direkte, men følger af de interpolerede
+lagtykkelser. Den fundne reduktion på 28,9 % ligger følgelig mellem de to
+nærmeste kurvers egne reduktioner på henholdsvis 30,0 % (Eo = 80 MPa) og
+27,3 % (Eo = 120 MPa).
+
+Da den ustabiliserede kurve indgår i begge interpolationer, er
+interpolationsfaktoren den samme, uanset om den bestemmes ud fra lagtykkelsen
+eller ud fra Eo-værdien. Den ækvivalente Eo kan derfor betragtes som en
+angivelse af interpolationsfaktoren.
+
+Der gøres opmærksom på, at designdiagrammerne ikke indeholder armerede kurver
+i alle punkter. Ved Eu = 10 MPa findes eksempelvis ingen kurve for 2 lag
+geonet ved Eo = 30, 45, 60 og 80 MPa. Falder den ækvivalente Eo i dette
+område, kan reduktionen for 2 lag ikke bestemmes, og resultatet udelades.
+
+---
+
+#### 4 Korrektion for materialer og geonettype
+
+De lagtykkelser, der bestemmes efter afsnit 3, er designdiagrammernes
+basisværdier, som forudsætter en friktionsvinkel på φ = 37°. Lagtykkelsen
+korrigeres for det valgte materiale og det valgte geonet:
+
+```
+T   = T_basis × (1 + k_φ + k_net)
+k_φ = −0,02 × (φ − 37°)
+```
+
+hvor:
+
+- **k_φ** = korrektion for friktionsvinklen i de ubundne materialer.
+- **k_net** = korrektion for det valgte geonet i forhold til referencenettet.
+  Værdien er 0 for referencenettet og negativ for net med højere effektivitet.
+
+Korrektionen for friktionsvinklen anvendes på samtlige tre kurver. Korrektionen
+for geonettype anvendes alene på de armerede kurver, idet den ustabiliserede
+opbygning ikke indeholder geonet. Reduktionen opgøres derfor i forhold til den
+korrigerede ustabiliserede lagtykkelse, således at begge lagtykkelser er
+korrigeret på samme grundlag.
+
+---
+
+#### 5 Sammenfatning
+
+Fremgangsmåden kan sammenfattes i fire trin pr. kombination af trafikklasse og
+underbunds-E-værdi:
+
+1. Den ubundne lagtykkelse fastlægges som t_SG + t_BL fra VejDim-kørslen. Ved
+   E-værdier mellem de kørte punkter interpoleres i log(Eu).
+2. Den ækvivalente Eo bestemmes ved interpolation mellem de to nærmeste
+   Eo-kurver, således at den ustabiliserede lagtykkelse svarer til den
+   fastlagte.
+3. Lagtykkelsen for armeret opbygning bestemmes ved interpolation mellem de
+   samme to Eo-kurver med samme interpolationsfaktor. Reduktionen følger heraf.
+4. Lagtykkelserne korrigeres for friktionsvinkel og geonettype.
+
+Grundlaget er rent bæreevnemæssigt. Kravene til frostsikring og koblingshøjde,
+jf. håndbogens afsnit 5.1 og 5.3, er ikke omfattet og bør kontrolleres
+særskilt.
 """
 
 _KORR_DATA_INTRO_MD = """
@@ -4804,7 +4931,7 @@ VejDim-beregnet — derfor et interval, hvor tykkelsen varierer med Eu):
 
 _KORR_DATA_NOTE_MD = """
 Tykkelser på bundne bærelag, som VejDim selv beregner (kan ikke låses), er
-programmets egne kanoniske værdier. NÆ10 er dimensioneringstrafikken over
+programmets egne værdier. NÆ10 er dimensioneringstrafikken over
 20 år for klassen.
 """
 
