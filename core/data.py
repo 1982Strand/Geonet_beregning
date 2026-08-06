@@ -1974,13 +1974,10 @@ GEONET_NOTER = [
             "forskellige produkter ved flerlagsopbygninger."
         ),
     },
-    {
-        "titel": "Overlæg i samlinger",
-        "tekst": (
-            "For alle produkter (begge serier): min. 30 cm overlæg ved Eu ≥ 5 MPa. "
-            "Min. 40 cm overlæg ved Eu < 5 MPa."
-        ),
-    },
+    # Overlæg i samlinger indgår ikke som note. Kravet afhænger af underbundens
+    # E-værdi og vises derfor under "Krav til nettet" i produktlisten, hvor
+    # E-værdien er kendt (se placement.overlap_krav_mm). Værdierne pr. produkt
+    # står fortsat i kolonnerne "Overlæg Eu ≥ 5" og "Overlæg Eu < 5" ovenfor.
     {
         "titel": "Kildedokumenter",
         "tekst": "\n".join(

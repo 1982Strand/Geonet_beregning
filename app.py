@@ -66,7 +66,11 @@ from core.calculator import (
     _slaa_op_interp,
 )
 from core.validators import valider_input
-from core.placement import check_geonet_placement, placement_requirements
+from core.placement import (
+    check_geonet_placement,
+    overlap_krav_mm,
+    placement_requirements,
+)
 
 # ---------------------------------------------------------------------------
 # Redigerbare materialer
@@ -2351,10 +2355,11 @@ def _rt_detalje_html(
     p2: dict | None,
     is_ref: bool = False,
     phi: float = PHI_BASIS,
+    eu: float | None = None,
 ) -> str:
     """Foldbar detalje justeret efter tabellens kolonner.
 
-    Layout (samme grid som tabellen): 'Krav til nettet' til venstre (under
+    Layout (samme grid som tabellen): 'Krav til udførsel' til venstre (under
     Produkt/klasse); under 'Bærelagstykkelse, x lag geonet' vises det simple
     regnestykke (ustabiliseret → reduktion → stabiliseret); under
     'Reduktion i alt, x lag' vises reduktionen opdelt på basis/net/φ.
@@ -2365,19 +2370,26 @@ def _rt_detalje_html(
             'Ingen gyldig beregning for denne kombination.</div>'
         )
 
-    # Krav til nettet — uafhængig af lag.
+    # Krav til udførsel — uafhængig af lag. Overlægget afhænger dog af
+    # underbundens E-værdi, jf. placement.overlap_krav_mm.
     geonet = None if is_ref else find_geonet(navn)
     krav = placement_requirements(geonet)
     tilslag = (geonet or {}).get("anbefalet_tilslag") or "—"
+    overlap_mm, overlap_betingelse = overlap_krav_mm(krav, eu)
     krav_html = (
         '<div class="rt-d-krav">'
-        '<div class="rt-krav-titel">Krav til nettet</div>'
+        '<div class="rt-krav-titel">Krav til udførsel</div>'
         '<div class="rt-dlinje rt-graa"><span>Minimum dæklag over geonet</span>'
         f'<span class="val">{krav["min_top_cover_mm"]:.0f} mm</span></div>'
         '<div class="rt-dlinje rt-graa"><span>Anbefalet afstand imellem geonetlag</span>'
         f'<span class="val">{krav["min_spacing_mm"]:.0f}–{krav["max_spacing_mm"]:.0f} mm</span></div>'
         '<div class="rt-dlinje rt-graa"><span>Anbefalet tilslagsstørrelse</span>'
         f'<span class="val">{tilslag}</span></div>'
+        # Betingelsen indeholder "<" ved blød underbund og skal escapes,
+        # ellers opfatter browseren den som starten på et tag.
+        f'<div class="rt-dlinje rt-graa"><span>Overlæg i samlinger '
+        f'({html.escape(overlap_betingelse)})</span>'
+        f'<span class="val">{overlap_mm:.0f} mm</span></div>'
         '</div>'
     )
 
@@ -2421,6 +2433,7 @@ def _rt_raekke_html(
     is_ref: bool = False,
     phi: float = PHI_BASIS,
     trafik_eu: float | None = None,
+    eu: float | None = None,
 ) -> str:
     """Byg én foldbar tabelrække (<details>) for et produkt/referencenet.
 
@@ -2466,7 +2479,7 @@ def _rt_raekke_html(
         f'{_rt_tk_celle(p2, v2, t2, t2_cls, phi)}'
         f'<span class="{red2_cls}">{red2_txt}</span>'
         f'</summary>'
-        f'{_rt_detalje_html(navn, p1, p2, is_ref, phi)}'
+        f'{_rt_detalje_html(navn, p1, p2, is_ref, phi, eu)}'
         f'</details>'
     )
 
@@ -2482,6 +2495,7 @@ def _render_produkt_tabel(
     phi: float = PHI_BASIS,
     vis_reference: bool = True,
     trafik_eu: float | None = None,
+    eu: float | None = None,
 ) -> None:
     """Resultattabel: én foldbar række pr. produkt. Bruges af både Standard og
     Brugerdefineret (sidstnævnte sender φ ≠ 37, som giver en φ-korrektionslinje
@@ -2535,14 +2549,15 @@ def _render_produkt_tabel(
     if vis_reference:
         dele.append(
             _rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True,
-                            phi=phi, trafik_eu=trafik_eu)
+                            phi=phi, trafik_eu=trafik_eu, eu=eu)
         )
     for n in navne:
         p1 = p1_by.get(n)
         p2 = p2_by.get(n)
         if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
             continue
-        dele.append(_rt_raekke_html(n, p1, p2, phi=phi, trafik_eu=trafik_eu))
+        dele.append(_rt_raekke_html(n, p1, p2, phi=phi, trafik_eu=trafik_eu,
+                                    eu=eu))
     dele.append('</div>')
     caption = (
         "Referencenet vises øverst, derefter de mest effektive produkter "
@@ -3843,7 +3858,7 @@ def render_standard() -> None:
 
         _render_produkt_tabel(
             ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-            prod_1lag, prod_2lag, valgt_klasse,
+            prod_1lag, prod_2lag, valgt_klasse, eu=eu,
             trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
         )
 
@@ -4273,7 +4288,7 @@ def render_brugerdefineret() -> None:
                 )
             _render_produkt_tabel(
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                prod_1lag, prod_2lag, valgt_klasse, phi=phi,
+                prod_1lag, prod_2lag, valgt_klasse, phi=phi, eu=eu,
                 trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
             )
 
@@ -4395,7 +4410,7 @@ def render_brugerdefineret() -> None:
             )
             _render_produkt_tabel(
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                prod_1, prod_2, valgt_klasse, phi=phi,
+                prod_1, prod_2, valgt_klasse, phi=phi, eu=eu,
                 vis_reference=False,
                 trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
             )

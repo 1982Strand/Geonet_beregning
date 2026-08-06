@@ -14,6 +14,12 @@ MAX_SPACING_TENSAR_MM = 400.0
 MAX_SPACING_GS_EGRID_MM = 500.0
 MAX_SPACING_CONSERVATIVE_MM = 400.0
 
+# Overlæg i samlinger. Kravet afhænger af underbundens E-værdi og er ens for
+# begge serier, men aflæses pr. produkt, så et afvigende produkt slår igennem.
+OVERLAP_EU_GRAENSE_MPA = 5.0
+OVERLAP_EU_GE5_MM = 300.0
+OVERLAP_EU_LT5_MM = 400.0
+
 
 def placement_requirements(geonet: dict | None = None) -> dict:
     """Return the active placement requirements for a product or reference net."""
@@ -34,14 +40,31 @@ def placement_requirements(geonet: dict | None = None) -> dict:
         max_spacing = MAX_SPACING_CONSERVATIVE_MM
         source = "referencenet"
 
+    def _overlap(felt: str, standard: float) -> float:
+        v = (geonet or {}).get(felt)
+        return float(v) * 10.0 if isinstance(v, (int, float)) else standard
+
     return {
         "min_top_cover_mm": max(MIN_TOP_COVER_MM, product_cover_mm),
         "general_top_cover_mm": MIN_TOP_COVER_MM,
         "product_cover_mm": product_cover_mm,
         "min_spacing_mm": MIN_GEONET_SPACING_MM,
         "max_spacing_mm": max_spacing,
+        "overlap_ge5_mm": _overlap("overlap_eu_ge5_cm", OVERLAP_EU_GE5_MM),
+        "overlap_lt5_mm": _overlap("overlap_eu_lt5_cm", OVERLAP_EU_LT5_MM),
         "source": source,
     }
+
+
+def overlap_krav_mm(krav: dict, eu: float | None) -> tuple[float, str]:
+    """Påkrævet overlæg i samlinger ved en given underbunds-E-værdi.
+
+    Returnerer (mm, betingelse). Er eu ukendt, returneres det konservative
+    krav for blød underbund.
+    """
+    if eu is None or eu < OVERLAP_EU_GRAENSE_MPA:
+        return krav["overlap_lt5_mm"], f"Eu < {OVERLAP_EU_GRAENSE_MPA:g} MPa"
+    return krav["overlap_ge5_mm"], f"Eu ≥ {OVERLAP_EU_GRAENSE_MPA:g} MPa"
 
 
 def _top_cover_requirement_text(krav: dict) -> str:
