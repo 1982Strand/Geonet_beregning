@@ -182,7 +182,7 @@ class Snit:
     # status_tekst vises under søjlen til sammenligning med indtastet opbygning.
     er_krav_soejle: bool = False
     t_indtastet_mm: float | None = None  # til sammenligningslinje på tværs af søjler
-    status_tekst: str | None = None      # fx "Mangler 77 mm" eller "✓ +6 mm besparelse"
+    status_tekst: str | None = None      # fx "77 mm for lidt" eller "6 mm i overskud"
     status_farve: str | None = None      # "danger" | "warning" | "success" | None
     phi_vaegtet: bool = True             # False → label er "Bærelag" i stedet for "φ-vægtet bærelag"
 

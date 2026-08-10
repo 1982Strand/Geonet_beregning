@@ -108,7 +108,7 @@ T_krav = T_basis × (1 + k_φ)
 
 Materialeforholdet fra den indtastede opbygning bevares, og lagtykkelsen
 fordeles proportionalt på lagene. Værdierne kan derfor overstige de
-indtastede. Differencen er angivet som "Mangler X mm" under søjlen.
+indtastede. Differencen er angivet som "X mm for lidt" under søjlen.
 
 **1 lag / 2 lag geonet** viser den stabiliserede lagtykkelse med samme
 proportionale lagfordeling. Ved 2 lag placeres det øverste geonet ved den
@@ -166,7 +166,7 @@ def _vis_billede_med_info(
     """Vis PNG med Streamlits grå ⍰-hjælpeikon ved siden af.
 
     Ikonet er st.markdown(help=...) — samme udseende og opførsel som
-    hjælpeikonet på widgets. Falder tilbage til et ℹ️-popover, hvis
+    hjælpeikonet på widgets. Falder tilbage til et popover, hvis
     den installerede Streamlit ikke understøtter help på st.markdown.
     """
     col_img, col_info = st.columns([0.95, 0.05])
@@ -182,15 +182,15 @@ def _vis_billede_med_info(
         except TypeError:
             popover = getattr(st, "popover", None)
             if callable(popover):
-                with popover("ℹ️", width="stretch"):
+                with popover("Forklaring", width="stretch"):
                     st.markdown(info_md)
             else:
-                with st.expander("ℹ️", expanded=False):
+                with st.expander("Forklaring", expanded=False):
                     st.markdown(info_md)
 
 
 def _vis_opbygning_med_info(png: bytes, *, caption: str | None = None) -> None:
-    """Vis opbygnings-PNG med et ℹ️-popover (INFO_VISUALISERING_MD)."""
+    """Vis opbygnings-PNG med hjælpeikon (INFO_VISUALISERING_MD)."""
     _vis_billede_med_info(png, INFO_VISUALISERING_MD, caption=caption)
 
 
@@ -200,7 +200,7 @@ def _vis_designdiagram_med_info(
     caption: str | None = None,
     use_container_width: bool = False,
 ) -> None:
-    """Vis designdiagram-PNG med et ℹ️-popover (INFO_DESIGNDIAGRAM_MD)."""
+    """Vis designdiagram-PNG med hjælpeikon (INFO_DESIGNDIAGRAM_MD)."""
     _vis_billede_med_info(
         png, INFO_DESIGNDIAGRAM_MD,
         caption=caption, use_container_width=use_container_width,
@@ -748,20 +748,24 @@ def _noegletal_tabel_html(
     )
 
 
-def _boks(css_klasse: str, ikon: str, tekst: str):
-    st.markdown(
-        f'<div class="{css_klasse}">{ikon} {tekst}</div>',
-        unsafe_allow_html=True,
-    )
-
-def vis_fejl(tekst: str):        _boks("boks-fejl", "⛔", tekst)
-def vis_advarsel(tekst: str):    _boks("boks-adv",  "⚠️", tekst)
-def vis_anbefaling(tekst: str):  _boks("boks-tip",  "💡", tekst)
+def vis_fejl(tekst: str):        ui.besked(tekst, "kritisk")
+def vis_advarsel(tekst: str):    ui.besked(tekst, "advarsel")
+def vis_anbefaling(tekst: str):  ui.besked(tekst, "info")
 
 # ---------------------------------------------------------------------------
 # Belastningsklasse-ikoner
+#
+# Material Symbols frem for emoji: de tegnes af Streamlit selv og gengives ens
+# på tværs af styresystemer.
 # ---------------------------------------------------------------------------
-KLASSE_IKON = {1: "🚲", 2: "🚜", 3: "🚗", 4: "🚛", 5: "🏗️", 6: "✈️"}
+KLASSE_IKON = {
+    1: ":material/directions_bike:",
+    2: ":material/agriculture:",
+    3: ":material/directions_car:",
+    4: ":material/local_shipping:",
+    5: ":material/construction:",
+    6: ":material/flight:",
+}
 
 
 # ===========================================================================
@@ -845,7 +849,8 @@ def input_belastning(key_prefix: str) -> tuple[int, dict, float]:
             with kl_cols[(kl_nr - 1) % 2]:
                 aktiv = st.session_state[state_key] == kl_nr
                 if st.button(
-                    f"{KLASSE_IKON[kl_nr]}\n**{kl_nr}**",
+                    f"**{kl_nr}**",
+                    icon=KLASSE_IKON[kl_nr],
                     key=f"{key_prefix}_kl_{kl_nr}",
                     type="primary" if aktiv else "secondary",
                     width="stretch",
@@ -914,7 +919,7 @@ def _vis_korrelationstabel(
     """Vis Eo_ækv-tabellen (T × Eu) med den aktuelle celle markeret.
 
     Bruges både i dimensioneringen (så man kan se hele korrelationen mens man
-    vælger trafikklasse) og i 🚦-sektionen. valgt_t/eu markerer den række og
+    vælger trafikklasse) og i Trafikklasse-sektionen. valgt_t/eu markerer den række og
     celle, dimensioneringen aktuelt slår op i.
     """
     import pandas as pd
@@ -1037,28 +1042,28 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
                 ("Nærmeste belastningsklasser", klasse_txt),
                 ("Ækvivalent Eo-kurve", f"{eo_aekv:.0f} MPa{interp_txt}"),
             ]
-            _boks(
-                "boks-tip", "🔗",
+            ui.besked(
                 f"<b>{valgt_t} ved Eu = {eu:.0f} MPa:</b>"
-                '<hr style="margin:5px 0 4px;border:none;'
-                'border-top:1px solid #90BEDF">'
+                f'<hr style="margin:5px 0 4px;border:none;'
+                f'border-top:1px solid {ui.FARVE["linje"]}">'
                 + _noegletal_tabel_html(raekker),
+                "info",
             )
         elif zone == "under":
-            _boks(
-                "boks-adv", "⚠️",
+            ui.besked(
                 f"<b>{valgt_t} · Eu = {eu:.0f} MPa er uden for kernezonen "
                 f"(under).</b> VejDim kræver en tyndere ubunden opbygning end "
                 f"designdiagrammernes område. Dimensionér i stedet via "
                 f"<b>Belastningsklasse</b>-grundlaget. "
                 f"(Frost/koblingshøjde styrer ofte disse tilfælde.)",
+                "advarsel",
             )
         elif zone == "over":
-            _boks(
-                "boks-adv", "⚠️",
+            ui.besked(
                 f"<b>{valgt_t} · Eu = {eu:.0f} MPa er uden for kernezonen "
                 f"(over).</b> VejDims krav overstiger designdiagrammernes "
                 f"tykkelsesområde. En konkret VejDim-beregning er nødvendig.",
+                "advarsel",
             )
         else:  # udenfor
             interval = trafik_eu_interval(valgt_t, _aktiv_koersler())
@@ -1066,12 +1071,12 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
                 f"{interval[0]}–{interval[1]} MPa" if interval
                 else "ingen kørsler endnu"
             )
-            _boks(
-                "boks-adv", "⚠️",
+            ui.besked(
                 f"<b>Eu = {eu:.0f} MPa er uden for de kørte punkter for "
                 f"{valgt_t} ({interval_txt}).</b> Vælg et Eu i intervallet, "
                 f"udfyld kørslen under <b>Trafikklasse-korrelation</b>, eller "
                 f"brug <b>Belastningsklasse</b>-grundlaget.",
+                "advarsel",
             )
     with st.expander("Om trafikklasse-grundlaget"):
         st.markdown(_TRAFIK_GRUNDLAG_MD)
@@ -1552,7 +1557,7 @@ def _render_trafik_kobling_forklaring(
     # --- Kompakt lodret trin-flow (tykkelses-først) ---------------------
     def _box(top: str, big: str, sub: str = "", tip: str = "") -> str:
         """En grøn trin-boks. Med tip vises regnestykket bag trinnet som
-        browser-tooltip (title), markeret med 🔍 og hjælpe-markør."""
+        browser-tooltip (title), markeret med en prik og hjælpe-markør."""
         sub_html = (
             f'<div style="font-size:0.8rem;color:#555">{sub}</div>' if sub else ""
         )
@@ -1562,7 +1567,8 @@ def _render_trafik_kobling_forklaring(
             if tip else ""
         )
         markør = (
-            '<span style="font-size:0.72rem;color:#8AAB8C;margin-left:5px">🔍</span>'
+            f'<span style="font-size:0.72rem;color:{ui.FARVE["gron"]};'
+            f'margin-left:5px">&#9679;</span>'
             if tip else ""
         )
         ekstra = "cursor:help;" if tip else ""
@@ -2202,7 +2208,7 @@ def _rt_raekke_html(
     if trafik_eu is not None:
         kl_txt = _trafik_badge_tekst(klasser, trafik_eu)
     badge_css = "rt-badge-ok" if klasse_ok else "rt-badge-advarsel"
-    badge_pre = "" if klasse_ok else "⚠️ "
+    badge_pre = ""
 
     t1 = f'{int(round(p1["t_armeret_mm"]))}' if v1 else "—"
     t2 = f'{int(round(p2["t_armeret_mm"]))}' if v2 else "—"
@@ -2604,29 +2610,32 @@ def _status_for_krav(
         else None
     )
 
-    # Hvis konservativ er tilstrækkelig → grøn (besparelse)
+    # Statusteksten formuleres som en konstatering: "311 mm for lidt" frem for
+    # "Mangler 311 mm".
+
+    # Hvis konservativ er tilstrækkelig → grøn (overskud)
     if diff_kons >= 0:
         if diff_best is not None and diff_best > diff_kons:
             return (
-                f"✓ Besparelse {diff_kons:.0f} mm\n({diff_best:.0f} mm)",
+                f"{diff_kons:.0f} mm i overskud\n({diff_best:.0f} mm)",
                 "success",
             )
-        return f"✓ Besparelse {diff_kons:.0f} mm", "success"
+        return f"{diff_kons:.0f} mm i overskud", "success"
 
     # Hvis best-case er tilstrækkelig men konservativ ikke → orange (interval)
     if diff_best is not None and diff_best >= 0:
         return (
-            f"Mangler {-diff_kons:.0f} mm (best: ✓ +{diff_best:.0f} mm)",
+            f"{-diff_kons:.0f} mm for lidt (optimalt {diff_best:.0f} mm i overskud)",
             "warning",
         )
 
     # Begge mangler → rød. Konservativ stor (størst mangler), optimal i parentes.
     if diff_best is not None:
         return (
-            f"Mangler {-diff_kons:.0f} mm\n({-diff_best:.0f} mm)",
+            f"{-diff_kons:.0f} mm for lidt\n({-diff_best:.0f} mm)",
             "danger",
         )
-    return f"Mangler {-diff_kons:.0f} mm", "danger"
+    return f"{-diff_kons:.0f} mm for lidt", "danger"
 
 
 def _render_opbygningsvisualisering(
@@ -3102,8 +3111,8 @@ def _render_oversigt_expanders(
 
     antal = len(advarsler_unik) + len(anbefalinger)
     titel_adv = (
-        f"⚠️ Advarsler og anbefalinger ({antal})"
-        if antal else "⚠️ Advarsler og anbefalinger"
+        f"Advarsler og anbefalinger ({antal})"
+        if antal else "Advarsler og anbefalinger"
     )
     with st.expander(titel_adv, expanded=bool(advarsler_unik or anbefalinger)):
         if antal == 0:
@@ -3116,7 +3125,7 @@ def _render_oversigt_expanders(
             vis_anbefaling(r)
 
     # --- Udførelseskrav ---------------------------------------------------
-    with st.expander("📋 Udførelseskrav"):
+    with st.expander("Udførelseskrav"):
         st.markdown("**Generelle krav ved udførelse med geonet:**")
         st.markdown("""
 - Underbund jævnes og planeres — ingen skarpe fremspring eller huller
@@ -3182,15 +3191,15 @@ def _render_oversigt_expanders(
                 )
 
     # --- Sådan beregnes det -----------------------------------------------
-    with st.expander("🔢 Sådan beregnes det"):
+    with st.expander("Sådan beregnes det"):
         if eo_interpoleret:
             st.info(
                 "**Trafikklasse-tilstand:** trin 2 nedenfor (kravet til Eo) "
                 "bestemmes ikke ud fra en belastningsklasse, men via "
                 "trafikklasse-koblingen — VejDim fastlægger den krævede ubundne "
                 "tykkelse, og den ækvivalente Eo (Eo_ækv) er blot den diagramkurve, "
-                "tykkelsen lander på. Se **'🔗 Sådan er trafikklassen koblet til "
-                "diagrammet'** ovenfor. Trin 5–6 (φ- og net-korrektion) gælder uændret."
+                "tykkelsen lander på, jf. **'Kobling imellem trafikklasse og "
+                "designdiagram'** ovenfor. Trin 5–6 (φ- og net-korrektion) gælder uændret."
             )
         st.markdown("""
 Trinvis beregning, baseret på designmanualer og intern forsøgsdata fra Byggros:
@@ -3415,7 +3424,7 @@ def _vis_beregnings_breakdown(
     )
 
     with st.container(border=True):
-        st.markdown("**📊 Beregnings-breakdown**")
+        st.markdown("**Beregnings-breakdown**")
 
         # ── Uarmeret ──────────────────────────────────────────────────
         st.markdown("**Ustabiliseret bærelagstykkelse**")
@@ -3505,7 +3514,7 @@ def _vis_beregnings_breakdown(
                 st.caption("Ingen gyldigt 2-lag resultat for denne kombination.")
 
         if note:
-            st.caption(f"ℹ️ {note}")
+            st.caption(note)
 
 
 def render_standard() -> None:
@@ -3528,7 +3537,7 @@ def render_standard() -> None:
     valgt_klasse = grundlag["valgt_klasse"]
     eo_interpoleret = grundlag["type"] == "trafikklasse"
     st.caption(
-        "ℹ️ I resultatoversigten vises hvilke belastningsklasser produkterne anbefales til. Der vises en advarsel, hvis et produkt ikke anbefales anvendt til den valgte klasse."
+        "I resultatoversigten vises hvilke belastningsklasser produkterne anbefales til. Der vises en advarsel, hvis et produkt ikke anbefales anvendt til den valgte klasse."
     )
 
     # --- Beregn alt -----------------------------------------------------
@@ -3706,7 +3715,7 @@ def _vis_phi_opsummeringsboks(
 
     boks_kol, _ = st.columns([1, 1])
     with boks_kol, st.container(border=True):
-        st.markdown("**📐 φ-beregning fra materialelagene**")
+        st.markdown("**φ-beregning fra materialelagene**")
         st.markdown(data["tabel_md"])
         st.markdown(
             f"**Vægtet φ** = Σ({data['symbol']}ᵢ × φᵢ) / Σ({data['symbol']}ᵢ) = "
@@ -3715,7 +3724,7 @@ def _vis_phi_opsummeringsboks(
 
         if overskrevet:
             st.markdown(
-                f"⚠️ φ overskrevet manuelt → bruger **{phi_f_str}°** "
+                f"φ overskrevet manuelt — bruger **{phi_f_str}°** "
                 f"i resten af beregningen (vægtet værdi {phi_w_str}° ignoreres)."
             )
 
@@ -4258,12 +4267,12 @@ def render_brugerdefineret() -> None:
 # ===========================================================================
 
 _NAV_ITEMS = [
-    ("📐", "Dimensionering",        "dimensionering"),
-    ("🪨", "Materialer",             "materialer"),
-    ("🕸️", "Geonet database",       "geonet_database"),
-    ("📊", "Designdiagrammer",       "designdiagrammer"),
-    ("🚦", "Trafikklasse-korrelation", "trafikklasse_korrelation"),
-    ("📄", "Rapport",                 "rapport"),
+    (":material/straighten:",   "Dimensionering",           "dimensionering"),
+    (":material/layers:",       "Materialer",               "materialer"),
+    (":material/grid_on:",      "Geonet-database",          "geonet_database"),
+    (":material/show_chart:",   "Designdiagrammer",         "designdiagrammer"),
+    (":material/table_chart:",  "Trafikklasse-korrelation", "trafikklasse_korrelation"),
+    (":material/description:",  "Rapport",                  "rapport"),
 ]
 
 
@@ -4273,11 +4282,11 @@ def render_sidebar() -> str:
         st.session_state.aktiv_side = "dimensionering"
 
     with st.sidebar:
+        st.image(str(ui.ROD / "static" / "byggros_logo.png"), width=150)
         st.markdown(
-            '<div class="sb-header">'
-            '<div class="sb-logo">🏗️</div>'
+            '<div class="sb-header" style="padding-top:.4rem">'
             '<div class="sb-title">Beregningsværktøj</div>'
-            '<div class="sb-sub">BG Byggros · v0.3</div>'
+            '<div class="sb-sub">BG Byggros · v0.4</div>'
             "</div>",
             unsafe_allow_html=True,
         )
@@ -4313,7 +4322,7 @@ def render_sidebar() -> str:
 # ===========================================================================
 
 def render_geonet_database() -> None:
-    st.title("🕸️ Geonet database")
+    st.title("Geonet-database")
     st.caption(
         "Oversigt over alle geonet-produkter med effektindeks, belastningsklasser og tekniske data. "
     )
@@ -4414,7 +4423,7 @@ def render_geonet_database() -> None:
     # ── Vigtige noter ─────────────────────────────────────────────────────
     # Noterne står som et samlet afsnit frem for i expandere, så forbehold og
     # kildehenvisninger kan læses uden at skulle åbnes enkeltvis.
-    st.subheader("📝 Database-noter og kildehenvisninger")
+    st.subheader("Database-noter og kildehenvisninger")
     st.markdown("\n\n".join(
         f"##### {i} {note['titel']}\n{note['tekst']}"
         for i, note in enumerate(GEONET_NOTER, start=1)
@@ -4422,7 +4431,7 @@ def render_geonet_database() -> None:
 
 
 def render_designdiagrammer() -> None:
-    st.title("📊 Designdiagrammer")
+    st.title("Designdiagrammer")
     st.caption(
         "Designdiagrammer fra designmanualerne, samt redigerbare diagramdata. "
         "Beregningerne bruger tabellerne direkte som opslag, da der er lavet forudgående interpolation imellem værdier fra de originale designdiagrammer."
@@ -4833,7 +4842,7 @@ gyldighedsområde. Der foretages ikke ekstrapolation; i stedet afvises cellen:
 """
 
 def render_trafikklasse_korrelation() -> None:
-    st.title("🚦 Trafikklasse-korrelation")
+    st.title("Trafikklasse-korrelation")
     st.caption(
         "Datagrundlaget bag trafikklasse-dimensioneringen: Vejdirektoratets "
         "trafikklasser koblet til designdiagrammerne via de rå VejDim-kørsler. "
@@ -4972,10 +4981,10 @@ def render_trafikklasse_korrelation() -> None:
             1 for ny, std in zip(nye_raekker, _standard_koersel_raekker())
             if ny != std
         )
-        _boks(
-            "boks-adv", "✏️",
+        ui.besked(
             f"<b>{antal} kørsel(er) er ændret</b> i forhold til de oprindelige "
             f"værdier. Brug <i>Nulstil til standardværdier</i> for at gendanne dem.",
+            "advarsel",
         )
 
     st.divider()
@@ -5023,7 +5032,7 @@ def render_trafikklasse_korrelation() -> None:
 
 
 def render_materialer() -> None:
-    st.title("🪨 Materialer")
+    st.title("Materialer")
     st.caption(
         "Anvend standard materialerne til dimensioneringen, eller indtast egne materialer. Ændringer gemmes automatisk og anvendes ved beregninger "
         "i Brugerdefineret-tilstand."
@@ -5034,7 +5043,7 @@ def render_materialer() -> None:
 
     kol_a, kol_b, kol_c = st.columns([1, 1, 4])
     with kol_a:
-        if st.button("➕ Tilføj materiale", width="stretch"):
+        if st.button("Tilføj materiale", icon=":material/add:", width="stretch"):
             eksisterende = {
                 m["navn"].casefold()
                 for m in st.session_state.get("materialer", [])
@@ -5056,7 +5065,8 @@ def render_materialer() -> None:
             st.rerun()
 
     with kol_b:
-        if st.button("🔄 Nulstil til standard", width="stretch", type="secondary"):
+        if st.button("Nulstil til standard", icon=":material/refresh:",
+                     width="stretch", type="secondary"):
             slet_json_og_nulstil()
             st.session_state["materialer"] = indlaes_materialer()
             st.rerun()
@@ -5145,7 +5155,7 @@ def render_rapport() -> None:
 
     from core import rapport as rapport_mod
 
-    st.title("📄 Rapport")
+    st.title("Rapport")
     st.caption(
         "Generér en notat-rapport (Word og PDF) baseret på den seneste "
         "dimensionering. Standardtekster kan redigeres pr. rapport."
@@ -5198,7 +5208,8 @@ def render_rapport() -> None:
         )
     with kol_a_reset:
         if st.button(
-            "🔄 Nulstil felter", key="rap_nulstil_felter", width="stretch",
+            "Nulstil felter", icon=":material/refresh:",
+            key="rap_nulstil_felter", width="stretch",
             help="Rydder alle projekt-oplysninger og glemmer de gemte værdier.",
         ):
             st.session_state["rapport_metadata"] = _standard_rapport_metadata()
@@ -5283,7 +5294,7 @@ def render_rapport() -> None:
         with st.expander(titel, expanded=False):
             kol_l, kol_r = st.columns([5, 1])
             with kol_r:
-                if st.button("🔄 Nulstil", key=f"rap_reset_{nøgle}",
+                if st.button("Nulstil", icon=":material/refresh:", key=f"rap_reset_{nøgle}",
                              width="stretch"):
                     tekster_state[nøgle] = std
                     # Bump versionen — det giver text_area en ny key, så
@@ -5462,7 +5473,7 @@ def render_rapport() -> None:
         vis_indtastet and har_indtastet_rap and bool(indtastet_total_rap)
     )
     t_indtastet_for_snit = indtastet_total_rap if vis_indtastet_aktiv else None
-    # Status-tekst (Mangler / Besparelse) giver kun mening sammen med linjen.
+    # Statusteksten (for lidt / i overskud) giver kun mening sammen med linjen.
     status_indtastet_ref = (
         indtastet_total_rap if vis_indtastet_aktiv else None
     )
@@ -5639,7 +5650,8 @@ def render_rapport() -> None:
     ).encode("utf-8")).hexdigest()
 
     if st.button(
-        "📄 Generér rapport",
+        "Generér rapport",
+        icon=":material/description:",
         type="primary",
         disabled=not klar,
         width="stretch",
@@ -5707,7 +5719,8 @@ def render_rapport() -> None:
 
         with kol_d1:
             st.download_button(
-                "📄 Hent som Word (.docx)",
+                "Hent som Word (.docx)",
+                icon=":material/download:",
                 data=genereret["docx_bytes"],
                 file_name=f"{genereret['filnavn_base']}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -5716,7 +5729,8 @@ def render_rapport() -> None:
         if kol_d2 is not None:
             with kol_d2:
                 st.download_button(
-                    "📄 Hent som PDF (.pdf)",
+                    "Hent som PDF (.pdf)",
+                    icon=":material/download:",
                     data=genereret["pdf_bytes"],
                     file_name=f"{genereret['filnavn_base']}.pdf",
                     mime="application/pdf",
@@ -5766,7 +5780,7 @@ def _nulstil_dim_knap(praefikser: tuple[str, ...], key: str) -> None:
     _, kol_reset = st.columns([4, 1])
     with kol_reset:
         if st.button(
-            "🔄 Nulstil felter", key=key, width="stretch",
+            "Nulstil felter", icon=":material/refresh:", key=key, width="stretch",
             help="Nulstil alle felter på denne side til standardværdierne.",
         ):
             for nøgle in list(st.session_state.keys()):
@@ -5781,7 +5795,7 @@ _bevar_dimensionering_state()
 aktiv_side = render_sidebar()
 
 if aktiv_side == "dimensionering":
-    st.title("🏗️ Dimensionering")
+    st.title("Dimensionering")
     st.caption(
         "Beregning af bærelagstykkelse med og uden geonetarmering "
         "· Baseret på BG Byggros designmanualer til Tensar og GS-GRID, samt interne forsøgsdata"
