@@ -187,11 +187,40 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 #MainMenu, footer, [data-testid="stDecoration"]{ display:none; }
 .stAppDeployButton{ display:none; }
 
-/* ---- 13. Tablet --------------------------------------------------------- */
+/* ---- 13. Tablet ---------------------------------------------------------
+   Appen bruges primært på desktop. Under 1180 px falder de to kolonner under
+   hinanden; inputkolonnen fylder da hele bredden og må ikke klæbe, da den
+   ville dække resultatet. */
 @media (max-width:1180px){
   .stMainBlockContainer{ padding-left:1.25rem; padding-right:1.25rem; }
   [data-testid="stMetricValue"]{ font-size:1.9rem; }
   [data-testid="column"]{ min-width:100% !important; }
+
+  .stMainBlockContainer [data-testid="stHorizontalBlock"]
+    > [data-testid="column"]:first-child{
+    position:static; max-height:none; overflow-y:visible; padding-right:0;
+  }
+
+  /* Topbjælken beholder sine to felter side om side. */
+  .st-key-bg_topbar [data-testid="column"]{ min-width:0 !important; }
+  .st-key-bg_topbar{ margin-left:-1.25rem; margin-right:-1.25rem; }
+
+  /* Snittene klemmes ikke sammen: hver søjle holder en læsbar bredde, og
+     figuren rulles vandret i stedet. */
+  .bg-snit-rulle{ overflow-x:auto; scrollbar-width:thin; }
+  .bg-snit{ min-width:640px; }
+
+  /* Resultattabellen er bredere end skærmen og rulles med. */
+  .rt-tabel{ overflow-x:auto; }
+  .rt-head, .rt-sum, .rt-detalje{ min-width:720px; }
+
+  /* Alle klikbare elementer skal kunne rammes med en finger. */
+  .stButton button, .stDownloadButton button, .stFormSubmitButton button,
+  [data-testid="stSegmentedControl"] button,
+  [data-testid="stExpander"] summary{
+    min-height:44px;
+  }
+  [data-testid="stSegmentedControl"] button{ padding-left:.7rem; padding-right:.7rem; }
 }
 
 /* ---- 15. Topbjælke ------------------------------------------------------

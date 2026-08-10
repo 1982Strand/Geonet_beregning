@@ -445,12 +445,17 @@ def snit(
         for glyf, tekst in signatur
     )
 
+    # bg-snit-rulle tillader vandret scroll på smalle skærme, hvor søjlerne
+    # ellers ville blive klemt så tæt sammen, at lagteksten forsvinder.
     st.html(
         f"""
-        <div style="padding:26px 0 14px;display:grid;
-                    grid-template-columns:repeat({len(kolonner)},1fr);gap:22px">{''.join(celler)}</div>
-        <div style="display:flex;align-items:center;gap:20px;
-                    font:400 10.5px/1 {SANS};color:{FARVE['ink_45']}">{signatur_html}</div>
+        <div class="bg-snit-rulle">
+          <div class="bg-snit" style="padding:26px 0 14px;display:grid;
+                      grid-template-columns:repeat({len(kolonner)},minmax(0,1fr));
+                      gap:22px">{''.join(celler)}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+                    font:400 10.5px/1.6 {SANS};color:{FARVE['ink_45']}">{signatur_html}</div>
         """
     )
 
