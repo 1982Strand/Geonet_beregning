@@ -1,6 +1,7 @@
 streamlit>=1.35
 pandas>=2.2
 matplotlib>=3.9
+plotly>=5.22
 python-docx>=1.1
 docxtpl>=0.16
 docx2pdf>=0.1.8

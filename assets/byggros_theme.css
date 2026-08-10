@@ -1,0 +1,193 @@
+/* BG Byggros — Geonet-beregning
+   Indlæses fra app.py umiddelbart efter st.set_page_config():
+
+       from pathlib import Path
+       st.html(f"<style>{Path('assets/byggros_theme.css').read_text(encoding='utf-8')}</style>")
+
+   Kræver .streamlit/config.toml fra samme mappe (farver + skrifter).
+   Skrifterne hentes fra Google Fonts; ved offline drift lægges .woff2-filer
+   i assets/fonts/ og @import-linjen erstattes af @font-face. */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg-green-900:#12401F;
+  --bg-green-700:#1B6B34;
+  --bg-green-600:#2A7D3F;
+  --bg-green-050:#EDF4EE;
+  --bg-ink:#15211A;
+  --bg-ink-70:#4A554E;
+  --bg-ink-45:#7A857D;
+  --bg-ink-25:#9AA39C;
+  --bg-line:#DCE1DD;
+  --bg-line-soft:#E6EAE6;
+  --bg-surface:#FFFFFF;
+  --bg-canvas:#F4F6F4;
+  --bg-warn:#A8600B;   --bg-warn-bg:#FCF5E8;
+  --bg-crit:#B42318;   --bg-crit-bg:#FBF0EF;
+  --bg-soil:#8B7355;
+  --bg-space:4px;
+}
+
+/* ---- 1. Bredde og rytme -------------------------------------------------
+   Streamlits wide-layout er ubegrænset. Indholdet får en maksbredde, så
+   linjelængden holdes læsbar, og de lodrette afstande halveres. */
+.stMainBlockContainer{
+  max-width:1560px;
+  padding-top:1.75rem;
+  padding-bottom:4rem;
+}
+.stMainBlockContainer [data-testid="stVerticalBlock"]{ gap:.85rem; }
+.stMainBlockContainer hr{ margin:1.4rem 0; border-color:var(--bg-line-soft); }
+
+/* Brødtekst begrænses til ca. 78 tegn — tabeller og diagrammer må gerne
+   bruge hele bredden, og gør det derfor stadig. */
+.stMarkdown p, .stMarkdown li{
+  max-width:78ch;
+  color:var(--bg-ink-70);
+  line-height:1.6;
+  text-wrap:pretty;
+}
+
+/* ---- 2. Typografi ------------------------------------------------------- */
+html, body, .stApp{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  font-feature-settings:'ss01','cv05';
+  color:var(--bg-ink);
+}
+h1,h2,h3,h4{ font-family:'IBM Plex Sans',sans-serif; letter-spacing:-.015em; color:var(--bg-ink); }
+h1{ font-size:1.55rem; font-weight:600; margin:0 0 .35rem; }
+h2{ font-size:1.15rem; font-weight:600; margin:1.6rem 0 .55rem; padding-bottom:.4rem; border-bottom:1px solid var(--bg-line-soft); }
+h3{ font-size:.95rem; font-weight:600; margin:1.1rem 0 .35rem; }
+
+/* Alle tal i tabulær monospace, så kolonner kan sammenlignes lodret. */
+code, .stMetricValue, [data-testid="stMetricValue"],
+.stDataFrame td, .stDataFrame th,
+[data-testid="stTable"] td{
+  font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-variant-numeric:tabular-nums;
+}
+
+/* Sektionsetiketter: erstat emoji-overskrifter med denne klasse via st.html. */
+.bg-eyebrow{
+  font:600 9.5px/1 'IBM Plex Mono',monospace;
+  letter-spacing:.1em; text-transform:uppercase;
+  color:var(--bg-ink-45); margin:0 0 .5rem;
+}
+
+/* ---- 3. Sidebar --------------------------------------------------------- */
+[data-testid="stSidebar"]{ border-right:1px solid var(--bg-line); }
+[data-testid="stSidebar"] .stRadio label,
+[data-testid="stSidebar"] .stButton button{ font-size:12.5px; }
+[data-testid="stSidebarNav"] a{ border-radius:0; border-left:2.5px solid transparent; }
+[data-testid="stSidebarNav"] a[aria-current="page"]{
+  border-left-color:var(--bg-green-700);
+  background:var(--bg-green-050);
+  font-weight:600;
+}
+/* Gruppeoverskrifter i sidebar (st.caption). */
+[data-testid="stSidebar"] .stCaption{
+  font:600 9.5px/1 'IBM Plex Mono',monospace;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--bg-ink-25);
+  padding:1.1rem 0 .35rem;
+}
+
+/* ---- 4. Knapper --------------------------------------------------------- */
+.stButton button, .stDownloadButton button, .stFormSubmitButton button{
+  font-family:'IBM Plex Sans',sans-serif;
+  font-weight:600; font-size:12.5px;
+  border-radius:4px; padding:.5rem .9rem;
+  border:1px solid var(--bg-line);
+  transition:background .12s ease, border-color .12s ease;
+}
+.stButton button[kind="primary"], .stDownloadButton button[kind="primary"]{
+  background:var(--bg-green-700); border-color:var(--bg-green-700); color:#fff;
+}
+.stButton button[kind="primary"]:hover{ background:var(--bg-green-900); border-color:var(--bg-green-900); }
+.stButton button[kind="secondary"]:hover{ border-color:var(--bg-green-700); color:var(--bg-green-700); }
+/* Fuldbreddeknapper er ikke primære handlinger — kun Generér rapport er. */
+.stButton button{ width:auto; }
+
+/* ---- 5. Segmented control / trafikklasse-vælger ------------------------- */
+[data-testid="stSegmentedControl"] button{
+  font-family:'IBM Plex Mono',monospace; font-weight:500;
+  border-radius:3px;
+}
+[data-testid="stSegmentedControl"] button[aria-checked="true"]{
+  background:var(--bg-green-700); color:#fff; border-color:var(--bg-green-700);
+}
+
+/* ---- 6. Kort og containere ---------------------------------------------- */
+[data-testid="stVerticalBlockBorderWrapper"]{
+  border:1px solid var(--bg-line) !important;
+  border-radius:5px;
+  background:var(--bg-surface);
+}
+/* Fremhævet resultatkort: <div class="bg-recommended"> omkring st.container. */
+.bg-recommended [data-testid="stVerticalBlockBorderWrapper"]{
+  background:#F7FBF8;
+  box-shadow:inset 3px 0 0 var(--bg-green-700);
+}
+
+/* ---- 7. Metrics — resultattallene --------------------------------------- */
+[data-testid="stMetric"]{
+  border:1px solid var(--bg-line); border-radius:5px;
+  padding:1rem 1.15rem; background:var(--bg-surface);
+}
+[data-testid="stMetricLabel"] p{
+  font:600 9.5px/1 'IBM Plex Mono',monospace;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--bg-ink-45);
+}
+[data-testid="stMetricValue"]{
+  font-size:2.4rem; font-weight:600; letter-spacing:-.02em; line-height:1;
+  color:var(--bg-ink);
+}
+[data-testid="stMetricDelta"]{ font-size:11.5px; font-weight:600; }
+
+/* ---- 8. Tabeller -------------------------------------------------------- */
+.stDataFrame, [data-testid="stTable"]{ font-size:12px; }
+[data-testid="stTable"] th{
+  font:600 9.5px/1 'IBM Plex Mono',monospace;
+  letter-spacing:.08em; text-transform:uppercase;
+  color:var(--bg-ink-45); background:#FBFCFB;
+  border-bottom:1px solid var(--bg-line);
+  padding:.55rem .75rem; text-align:left;
+}
+[data-testid="stTable"] td{
+  padding:.5rem .75rem;
+  border-bottom:1px solid #F0F2F0;
+  color:var(--bg-ink);
+}
+/* Talkolonner højrestilles — sæt klassen på st.column_config eller via
+   nth-child pr. tabel. */
+[data-testid="stTable"] td.bg-num, [data-testid="stTable"] th.bg-num{ text-align:right; }
+
+/* ---- 9. Beskeder -------------------------------------------------------- */
+.stAlert{ border-radius:4px; border-width:1px; border-left-width:3px; padding:.7rem .9rem; }
+.stAlert p{ font-size:12.5px; line-height:1.55; margin:0; }
+
+/* ---- 10. Ekspandere ----------------------------------------------------- */
+[data-testid="stExpander"] details{
+  border:1px solid var(--bg-line); border-radius:5px; background:var(--bg-surface);
+}
+[data-testid="stExpander"] summary{ font-size:12.5px; font-weight:500; padding:.7rem 1.1rem; }
+[data-testid="stExpander"] summary:hover{ color:var(--bg-green-700); }
+
+/* ---- 11. Snit-visualisering (hvis den bygges i HTML frem for matplotlib) - */
+.bg-soil{
+  background:repeating-linear-gradient(45deg,var(--bg-soil),var(--bg-soil) 3px,#7A6449 3px,#7A6449 6px);
+}
+.bg-layer-base{ background:#D9DDD9; border:1px solid #B9C0BA; }
+.bg-layer-sub { background:#EDEFED; border:1px solid #C4CAC5; }
+.bg-geonet    { height:2px; background:var(--bg-crit); }
+
+/* ---- 12. Oprydning ------------------------------------------------------ */
+#MainMenu, footer, [data-testid="stDecoration"]{ display:none; }
+.stAppDeployButton{ display:none; }
+
+/* ---- 13. Tablet --------------------------------------------------------- */
+@media (max-width:1180px){
+  .stMainBlockContainer{ padding-left:1.25rem; padding-right:1.25rem; }
+  [data-testid="stMetricValue"]{ font-size:1.9rem; }
+  [data-testid="column"]{ min-width:100% !important; }
+}
