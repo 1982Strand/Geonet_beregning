@@ -217,6 +217,37 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   fill:rgba(255,255,255,.5);
 }
 
+/* ---- 16. To-kolonne-layout ----------------------------------------------
+   Flow B: input i venstre kolonne, resultatet i højre. Inputkolonnen bliver
+   stående, når der scrolles i resultatet, så en justering af Eu eller φ ikke
+   kræver en tur op og ned ad siden. */
+.stMainBlockContainer [data-testid="stHorizontalBlock"]
+  > [data-testid="column"]:first-child{
+  position:sticky; top:0; align-self:flex-start;
+  max-height:100vh; overflow-y:auto;
+  scrollbar-width:thin;
+  padding-right:.35rem;
+}
+/* Topbjælken er selv en kolonneopdeling og må ikke klæbe. */
+.st-key-bg_topbar [data-testid="column"]:first-child{ position:static; }
+
+/* Sektionsetiketterne i inputkolonnen får luft over sig, så blokkene
+   adskilles uden vandrette streger. Sektionsafstanden er 28 px. */
+[data-testid="column"] .bg-eyebrow{ margin-top:1.75rem; }
+[data-testid="column"] > [data-testid="stVerticalBlock"]
+  > [data-testid="stElementContainer"]:first-child .bg-eyebrow{ margin-top:0; }
+
+/* Resultatafsnittets sidehoved: overskrift og forudsætninger på én linje. */
+.bg-resultat-hoved{
+  display:flex; align-items:baseline; gap:.85rem;
+  flex-wrap:wrap; margin:0 0 .9rem;
+}
+.bg-resultat-hoved h2{
+  font-size:1.15rem; font-weight:600; margin:0;
+  padding:0; border:none; letter-spacing:-.015em;
+}
+.bg-resultat-hoved span{ font-size:11.5px; color:var(--bg-ink-45); }
+
 /* ---- 14. Flyttet fra app.py ---------------------------------------------
    Regler, som stylesheetets øvrige afsnit ikke dækker: den foldbare
    resultattabel, Cv→Eu-opslagstabellen og enkelte placeringsjusteringer.

@@ -139,14 +139,46 @@ def topbjaelke(version: str = "v0.4") -> None:
                 """
             )
         with handling_kol:
-            st.toggle(
-                "Vis mellemregninger",
-                key="vis_mellemregninger",
-                help=(
-                    "Viser φ-beregningen, korrektionsleddene og "
-                    "interpolationsdetaljerne bag de viste tykkelser."
-                ),
+            kontakt_kol, nulstil_kol, rapport_kol = st.columns(
+                [2, 1, 1.4], vertical_alignment="center"
             )
+            with kontakt_kol:
+                st.toggle(
+                    "Vis mellemregninger",
+                    key="vis_mellemregninger",
+                    help=(
+                        "Viser φ-beregningen, korrektionsleddene og "
+                        "interpolationsdetaljerne bag de viste tykkelser."
+                    ),
+                )
+            # Knapperne aflæses af app.py gennem deres nøgler, når den aktive
+            # side er bestemt. Nulstil gælder dimensioneringens felter; på de
+            # øvrige sider er der intet at rydde, og knappen er slået fra.
+            paa_dimensionering = (
+                st.session_state.get("aktiv_side", "dimensionering")
+                == "dimensionering"
+            )
+            with nulstil_kol:
+                st.button(
+                    "Nulstil",
+                    key="bg_nulstil",
+                    width="stretch",
+                    disabled=not paa_dimensionering,
+                    help=(
+                        "Nulstil dimensioneringens felter til standardværdierne."
+                        if paa_dimensionering
+                        else "Gælder dimensioneringens felter."
+                    ),
+                )
+            with rapport_kol:
+                st.button(
+                    "Generér rapport",
+                    key="bg_gaa_til_rapport",
+                    type="primary",
+                    width="stretch",
+                    disabled=not paa_dimensionering,
+                    help="Gå til rapportsiden med den aktuelle dimensionering.",
+                )
 
 
 def mellemregninger() -> bool:
