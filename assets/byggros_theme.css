@@ -94,6 +94,38 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   padding:1.1rem 0 .35rem;
 }
 
+/* ---- 3b. Lærred og kolonneflader ---------------------------------------
+   Resultatkolonnen står på et lærred, inputkolonnen på hvidt med en
+   skillelinje imellem, jf. designgennemgangens option 1d. */
+.stMain{ background:var(--bg-canvas); }
+
+.stMainBlockContainer > [data-testid="stVerticalBlock"]
+  > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child{
+  background:var(--bg-surface);
+  border-right:1px solid var(--bg-line);
+  padding:1.25rem 1.15rem 2rem;
+  margin-top:-.5rem;
+}
+
+/* ---- 3c. Kort i resultatkolonnen ---------------------------------------- */
+[class*="st-key-bg_kort_"]{
+  border:1px solid var(--bg-line);
+  border-radius:5px;
+  background:var(--bg-surface);
+  overflow:hidden;
+  padding:0 20px 16px;
+  margin-bottom:1.25rem;
+}
+.bg-kort-hoved{
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:1rem; flex-wrap:wrap;
+  padding:15px 20px 13px;
+  margin:0 -20px 14px;
+  border-bottom:1px solid var(--bg-line-soft);
+}
+.bg-kort-titel{ font:600 14px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
+.bg-kort-note{ font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
+
 /* ---- 4. Knapper --------------------------------------------------------- */
 .stButton button, .stDownloadButton button, .stFormSubmitButton button{
   font-family:'IBM Plex Sans',sans-serif;
@@ -110,23 +142,41 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 /* Fuldbreddeknapper er ikke primære handlinger — kun Generér rapport er. */
 .stButton button{ width:auto; }
 
-/* ---- 5. Segmented control / trafikklasse-vælger ------------------------- */
-[data-testid="stSegmentedControl"] button{
+/* ---- 5. Segmented control / trafikklasse-vælger -------------------------
+   Streamlit tegner segmented control som en knapgruppe; testid'et er
+   stButtonGroup. Valget markeres med aria-checked. */
+[data-testid="stButtonGroup"] button{
   font-family:'IBM Plex Mono',monospace; font-weight:500;
   border-radius:3px;
 }
-[data-testid="stSegmentedControl"] button[aria-checked="true"]{
-  background:var(--bg-green-700); color:#fff; border-color:var(--bg-green-700);
+/* Valget markeres mørkt. Grøn er forbeholdt handling og anbefaling; et
+   tilstandsvalg er ingen af delene, jf. designgennemgangens farveregel. */
+[data-testid="stButtonGroup"] button[aria-checked="true"],
+[data-testid="stButtonGroup"] button[aria-pressed="true"],
+[data-testid="stButtonGroup"] button[kind="segmented_controlActive"]{
+  background:var(--bg-ink); color:#fff; border-color:var(--bg-ink);
 }
+/* Trafik- og belastningsklassen er derimod selve dimensioneringsgrundlaget
+   og markeres grønt, så den valgte klasse kan findes med et blik. */
+.st-key-std_valgt_tklasse [data-testid="stButtonGroup"] button[aria-checked="true"],
+.st-key-bd_valgt_tklasse [data-testid="stButtonGroup"] button[aria-checked="true"],
+.st-key-std_valgt_klasse [data-testid="stButtonGroup"] button[aria-checked="true"],
+.st-key-bd_valgt_klasse [data-testid="stButtonGroup"] button[aria-checked="true"],
+.st-key-std_valgt_tklasse [data-testid="stButtonGroup"] button[aria-pressed="true"],
+.st-key-bd_valgt_tklasse [data-testid="stButtonGroup"] button[aria-pressed="true"],
+.st-key-std_valgt_klasse [data-testid="stButtonGroup"] button[aria-pressed="true"],
+.st-key-bd_valgt_klasse [data-testid="stButtonGroup"] button[aria-pressed="true"]{
+  background:var(--bg-green-700); border-color:var(--bg-green-700);
+}
+/* Gruppen fylder inputkolonnens bredde, og knapperne deler den ligeligt. */
+[data-testid="stButtonGroup"]{ width:100%; }
+[data-testid="stButtonGroup"] > div{ width:100%; display:flex; }
+[data-testid="stButtonGroup"] button{ flex:1 1 0; min-width:0; }
 
-/* ---- 6. Kort og containere ---------------------------------------------- */
-[data-testid="stVerticalBlockBorderWrapper"]{
-  border:1px solid var(--bg-line) !important;
-  border-radius:5px;
-  background:var(--bg-surface);
-}
-/* Fremhævet resultatkort: <div class="bg-recommended"> omkring st.container. */
-.bg-recommended [data-testid="stVerticalBlockBorderWrapper"]{
+/* ---- 6. Kort og containere ----------------------------------------------
+   Rammen om st.container(border=True) sættes af temaets borderColor og
+   showWidgetBorder i config.toml. */
+.bg-recommended [data-testid="stVerticalBlock"]{
   background:#F7FBF8;
   box-shadow:inset 3px 0 0 var(--bg-green-700);
 }
@@ -184,7 +234,7 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .bg-geonet    { height:2px; background:var(--bg-crit); }
 
 /* ---- 12. Oprydning ------------------------------------------------------ */
-#MainMenu, footer, [data-testid="stDecoration"]{ display:none; }
+#MainMenu, footer{ display:none; }
 .stAppDeployButton{ display:none; }
 
 /* ---- 13. Tablet ---------------------------------------------------------
@@ -216,11 +266,11 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 
   /* Alle klikbare elementer skal kunne rammes med en finger. */
   .stButton button, .stDownloadButton button, .stFormSubmitButton button,
-  [data-testid="stSegmentedControl"] button,
+  [data-testid="stButtonGroup"] button,
   [data-testid="stExpander"] summary{
     min-height:44px;
   }
-  [data-testid="stSegmentedControl"] button{ padding-left:.7rem; padding-right:.7rem; }
+  [data-testid="stButtonGroup"] button{ padding-left:.7rem; padding-right:.7rem; }
 }
 
 /* ---- 15. Topbjælke ------------------------------------------------------
@@ -236,7 +286,8 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .st-key-bg_topbar [data-testid="stElementContainer"]{ margin:0; }
 
 /* Kontakten står lyst på den mørke bund og højrestilles. */
-.st-key-bg_topbar [data-testid="stToggle"]{ justify-content:flex-end; }
+.st-key-bg_topbar [data-testid="stCheckbox"],
+.st-key-bg_topbar [data-testid="stCheckBox"]{ justify-content:flex-end; }
 .st-key-bg_topbar [data-testid="stWidgetLabel"] p,
 .st-key-bg_topbar label p{
   color:rgba(255,255,255,.82) !important;
@@ -506,9 +557,18 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
   background:var(--bg-canvas) !important; color:var(--bg-green-700) !important;
   border-left-color:var(--bg-green-050) !important;
 }
+/* Det aktive menupunkt markeres med grøn kant og lys grøn flade — ikke som
+   en fyldt knap. Grøn er handlingsfarve, jf. designgennemgangens farveregel. */
 [data-testid="stSidebar"] .stButton > button[kind="primary"]{
   background:var(--bg-green-050) !important;
-  color:var(--bg-green-700) !important;
+  color:var(--bg-ink) !important;
   border-left:2.5px solid var(--bg-green-700) !important;
   font-weight:600 !important;
+}
+[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover{
+  background:var(--bg-green-050) !important;
+  color:var(--bg-ink) !important;
+}
+[data-testid="stSidebar"] .stButton > button[kind="primary"] [data-testid="stIconMaterial"]{
+  color:var(--bg-green-700) !important;
 }

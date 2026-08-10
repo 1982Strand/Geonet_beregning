@@ -17,7 +17,10 @@ Kræver .streamlit/config.toml og assets/byggros_theme.css fra samme udrulning.
 
 from __future__ import annotations
 
+import base64
 import re
+from contextlib import contextmanager
+from functools import lru_cache
 from html import escape
 from pathlib import Path
 
@@ -100,10 +103,28 @@ def opsaet_side(titel: str = "Geonet-dimensionering · BG Byggros") -> None:
     # En afsluttende style-tag i stylesheetet — også inde i en kommentar —
     # ville afbryde style-elementet, så resten af filen blev vist som tekst.
     css = re.sub(r"</\s*style", "<\\/style", css, flags=re.I)
-    st.html(f"<style>{css}</style>")
+    # Stylesheetet indsættes med st.markdown. st.html renser sit indhold, og
+    # style-elementet når ikke frem til dokumentet; reglerne ville da ikke
+    # gælde, og alt uden inline-opmærkning stod ustylet.
+    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 
 # -------------------------------------------------------------------- topbar
+
+@lru_cache(maxsize=1)
+def _logo_data_uri() -> str:
+    """Firmalogoet som data-URI.
+
+    Logoet indlejres frem for at hentes fra static-mappen: den vej kræver, at
+    serveren udstiller statiske filer, og slår fejl, når appen ikke kører fra
+    dokumentroden. Filen er små 26 kB og læses én gang pr. proces.
+    """
+    sti = ROD / "static" / "byggros_logo.png"
+    if not sti.exists():
+        return ""
+    data = base64.b64encode(sti.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{data}"
+
 
 def topbjaelke(version: str = "v0.4") -> None:
     """Mørk bjælke med logo, værktøjsnavn og kontakten for mellemregninger.
@@ -126,7 +147,7 @@ def topbjaelke(version: str = "v0.4") -> None:
                 <div style="display:flex;align-items:center;gap:14px">
                   <div style="background:#fff;border-radius:3px;padding:5px 8px;
                               display:flex;align-items:center">
-                    <img src="app/static/byggros_logo.png" alt="BG Byggros"
+                    <img src="{_logo_data_uri()}" alt="BG Byggros"
                          style="height:15px;width:auto;display:block">
                   </div>
                   <div style="width:1px;height:20px;background:rgba(255,255,255,.22)"></div>
@@ -189,6 +210,34 @@ def mellemregninger() -> bool:
 def etiket(tekst: str) -> None:
     """Lille versal sektionsetiket — erstatter emoji-overskrifter."""
     st.html(f'<div class="bg-eyebrow">{escape(tekst.upper())}</div>')
+
+
+@contextmanager
+def kort(titel: str, note: str = ""):
+    """Hvidt kort med sidehoved, jf. designgennemgangens option 1d.
+
+    Resultatkolonnens afsnit — Opbygning, Designdiagram og Produktvalg —
+    står hver i sit kort på lærredet, så de kan aflæses som selvstændige
+    enheder. Sidehovedet bærer afsnittets navn til venstre og dets
+    forudsætninger til højre.
+
+    Anvendes som kontekst:
+
+        with ui.kort("Opbygning", "Snit i samme lodrette skala"):
+            ...
+    """
+    with st.container(key=f"bg_kort_{_slug(titel)}"):
+        st.html(
+            f'<div class="bg-kort-hoved"><div class="bg-kort-titel">'
+            f'{escape(titel)}</div>'
+            f'<div class="bg-kort-note">{note}</div></div>'
+        )
+        yield
+
+
+def _slug(tekst: str) -> str:
+    """Nøglevenligt navn: kun bogstaver, tal og understreg."""
+    return re.sub(r"[^a-z0-9]+", "_", tekst.lower()).strip("_") or "kort"
 
 
 # ------------------------------------------------------------- resultatkort
@@ -320,10 +369,15 @@ def snit(
                 f'<div style="font:500 10px/1.2 {SANS};color:{FARVE["ink"]};text-align:center">{escape(navn)}</div>'
                 f'<div style="font:600 10px/1 {MONO};color:{FARVE["ink"]}">{tykkelse:.0f}</div>'
             ) if h >= 34 else ""
+            # Lagene støder op til hinanden; kun det nederste beholder sin
+            # underkant, så grænsen mellem to lag ikke tegnes dobbelt.
+            sidste = (navn, tykkelse, slags) == k["lag"][-1]
+            bund = "" if sidste else "border-bottom:none;"
             lag_html.append(
                 f'<div style="height:{h}px;background:{flade};border:1px solid {kant};'
-                f'display:flex;flex-direction:column;align-items:center;justify-content:flex-start;'
-                f'padding-top:8px;box-sizing:border-box;gap:1px;overflow:hidden">{indhold}</div>'
+                f'{bund}display:flex;flex-direction:column;align-items:center;'
+                f'justify-content:center;box-sizing:border-box;gap:1px;'
+                f'overflow:hidden">{indhold}</div>'
             )
 
         geonet_html = "".join(

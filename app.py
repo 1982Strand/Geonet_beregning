@@ -800,7 +800,10 @@ def input_underbund(key_prefix: str, kompakt: bool = False) -> float:
     kompakt=True anvendes i inputkolonnen, hvor bredden ikke rummer
     opslagstabellen ved siden af slideren; tabellen lægges da i et popover.
     """
-    ui.etiket("Underbund") if kompakt else st.subheader("Underbund")
+    if kompakt:
+        ui.etiket("Underbund")
+    else:
+        st.subheader("Underbund")
     if not kompakt:
         st.caption(
             "Vælg om underbundens E-modul (Eu) angives direkte, eller udledes ud fra "
@@ -871,7 +874,10 @@ def input_belastning(
     Returnerer (klasse, info, eo). kompakt=True lægger designdiagrammet i et
     popover, idet inputkolonnen ikke er bred nok til at vise det ved siden af.
     """
-    ui.etiket("Belastningsklasse") if kompakt else st.subheader("Belastningsklasse")
+    if kompakt:
+        ui.etiket("Belastningsklasse")
+    else:
+        st.subheader("Belastningsklasse")
 
     state_key = f"{key_prefix}_valgt_klasse"
     if state_key not in st.session_state:
@@ -2948,6 +2954,51 @@ def _plotly_designdiagram(
     return fig
 
 
+def _tegn_designdiagram(
+    eu: float,
+    eo: float,
+    phi: float,
+    geonet: dict | None,
+    t_basis_table: dict,
+    t_indtastet_mm: float | None,
+    produkt_1: dict | None,
+    produkt_2: dict | None,
+) -> None:
+    """Tegner designdiagrammet og forklaringen bag det."""
+    try:
+        fig = _plotly_designdiagram(
+            eu=float(eu),
+            eo=float(eo),
+            phi=float(phi),
+            geonet=geonet,
+            t_indtastet_mm=t_indtastet_mm,
+            t_basis_table=t_basis_table,
+            t_1_lag_mm=(produkt_1 or {}).get("t_armeret_mm"),
+            t_2_lag_mm=(produkt_2 or {}).get("t_armeret_mm"),
+            t_1_lag_best_mm=(produkt_1 or {}).get("t_armeret_mm_min"),
+            t_2_lag_best_mm=(produkt_2 or {}).get("t_armeret_mm_min"),
+        )
+    except Exception as exc:
+        st.warning(f"Kunne ikke generere designdiagram: {exc}")
+        return
+
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    with st.expander("Sådan dannes diagrammet"):
+        st.markdown(INFO_DESIGNDIAGRAM_MD)
+
+
+def _kort_lagnavn(navn: str) -> str:
+    """Materialenavnet forkortet til søjlebredden i snittet.
+
+    Søjlerne er 104 px brede, og et fuldt navn som "Stabilgrus SGII 0-32"
+    ombrydes til flere linjer og skubber tykkelsen ud af laget. Betegnelsen
+    afkortes derfor til materialets hovedord; det fulde navn fremgår af
+    materialevalget i inputkolonnen.
+    """
+    ord = navn.split()
+    return ord[0] if ord else navn
+
+
 def _lagtype_for_navn(navn: str, materialer: list[dict] | None) -> str:
     """Fladefarve for et lag: bærelag eller bundsikring.
 
@@ -2984,7 +3035,7 @@ def _snit_til_kolonner(
         if s.sub_lag:
             lag = [
                 (
-                    l["navn"],
+                    _kort_lagnavn(l["navn"]),
                     l["tykkelse_mm"],
                     _lagtype_for_navn(l["navn"], materialer),
                 )
@@ -3249,21 +3300,11 @@ def _render_opbygningsvisualisering(
         phi_vaegtet=har_indtastet,
     ))
 
+    # Forudsætningerne står i kortets sidehoved, jf. ui.kort().
     ui.snit(
         _snit_til_kolonner(snit_liste, materialer, eu),
         reference_mm=t_indtastet_for_linje,
         geonet_navn=geonet_label,
-    )
-    st.caption(
-        "Snit i samme lodrette skala"
-        + (
-            f" · stiplet linje = indtastet {ui.mm(t_indtastet_for_linje)}"
-            if t_indtastet_for_linje else ""
-        )
-        + (
-            "" if har_indtastet
-            else " · uden materialelag vises kravet som ét ubundet lag"
-        )
     )
 
 
@@ -3299,14 +3340,20 @@ def _render_oversigt_expanders(
 
     # --- Opbygningsvisualisering (referencenet eller valgt produkt) -----
     if ref_1 is not None or ref_2 is not None:
-        st.markdown("#### Opbygning")
-        _render_opbygningsvisualisering(
-            eu, ref_1, ref_2,
-            prod_1lag=prod_1lag, prod_2lag=prod_2lag,
-            materialer=materialer,
-            phi=phi,
-            tvunget_produkt=geonet_navn,
-        )
+        indtastet = _indtastet_total(materialer)
+        note = "Snit i samme lodrette skala"
+        if indtastet:
+            note += f" · stiplet linje = indtastet {ui.mm(indtastet)}"
+        else:
+            note += " · uden materialelag vises kravet som ét ubundet lag"
+        with ui.kort("Opbygning", note):
+            _render_opbygningsvisualisering(
+                eu, ref_1, ref_2,
+                prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+                materialer=materialer,
+                phi=phi,
+                tvunget_produkt=geonet_navn,
+            )
 
     # --- Advarsler -------------------------------------------------------
     # Validator-kørslen bruger den valgte phi/geonet/materialer-kontekst.
@@ -4186,23 +4233,20 @@ def render_standard(input_kol, resultat_kol) -> None:
             # over Opbygning — se kaldet nedenfor.
             vis_kobling = eo_interpoleret
 
-            st.markdown(
-                '<div class="bg-resultat-hoved" style="margin-top:1.5rem">'
-                '<h2>Alle produkter</h2>'
-                '<span>Klik en række for krav til udførelse</span></div>',
-                unsafe_allow_html=True,
-            )
-            _render_produkt_tabel(
-                ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                prod_1lag, prod_2lag, valgt_klasse, eu=eu,
-                trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
-                grupperet=True,
-            )
-            st.caption(
-                "I resultatoversigten vises, hvilke belastningsklasser "
-                "produkterne anbefales til. Der vises en advarsel, hvis et "
-                "produkt ikke anbefales anvendt til den valgte klasse."
-            )
+            with ui.kort(
+                "Alle produkter", "Klik en række for krav til udførelse"
+            ):
+                _render_produkt_tabel(
+                    ref_1, ref_2, ref_fejl_1, ref_fejl_2,
+                    prod_1lag, prod_2lag, valgt_klasse, eu=eu,
+                    trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
+                    grupperet=True,
+                )
+                st.caption(
+                    "I resultatoversigten vises, hvilke belastningsklasser "
+                    "produkterne anbefales til. Der vises en advarsel, hvis et "
+                    "produkt ikke anbefales anvendt til den valgte klasse."
+                )
 
         if vis_kobling:
             _render_trafik_kobling_forklaring(
@@ -4378,7 +4422,10 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
     kompakt=True stiller lagene under hinanden i inputkolonnens fulde bredde
     i stedet for i en halv kolonne.
     """
-    ui.etiket("Opbygning") if kompakt else st.subheader("Materialelag")
+    if kompakt:
+        ui.etiket("Opbygning")
+    else:
+        st.subheader("Materialelag")
 
     if kompakt:
         antal_lag = st.number_input(
@@ -4817,12 +4864,17 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                     [bedste_2["produkter"][0]]
                     if bedste_2 and bedste_2.get("produkter") else []
                 )
-                _render_produkt_tabel(
-                    ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                    prod_1, prod_2, valgt_klasse, phi=phi, eu=eu,
-                    vis_reference=False,
-                    trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
-                )
+                with ui.kort(
+                    "Produktvalg", f"Bærelagstykkelse ved Eu = {ui.mpa(eu)}"
+                ):
+                    _render_produkt_tabel(
+                        ref_1, ref_2, ref_fejl_1, ref_fejl_2,
+                        prod_1, prod_2, valgt_klasse, phi=phi, eu=eu,
+                        vis_reference=False,
+                        trafik_eu=(
+                            eu if grundlag["type"] == "trafikklasse" else None
+                        ),
+                    )
 
                 if geonet and geonet.get("navn"):
                     t_indtastet_total = _indtastet_total(materialer)
@@ -4835,62 +4887,28 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                         if bedste_2 and bedste_2.get("produkter") else None
                     )
 
-                    st.markdown(
-                        f'<div class="bg-resultat-hoved" style="margin-top:1.5rem">'
-                        f'<h2>Designdiagram</h2>'
-                        f'<span>Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · '
-                        f'φ = {ui.grader(phi)}</span></div>',
-                        unsafe_allow_html=True,
+                    kort_note = (
+                        f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
+                        f"φ = {ui.grader(phi)}"
                     )
-
-                    vis_din_prik = st.checkbox(
-                        "Vis indtastet opbygning",
-                        value=True,
-                        key="bd_dd_vis_din_prik",
-                        disabled=t_indtastet_total is None,
-                    )
-                    vis_lag_prikker = st.checkbox(
-                        "Vis endepunkter for 1 og 2 lag geonet",
-                        value=True,
-                        key="bd_dd_vis_lag_prikker",
-                    )
-
-                    try:
-                        fig = _plotly_designdiagram(
-                            eu=float(eu),
-                            eo=float(eo),
-                            phi=float(phi),
-                            geonet=geonet,
-                            t_indtastet_mm=(
-                                t_indtastet_total if vis_din_prik else None
-                            ),
-                            t_basis_table=t_basis_table,
-                            t_1_lag_mm=(
-                                produkt_1.get("t_armeret_mm")
-                                if produkt_1 and vis_lag_prikker else None
-                            ),
-                            t_2_lag_mm=(
-                                produkt_2.get("t_armeret_mm")
-                                if produkt_2 and vis_lag_prikker else None
-                            ),
-                            t_1_lag_best_mm=(
-                                produkt_1.get("t_armeret_mm_min")
-                                if produkt_1 and vis_lag_prikker else None
-                            ),
-                            t_2_lag_best_mm=(
-                                produkt_2.get("t_armeret_mm_min")
-                                if produkt_2 and vis_lag_prikker else None
-                            ),
+                    with ui.kort("Designdiagram", kort_note):
+                        vis_din_prik = st.checkbox(
+                            "Vis indtastet opbygning",
+                            value=True,
+                            key="bd_dd_vis_din_prik",
+                            disabled=t_indtastet_total is None,
                         )
-                        st.plotly_chart(
-                            fig,
-                            width="stretch",
-                            config={"displayModeBar": False},
+                        vis_lag_prikker = st.checkbox(
+                            "Vis endepunkter for 1 og 2 lag geonet",
+                            value=True,
+                            key="bd_dd_vis_lag_prikker",
                         )
-                        with st.expander("Sådan dannes diagrammet"):
-                            st.markdown(INFO_DESIGNDIAGRAM_MD)
-                    except Exception as e:
-                        st.warning(f"Kunne ikke generere designdiagram: {e}")
+                        _tegn_designdiagram(
+                            eu, eo, phi, geonet, t_basis_table,
+                            t_indtastet_total if vis_din_prik else None,
+                            produkt_1 if vis_lag_prikker else None,
+                            produkt_2 if vis_lag_prikker else None,
+                        )
 
         if kobling_args is not None:
             _render_trafik_kobling_forklaring(*kobling_args)
