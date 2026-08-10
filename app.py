@@ -24,6 +24,7 @@ import hashlib
 import html
 import math
 import os
+import re
 
 from core.data import (
     BELASTNINGSKLASSER,
@@ -2160,6 +2161,7 @@ def _rt_detalje_html(
     is_ref: bool = False,
     phi: float = PHI_BASIS,
     eu: float | None = None,
+    vis_indeks: bool = False,
 ) -> str:
     """Foldbar detalje justeret efter tabellens kolonner.
 
@@ -2242,6 +2244,30 @@ def _rt_red_txt(p: dict | None) -> str:
     return "—"
 
 
+def _indeks_tal(navn: str) -> int:
+    """Effektindekset som tal til sortering. Ukendt indeks stilles bagest.
+
+    Produkter med korrektionsinterval har indeks angivet som et spænd,
+    eksempelvis "115–130"; den nedre ende anvendes, så sorteringen hviler på
+    den konservative værdi, tabellens tykkelser også er regnet af.
+    """
+    raa = str((find_geonet(navn) or {}).get("effektindeks") or "")
+    tal = re.match(r"\s*(\d+)", raa)
+    return int(tal.group(1)) if tal else 0
+
+
+def _effektindeks(navn: str, is_ref: bool = False) -> str:
+    """Produktets effektindeks. Referencenettet har indeks 100.
+
+    Indekset angiver produktets effektivitet i forhold til designmanualernes
+    referencenet og er tabuleret i geonet-databasen.
+    """
+    if is_ref:
+        return "100"
+    g = find_geonet(navn) or {}
+    return str(g.get("effektindeks") or "—")
+
+
 def _rt_raekke_html(
     navn: str,
     p1: dict | None,
@@ -2251,6 +2277,7 @@ def _rt_raekke_html(
     phi: float = PHI_BASIS,
     trafik_eu: float | None = None,
     eu: float | None = None,
+    vis_indeks: bool = False,
 ) -> str:
     """Byg én foldbar tabelrække (<details>) for et produkt/referencenet.
 
@@ -2285,18 +2312,25 @@ def _rt_raekke_html(
     red2_cls = "num" if v2 else "num rt-tom"
 
     raekke_css = "rt-raekke rt-ref" if is_ref else "rt-raekke"
+    if vis_indeks:
+        raekke_css += " rt-med-indeks"
+    indeks_html = (
+        f'<span class="num rt-indeks">{_effektindeks(navn, is_ref)}</span>'
+        if vis_indeks else ""
+    )
 
     return (
         f'<details class="{raekke_css}" name="rt-produkt">'
         f'<summary class="rt-sum">'
         f'<span class="rt-navn"><span class="rt-chev">▸</span> {navn}</span>'
+        f'{indeks_html}'
         f'<span><span class="rt-badge {badge_css}">{badge_pre}{kl_txt}</span></span>'
         f'{_rt_tk_celle(p1, v1, t1, t1_cls, phi)}'
         f'<span class="{red1_cls}">{red1_txt}</span>'
         f'{_rt_tk_celle(p2, v2, t2, t2_cls, phi)}'
         f'<span class="{red2_cls}">{red2_txt}</span>'
         f'</summary>'
-        f'{_rt_detalje_html(navn, p1, p2, is_ref, phi, eu)}'
+        f'{_rt_detalje_html(navn, p1, p2, is_ref, phi, eu, vis_indeks)}'
         f'</details>'
     )
 
@@ -2313,6 +2347,7 @@ def _render_produkt_tabel(
     vis_reference: bool = True,
     trafik_eu: float | None = None,
     eu: float | None = None,
+    grupperet: bool = False,
 ) -> None:
     """Resultattabel: én foldbar række pr. produkt. Bruges af både Standard og
     Brugerdefineret (sidstnævnte sender φ ≠ 37, som giver en φ-korrektionslinje
@@ -2327,6 +2362,10 @@ def _render_produkt_tabel(
 
     trafik_eu sættes i trafikklasse-tilstand og skifter klasse-kolonnen til
     anbefalede trafikklasser ved netop dette Eu.
+
+    grupperet=True anvendes i standardtilstanden, hvor produktoversigten er
+    hovedindholdet: rækkerne samles under versale serieoverskrifter, og
+    produktets effektindeks vises i en egen kolonne, jf. afsnit 10.
     """
     refp1 = ref_1["produkter"][0] if ref_1 and ref_1.get("produkter") else None
     refp2 = ref_2["produkter"][0] if ref_2 and ref_2.get("produkter") else None
@@ -2352,10 +2391,18 @@ def _render_produkt_tabel(
         )
     else:
         kl_kol = '<span>Anbefalet belastningsklasse</span>'
+
+    indeks_kol = (
+        '<span class="num" title="Produktets effektivitet i forhold til '
+        'designmanualernes referencenet, som har indeks 100." '
+        'style="cursor:help">Indeks</span>'
+        if grupperet else ""
+    )
     dele = ['<div class="rt-tabel">']
     dele.append(
-        '<div class="rt-head">'
+        f'<div class="rt-head{" rt-head-indeks" if grupperet else ""}">'
         '<span>Produkt</span>'
+        f'{indeks_kol}'
         f'{kl_kol}'
         '<span class="num">Bærelagstykkelse, 1 lag geonet</span>'
         '<span class="num">Reduktion i alt, 1 lag</span>'
@@ -2364,24 +2411,56 @@ def _render_produkt_tabel(
         '</div>'
     )
     if vis_reference:
+        if grupperet:
+            dele.append('<div class="rt-gruppe">Reference</div>')
         dele.append(
             _rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True,
-                            phi=phi, trafik_eu=trafik_eu, eu=eu)
+                            phi=phi, trafik_eu=trafik_eu, eu=eu,
+                            vis_indeks=grupperet)
         )
+
+    if grupperet:
+        # Produkterne samles efter serie i håndbogsrækkefølgen, jf.
+        # SERIE_ORDER, og inden for hver serie efter faldende effektindeks.
+        navne = sorted(
+            navne,
+            key=lambda n: (
+                SERIE_ORDER.get(
+                    (p1_by.get(n) or p2_by.get(n) or {}).get("serie", ""), 99
+                ),
+                -_indeks_tal(n),
+                n,
+            ),
+        )
+
+    sidste_serie: str | None = None
     for n in navne:
         p1 = p1_by.get(n)
         p2 = p2_by.get(n)
         if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
             continue
+        if grupperet:
+            serie = (p1 or p2 or {}).get("serie") or "Øvrige"
+            if serie != sidste_serie:
+                sidste_serie = serie
+                dele.append(f'<div class="rt-gruppe">{html.escape(serie)}</div>')
         dele.append(_rt_raekke_html(n, p1, p2, phi=phi, trafik_eu=trafik_eu,
-                                    eu=eu))
+                                    eu=eu, vis_indeks=grupperet))
     dele.append('</div>')
-    caption = (
-        "Referencenet vises øverst, derefter de mest effektive produkter "
-        "først. Klik på hver række for flere detaljer"
-        if vis_reference
-        else "Klik på rækken for flere detaljer"
-    )
+    if grupperet:
+        caption = (
+            "Produkterne er samlet efter serie og ordnet efter faldende "
+            "effektindeks. Indeks 100 svarer til designmanualernes "
+            "referencenet; et højere indeks angiver et net, der giver en "
+            "tyndere opbygning. Klik på en række for krav til udførelse"
+        )
+    elif vis_reference:
+        caption = (
+            "Referencenet vises øverst, derefter de mest effektive produkter "
+            "først. Klik på hver række for flere detaljer"
+        )
+    else:
+        caption = "Klik på rækken for flere detaljer"
     dele.append(f'<div class="rt-caption">{caption}</div>')
     st.markdown("".join(dele), unsafe_allow_html=True)
 
@@ -4107,10 +4186,17 @@ def render_standard(input_kol, resultat_kol) -> None:
             # over Opbygning — se kaldet nedenfor.
             vis_kobling = eo_interpoleret
 
+            st.markdown(
+                '<div class="bg-resultat-hoved" style="margin-top:1.5rem">'
+                '<h2>Alle produkter</h2>'
+                '<span>Klik en række for krav til udførelse</span></div>',
+                unsafe_allow_html=True,
+            )
             _render_produkt_tabel(
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
                 prod_1lag, prod_2lag, valgt_klasse, eu=eu,
                 trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
+                grupperet=True,
             )
             st.caption(
                 "I resultatoversigten vises, hvilke belastningsklasser "
