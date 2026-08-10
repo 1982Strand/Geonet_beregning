@@ -148,9 +148,16 @@ def check_geonet_placement(
         distances = [spacing]
 
         if top_cover < min_cover:
+            # Begge net oplyses, så det fremgår, hvilke af dem kravet er
+            # overholdt for. Det nederste ligger altid dybest og har dermed
+            # mest materiale over sig, men det er ikke oplagt uden tallene.
             advarsler.append(
-                f"Øverste geonet ligger {top_cover:.0f} mm under oversiden. "
-                f"{_top_cover_requirement_text(krav)}"
+                f"{_top_cover_requirement_text(krav)} "
+                f"Øverste geonet ligger {top_cover:.0f} mm under oversiden — "
+                f"kravet er ikke overholdt. "
+                f"Nederste geonet ligger {bottom:.0f} mm under oversiden — "
+                f"kravet er "
+                + ("overholdt." if bottom >= min_cover else "ikke overholdt.")
             )
         if spacing < min_spacing:
             advarsler.append(

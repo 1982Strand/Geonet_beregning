@@ -579,22 +579,33 @@ TRAFIK_EU_PUNKTER = [3, 4, 5, 10, 15, 20, 30, 40]
 #
 #   VEJDIM_KOERSLER_STANDARD_RAEKKER: én dict pr. (T, Eu) med alle rådata —
 #       asfaltpakke (navn + tykkelse pr. lag), vist asfalt-E, de ubundne lag
-#       (sg = stabilgrus SG II, bl = bundsikring BL II), styrende levetid og
-#       bemærkning. Totaler er IKKE gemt: de udledes af berig_koersel_raekker,
-#       så de aldrig kan komme i modstrid med lagtykkelserne.
+#       (navn + tykkelse: sg = stabilgrus SG II, bl = bundsikring BL II),
+#       styrende levetid og bemærkning. Totaler er IKKE gemt: de udledes af
+#       berig_koersel_raekker, så de aldrig kan komme i modstrid med
+#       lagtykkelserne.
 #
 #   Eo_ækv tilbageberegnes af korrelation_fra_koersler ud fra sg + bl.
 #   Fuld dokumentation: "Dokumenter og data/Korrelation_trafikklasse_Eo.md".
 # ---------------------------------------------------------------------------
 
+# De ubundne materialer er de samme i alle kørsler, jf. forudsætningerne:
+# SG II (E = 300) over BL II U≤3 (E = 100). Navnene indgår som redigerbare
+# felter, så en kørsel med andre materialer kan indtastes.
+UBUNDET_BAERELAG_STANDARD = "SG II"
+BUNDSIKRING_STANDARD = "BL II U≤3"
+
+
 def _kd(T, eu, slid, t_slid, binde, t_binde, bundet, t_bundet, e_asf, sg, bl,
-        levetid, bem=""):
+        levetid, bem="", ubundet_baerelag=UBUNDET_BAERELAG_STANDARD,
+        bundsikring=BUNDSIKRING_STANDARD):
     return {
         "T": T, "eu": eu,
         "slidlag": slid, "t_slid_mm": float(t_slid),
         "bindelag": binde, "t_bindelag_mm": float(t_binde),
         "bundet_baerelag": bundet, "t_bundet_mm": float(t_bundet),
-        "E_asf_vist_MPa": float(e_asf), "t_SG_mm": float(sg), "t_BL_mm": float(bl),
+        "E_asf_vist_MPa": float(e_asf),
+        "ubundet_baerelag": ubundet_baerelag, "t_SG_mm": float(sg),
+        "bundsikring": bundsikring, "t_BL_mm": float(bl),
         "levetid_styrende_aar": float(levetid), "bemaerkning": bem,
     }
 

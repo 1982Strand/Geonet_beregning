@@ -52,6 +52,8 @@ from core.data import (
     trafikklasse_noegletal,
     trafikklasser_for_belastningsklasser,
     VEJDIM_KOERSLER_STANDARD_RAEKKER,
+    UBUNDET_BAERELAG_STANDARD,
+    BUNDSIKRING_STANDARD,
     berig_koersel_raekker,
     koersler_fra_raekker,
     korrelation_fra_koersler,
@@ -542,10 +544,20 @@ def _aktiv_t_basis_table() -> dict:
 
 _KOERSEL_FELTER = (
     "T", "eu", "slidlag", "t_slid_mm", "bindelag", "t_bindelag_mm",
-    "bundet_baerelag", "t_bundet_mm", "E_asf_vist_MPa", "t_SG_mm", "t_BL_mm",
+    "bundet_baerelag", "t_bundet_mm", "E_asf_vist_MPa",
+    "ubundet_baerelag", "t_SG_mm", "bundsikring", "t_BL_mm",
     "levetid_styrende_aar", "bemaerkning",
 )
-_KOERSEL_TEKSTFELTER = ("T", "slidlag", "bindelag", "bundet_baerelag", "bemaerkning")
+_KOERSEL_TEKSTFELTER = (
+    "T", "slidlag", "bindelag", "bundet_baerelag",
+    "ubundet_baerelag", "bundsikring", "bemaerkning",
+)
+# Tekstfelter der er kommet til efter tabellen blev redigerbar. Mangler de helt
+# i en gemt tabel, indsættes standardnavnet i stedet for en tom celle.
+_KOERSEL_TEKST_STANDARD = {
+    "ubundet_baerelag": UBUNDET_BAERELAG_STANDARD,
+    "bundsikring": BUNDSIKRING_STANDARD,
+}
 
 
 def _standard_koersel_raekker() -> list[dict]:
@@ -580,7 +592,10 @@ def _normaliser_koersel_raekker(raekker) -> list[dict]:
                 continue
             vaerdi = r.get(felt)
             if felt in _KOERSEL_TEKSTFELTER:
-                ny[felt] = str(vaerdi or "").strip()
+                if felt not in r and felt in _KOERSEL_TEKST_STANDARD:
+                    ny[felt] = _KOERSEL_TEKST_STANDARD[felt]
+                else:
+                    ny[felt] = str(vaerdi or "").strip()
             else:
                 try:
                     ny[felt] = float(vaerdi)
@@ -939,6 +954,25 @@ st.markdown(f"""
     font-weight: 500 !important;
     box-shadow: none !important;
     letter-spacing: 0.01em;
+  }}
+  /* Menupunkterne skal begynde samme sted. Knapindholdet venstrestilles, og
+     ikonet gives fast bredde, så navnene flugter uanset emojiens bredde. */
+  [data-testid="stSidebar"] .stButton > button > div {{
+    width: 100% !important;
+    justify-content: flex-start !important;
+    gap: 0.55rem !important;
+  }}
+  [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] {{
+    text-align: left !important;
+  }}
+  [data-testid="stSidebar"] .stButton > button [data-testid="stIconEmoji"] {{
+    flex: 0 0 1.3rem !important;
+    width: 1.3rem !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 0.95rem !important;
+    margin: 0 !important;
   }}
   [data-testid="stSidebar"] .stButton > button:hover {{
     background: #F5F5F5 !important;
@@ -2970,7 +3004,6 @@ def _render_opbygningsvisualisering(
         t_2 = ref_2["t_armeret_mm"] if ref_2 is not None else None
         t_1_best = None
         t_2_best = None
-        produkt_navn_vis = None
         valgt_geonet = None
         geonet_label = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6"
     else:
@@ -2978,7 +3011,6 @@ def _render_opbygningsvisualisering(
         t_2 = _produkt_t(prod_2lag, valg)
         t_1_best = _produkt_t_best(prod_1lag, valg)
         t_2_best = _produkt_t_best(prod_2lag, valg)
-        produkt_navn_vis = valg
         valgt_geonet = find_geonet(valg)
         geonet_label = valg
 
@@ -2987,17 +3019,6 @@ def _render_opbygningsvisualisering(
     if not kandidater:
         st.caption("Ingen gyldige beregninger at visualisere.")
         return
-
-    # ── Caption (dynamisk efter valg) ──────────────────────────────────
-    if valg == _REF_VALG:
-        st.caption(
-            "Snittene viser opbygninger med **referencenettet** "
-            "(Tensar TriAx TX160 / GS-GRID SX160 / E'GRID T6). "
-        )
-    else:
-        st.caption(
-            f"Snittene viser opbygninger med **{produkt_navn_vis}**. "
-        )
 
     # ── Byg snit-listen (Koncept A) ────────────────────────────────────
     # I Brugerdefineret-tilstand (materialer != []): 4 søjler — Indtastet
@@ -3184,7 +3205,13 @@ def _render_oversigt_expanders(
     lag_by_advarsel: dict[str, set[str]] = {}
     advarsler_unik: list[str] = []
     seen_a: set[str] = set()
-    valgt_opbygning = st.session_state.get("opbygning_geonet_valg", _REF_VALG)
+    # I 'Vælg specifikt produkt' vises ingen dropdown, og
+    # opbygning_geonet_valg opdateres derfor ikke — den ville pege på
+    # referencenettet og give placeringsadvarsler for det forkerte net.
+    # geonet_navn er det produkt, snittegningen faktisk viser.
+    valgt_opbygning = geonet_navn or st.session_state.get(
+        "opbygning_geonet_valg", _REF_VALG
+    )
 
     def _placeringsadvarsler_for_valgt_opbygning(lag_mode: str) -> list[tuple[str, str]]:
         # Placeringen evalueres i krav-tykkelsen med SAMME lag-baserede
@@ -3836,6 +3863,7 @@ def render_standard() -> None:
     st.divider()
     st.subheader("Resultater")
 
+    vis_kobling = False
     if haard_fejl:
         vis_fejl(haard_fejl)
     else:
@@ -3850,16 +3878,20 @@ def render_standard() -> None:
         else:
             _render_uarmeret_mangler_besked(eu, eo)
 
-        if eo_interpoleret:
-            _render_trafik_kobling_forklaring(
-                grundlag["t_klasse"], eu, grundlag["eo_aekv"], PHI_BASIS,
-                ref_1, ref_2, t_basis_table,
-            )
+        # Koblings-forklaringen renderes nederst i resultatsektionen, lige
+        # over Opbygning — se kaldet før st.divider() nedenfor.
+        vis_kobling = eo_interpoleret
 
         _render_produkt_tabel(
             ref_1, ref_2, ref_fejl_1, ref_fejl_2,
             prod_1lag, prod_2lag, valgt_klasse, eu=eu,
             trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
+        )
+
+    if vis_kobling:
+        _render_trafik_kobling_forklaring(
+            grundlag["t_klasse"], eu, grundlag["eo_aekv"], PHI_BASIS,
+            ref_1, ref_2, t_basis_table,
         )
 
     # --- Informations-expandere ----------------------------------------
@@ -4226,6 +4258,10 @@ def render_brugerdefineret() -> None:
 
     bedste_1: dict | None = None
     bedste_2: dict | None = None
+    # Argumenterne til koblings-forklaringen. De to modes sender hver sit sæt
+    # (referencenet mod valgt produkt), og forklaringen renderes først nederst
+    # i resultatsektionen — se kaldet før st.divider().
+    kobling_args: tuple | None = None
 
     # Reference- og produktberegninger bruges i begge modes — både til
     # at vise reference-banneret og til opbygnings-expanderens dropdown.
@@ -4281,8 +4317,9 @@ def render_brugerdefineret() -> None:
                 _render_uarm_banner_bd(t_uarm, phi)
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
+            # Renderes nederst i resultatsektionen, lige over Opbygning.
             if eo_interpoleret:
-                _render_trafik_kobling_forklaring(
+                kobling_args = (
                     grundlag["t_klasse"], eu, grundlag["eo_aekv"], phi,
                     ref_1, ref_2, t_basis_table,
                 )
@@ -4390,12 +4427,13 @@ def render_brugerdefineret() -> None:
             if eo_interpoleret:
                 # res_1/res_2 er beregnet med det VALGTE nets korrektion —
                 # ref_1/ref_2 er altid referencenettet. Forklaringen skal vise
-                # det net, brugeren rent faktisk har valgt.
-                _render_trafik_kobling_forklaring(
+                # det net, brugeren rent faktisk har valgt. Renderes nederst i
+                # resultatsektionen, lige over Opbygning.
+                kobling_args = (
                     grundlag["t_klasse"], eu, grundlag["eo_aekv"], phi,
                     None if res_1.get("fejl") else res_1,
                     None if res_2.get("fejl") else res_2,
-                    t_basis_table, geonet=geonet,
+                    t_basis_table, geonet,
                 )
 
             # Ny tabel: referencerække + den valgte produkt-række. Enkelt-
@@ -4484,6 +4522,9 @@ def render_brugerdefineret() -> None:
                     except Exception as e:
                         st.warning(f"Kunne ikke generere designdiagram: {e}")
 
+    if kobling_args is not None:
+        _render_trafik_kobling_forklaring(*kobling_args)
+
     # --- Informations-expandere ------------------------------------------
     st.divider()
     _render_oversigt_expanders(
@@ -4530,8 +4571,11 @@ def render_sidebar() -> str:
 
         for ikon, navn, nøgle in _NAV_ITEMS:
             aktiv = st.session_state.aktiv_side == nøgle
+            # Ikonet sættes som selvstændigt element (ikke som en del af
+            # teksten), så det kan gives fast bredde i CSS og navnene flugter.
             if st.button(
-                f"{ikon}  {navn}",
+                navn,
+                icon=ikon,
                 key=f"_nav_{nøgle}",
                 width="stretch",
                 type="primary" if aktiv else "secondary",
@@ -5137,7 +5181,10 @@ def render_trafikklasse_korrelation() -> None:
             "Bundet bærelag": r["bundet_baerelag"],
             "t bundet (mm)": r["t_bundet_mm"],
             "Asfalt-E (MPa)": r["E_asf_vist_MPa"],
+            "Ubundet bærelag": r.get(
+                "ubundet_baerelag", UBUNDET_BAERELAG_STANDARD),
             "SG (mm)": r["t_SG_mm"],
+            "Bundsikringslag": r.get("bundsikring", BUNDSIKRING_STANDARD),
             "BL (mm)": r["t_BL_mm"],
             "Ubundet (mm)": r["t_ubundet_total_mm"],
             "Samlet højde (mm)": r["t_befaestelse_total_mm"],
@@ -5163,7 +5210,15 @@ def render_trafikklasse_korrelation() -> None:
             "t bundet (mm)": st.column_config.NumberColumn("t bundet (mm)", **_mm),
             "Asfalt-E (MPa)": st.column_config.NumberColumn(
                 "Asfalt-E (MPa)", min_value=0.0, step=100.0, format="%.0f"),
+            "Ubundet bærelag": st.column_config.TextColumn(
+                "Ubundet bærelag",
+                help="Materialet i det ubundne bærelag, som kørslen er "
+                     "udført med. Tykkelsen angives i kolonnen SG (mm)."),
             "SG (mm)": st.column_config.NumberColumn("SG (mm)", **_mm),
+            "Bundsikringslag": st.column_config.TextColumn(
+                "Bundsikringslag",
+                help="Materialet i bundsikringslaget, som kørslen er udført "
+                     "med. Tykkelsen angives i kolonnen BL (mm)."),
             "BL (mm)": st.column_config.NumberColumn("BL (mm)", **_mm),
             # Afledte kolonner — beregnes, kan ikke redigeres.
             "Ubundet (mm)": st.column_config.NumberColumn(
@@ -5185,7 +5240,8 @@ def render_trafikklasse_korrelation() -> None:
             "bindelag": r["Bindelag"], "t_bindelag_mm": r["t bindelag (mm)"],
             "bundet_baerelag": r["Bundet bærelag"], "t_bundet_mm": r["t bundet (mm)"],
             "E_asf_vist_MPa": r["Asfalt-E (MPa)"],
-            "t_SG_mm": r["SG (mm)"], "t_BL_mm": r["BL (mm)"],
+            "ubundet_baerelag": r["Ubundet bærelag"], "t_SG_mm": r["SG (mm)"],
+            "bundsikring": r["Bundsikringslag"], "t_BL_mm": r["BL (mm)"],
             "levetid_styrende_aar": r["Levetid (år)"],
             "bemaerkning": r["Bemærkning"],
         }
