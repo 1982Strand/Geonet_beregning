@@ -3674,6 +3674,92 @@ def _resultat_overskrift(eu: float, grundlag: dict, phi: float) -> None:
     )
 
 
+def _indtastet_total(materialer: list[dict] | None) -> float | None:
+    """Den indtastede opbygnings samlede tykkelse, eller None uden materialelag."""
+    if not materialer:
+        return None
+    total = sum(float(m.get("tykkelse_mm") or 0) for m in materialer)
+    return total or None
+
+
+def _note_uarmeret(eo_interpoleret: bool, phi: float) -> str:
+    """Undertekst til den ustabiliserede tykkelse: hvordan værdien er fremkommet."""
+    dele = ["Ustabiliseret opbygning"]
+    if eo_interpoleret:
+        dele.append("interpoleret")
+    if abs(phi - PHI_BASIS) > 0.05:
+        dele.append("φ-korrigeret")
+    return " · ".join(dele)
+
+
+def _vis_resultatkort(
+    t_uarm: float | None,
+    t_1: float | None,
+    t_2: float | None,
+    *,
+    standard: bool,
+    note_uarm: str,
+    navne_1: str = "",
+    navne_2: str = "",
+    indtastet_total: float | None = None,
+) -> None:
+    """Resultatrækken: ustabiliseret tykkelse og de to armerede alternativer.
+
+    Reduktionen måles mod den rå ustabiliserede tykkelse, som produkttabellens
+    kolonne 'Reduktion i alt' gør det, så de to opgørelser ikke kan divergere.
+
+    Det tyndeste alternativ fremhæves. I brugerdefineret tilstand fremhæves
+    alene et alternativ, som den indtastede opbygning holder til; holder ingen
+    af dem, fremhæves intet, og årsagen fremgår af advarselsafsnittet.
+    """
+    if t_uarm is None:
+        return
+
+    def _kort(etiket: str, t: float | None, navne: str) -> dict | None:
+        if t is None:
+            return None
+        red_mm = t_uarm - t
+        kort = {
+            "etiket": etiket,
+            "vaerdi": ui.mm(t).replace(" mm", ""),
+            "delta": f"{ui.fortegn(t - t_uarm)} mm",
+            "delta_note": f"{ui.procent(red_mm / t_uarm * 100)} tyndere",
+        }
+        if navne:
+            kort["delta_note"] += f" · {navne}"
+        return kort
+
+    kort_1 = _kort("Bedste med 1 lag" if standard else "1 lag geonet", t_1, navne_1)
+    kort_2 = _kort("Bedste med 2 lag" if standard else "2 lag geonet", t_2, navne_2)
+
+    # Det tyndeste alternativ, opbygningen holder til. Uden indtastet opbygning
+    # er der intet krav at holde mod, og det tyndeste alternativ fremhæves.
+    def _holder(t: float | None) -> bool:
+        if t is None:
+            return False
+        if indtastet_total is None:
+            return True
+        return indtastet_total >= t
+
+    if kort_2 and _holder(t_2):
+        kort_2["anbefalet"] = True
+        if indtastet_total is not None:
+            kort_2["delta_note"] += f" · holder ved {ui.mm(indtastet_total)}"
+    elif kort_1 and _holder(t_1):
+        kort_1["anbefalet"] = True
+        if indtastet_total is not None:
+            kort_1["delta_note"] += f" · holder ved {ui.mm(indtastet_total)}"
+
+    kort = [{
+        "etiket": "Uden geonet" if standard else "Nødvendig uden geonet",
+        "vaerdi": ui.mm(t_uarm).replace(" mm", ""),
+        "note": note_uarm,
+    }]
+    kort += [k for k in (kort_1, kort_2) if k]
+
+    ui.resultatkort(kort, badge_tekst="TYNDEST" if standard else "ANBEFALET")
+
+
 def render_standard(input_kol, resultat_kol) -> None:
     """Standard-tilstand: produktoversigt for alle geonet på én gang.
 
@@ -3753,12 +3839,17 @@ def render_standard(input_kol, resultat_kol) -> None:
             vis_fejl(haard_fejl)
         else:
             if t_uarm is not None:
-                st.markdown(
-                    f'<div class="uarm-banner">'
-                    f'<div class="uarm-banner-label">Ustabiliseret bærelagstykkelse</div>'
-                    f'<div class="uarm-banner-tal">{ui.mm(t_uarm)}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
+                _vis_resultatkort(
+                    t_uarm,
+                    bedste_1["t_armeret_mm"] if bedste_1 else None,
+                    bedste_2["t_armeret_mm"] if bedste_2 else None,
+                    standard=True,
+                    note_uarm=(
+                        "Ubunden opbygning · interpoleret mellem Eo-kurverne"
+                        if eo_interpoleret else "Ubunden opbygning"
+                    ),
+                    navne_1=_navne_kort(bedste_1) if bedste_1 else "",
+                    navne_2=_navne_kort(bedste_2) if bedste_2 else "",
                 )
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
@@ -4085,22 +4176,6 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
     return materialer, phi
 
 
-def _render_uarm_banner_bd(t_uarm: float, phi: float = PHI_BASIS) -> None:
-    """Render ustabiliseret-banner i brugerdefineret tilstand (én basis-boks).
-
-    phi bevares i signaturen for kald-kompatibilitet, men bruges ikke længere —
-    den φ-korrigerede boks er fjernet, og reduktionen (incl. φ-bidraget) vises
-    nu i de enkelte resultatkort.
-    """
-    st.markdown(
-        f'<div class="uarm-banner">'
-        f'<div class="uarm-banner-label">Ustabiliseret bærelagstykkelse</div>'
-        f'<div class="uarm-banner-tal">{ui.mm(t_uarm)}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-
 def render_brugerdefineret(input_kol, resultat_kol) -> None:
     """Brugerdefineret-tilstand: input + resultater + expandere.
 
@@ -4259,7 +4334,16 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                 vis_fejl(haard_fejl)
             else:
                 if t_uarm is not None:
-                    _render_uarm_banner_bd(t_uarm, phi)
+                    _vis_resultatkort(
+                        t_uarm,
+                        bedste_1["t_armeret_mm"] if bedste_1 else None,
+                        bedste_2["t_armeret_mm"] if bedste_2 else None,
+                        standard=False,
+                        note_uarm=_note_uarmeret(eo_interpoleret, phi),
+                        navne_1=_navne_kort(bedste_1) if bedste_1 else "",
+                        navne_2=_navne_kort(bedste_2) if bedste_2 else "",
+                        indtastet_total=_indtastet_total(materialer),
+                    )
                 else:
                     _render_uarmeret_mangler_besked(eu, eo)
                 # Renderes nederst i resultatsektionen, lige over Opbygning.
@@ -4365,7 +4449,14 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                     ),
                 }
                 if t_uarm is not None:
-                    _render_uarm_banner_bd(t_uarm, phi)
+                    _vis_resultatkort(
+                        t_uarm,
+                        res_1.get("t_armeret_mm") if not res_1.get("fejl") else None,
+                        res_2.get("t_armeret_mm") if not res_2.get("fejl") else None,
+                        standard=False,
+                        note_uarm=_note_uarmeret(eo_interpoleret, phi),
+                        indtastet_total=_indtastet_total(materialer),
+                    )
                 else:
                     _render_uarmeret_mangler_besked(eu, eo)
 

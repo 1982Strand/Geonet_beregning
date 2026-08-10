@@ -193,12 +193,16 @@ def etiket(tekst: str) -> None:
 
 # ------------------------------------------------------------- resultatkort
 
-def resultatkort(kort: list[dict]) -> None:
+def resultatkort(kort: list[dict], badge_tekst: str = "ANBEFALET") -> None:
     """Rækken af resultattal.
 
     Hvert kort: {"etiket", "vaerdi", "enhed", "note", "delta", "delta_note",
                  "anbefalet": bool}
     Første kort er referencetallet uden delta.
+
+    badge_tekst er mærket på det fremhævede kort. I standardtilstanden er der
+    ingen indtastet opbygning at holde mod, og det tyndeste alternativ mærkes
+    derfor TYNDEST frem for ANBEFALET.
     """
     kolonner = "1.15fr" + " 1fr" * (len(kort) - 1)
     celler = []
@@ -210,7 +214,8 @@ def resultatkort(kort: list[dict]) -> None:
         tal_farve = FARVE["gron_mork"] if anbefalet else FARVE["ink"]
         badge = (
             f'<div style="font:600 9px/1 {MONO};letter-spacing:.08em;color:#fff;'
-            f'background:{FARVE["gron"]};padding:4px 7px;border-radius:3px">ANBEFALET</div>'
+            f'background:{FARVE["gron"]};padding:4px 7px;border-radius:3px">'
+            f'{escape(badge_tekst)}</div>'
             if anbefalet else ""
         )
         delta = ""

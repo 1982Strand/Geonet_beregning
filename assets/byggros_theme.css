@@ -408,24 +408,7 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
 .boks-adv { background:var(--bg-warn-bg); border-left:3px solid var(--bg-warn); }
 .boks-tip { background:var(--bg-canvas); border-left:3px solid var(--bg-ink-45); }
 
-/* --- 14.5 Ustabiliseret basistykkelse — banner ---------------------------
-   Afløses af ui.resultatkort(). */
-.uarm-banner{
-  background:var(--bg-surface); border:1px solid var(--bg-line);
-  border-left:3px solid var(--bg-ink-45);
-  border-radius:5px; padding:.9rem 1.15rem; margin-bottom:1rem;
-}
-.uarm-banner-label{
-  font:600 9.5px/1 'IBM Plex Mono',monospace;
-  letter-spacing:.1em; text-transform:uppercase; color:var(--bg-ink-45);
-}
-.uarm-banner-tal{
-  font:600 2.1rem/1.1 'IBM Plex Mono',monospace;
-  font-variant-numeric:tabular-nums; letter-spacing:-.02em;
-  color:var(--bg-ink); margin-top:.2rem;
-}
-
-/* --- 14.6 Sidebar-navigation --------------------------------------------
+/* --- 14.5 Sidebar-navigation --------------------------------------------
    Menupunkterne tegnes som st.button, grupperet under versale
    gruppeoverskrifter (st.caption). Firmalogoet står i topbjælken. */
 .sb-divider{ border:none; border-top:1px solid var(--bg-line-soft); margin:.5rem 0; }
