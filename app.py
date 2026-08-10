@@ -1029,11 +1029,14 @@ def input_trafikklasse(key_prefix: str, eu: float) -> dict:
                 klasse_txt = f"{tal['kl_lav']} (Eo = {tal['eo_lav']} MPa)"
             # Ligger Eu mellem to kørte VejDim-punkter, er tykkelseskravet —
             # og dermed Eo_ækv — interpoleret i log(Eu). Det markeres, så
-            # tallet ikke forveksles med en aflæst kørsel.
+            # tallet ikke forveksles med en aflæst kørsel. Markeringen er en
+            # mellemregning og vises alene, når kontakten er slået til.
             trin = _eo_aekv_trin_tal(valgt_t, eu, _aktiv_t_basis_table())
             interp_txt = (
-                ' <span style="font-weight:400;color:#555">(interpoleret)</span>'
-                if trin and not trin["trin1"]["direkte"] else ""
+                f' <span style="font-weight:400;color:{ui.FARVE["ink_45"]}">'
+                f'(interpoleret)</span>'
+                if ui.mellemregninger() and trin and not trin["trin1"]["direkte"]
+                else ""
             )
             raekker = [
                 ("Tykkelseskrav til ubundet opbygning fra VejDim",
@@ -1505,7 +1508,10 @@ def _render_trafik_kobling_forklaring(
     )
 
     if t_krav is None:
-        with st.expander("Kobling imellem trafikklasse og designdiagram"):
+        with st.expander(
+        "Kobling imellem trafikklasse og designdiagram",
+        expanded=ui.mellemregninger(),
+    ):
             st.caption(
                 "Designdiagrammet indeholder ingen ustabiliseret kurve i dette "
                 "punkt, og sammenkædningen kan derfor ikke vises trinvist."
@@ -1640,7 +1646,10 @@ def _render_trafik_kobling_forklaring(
         + '</div>'
     )
     # --- Layout: forklaring til venstre, designdiagram til højre --------
-    with st.expander("Kobling imellem trafikklasse og designdiagram"):
+    with st.expander(
+        "Kobling imellem trafikklasse og designdiagram",
+        expanded=ui.mellemregninger(),
+    ):
         kol_forklaring, kol_figur = st.columns([1.05, 0.95], gap="large")
         with kol_forklaring:
             st.markdown(prosa)
@@ -1978,7 +1987,7 @@ def _rt_reduktion_linjer(
         linjer.append(
             '<span class="rt-dlinje rt-graa">'
             '<span>Basisreduktion</span>'
-            f'<span class="val">{basis_delta:+d} mm</span></span>'
+            f'<span class="val">{_delta_mm(basis_delta)}</span></span>'
         )
 
     if t_basis is not None:
@@ -1996,12 +2005,11 @@ def _rt_reduktion_linjer(
             )
         else:
             net_mm = round(t_basis * kor)
-            net_pct = round(kor * 100)
             css = "rt-spar" if net_mm <= 0 else "rt-pen"
             linjer.append(
                 f'<span class="rt-dlinje {css}">'
-                f'<span>Net-korrektion ({net_pct:+d} %) ift. ref.</span>'
-                f'<span class="val">{net_mm:+d} mm</span></span>'
+                f'<span>Net-korrektion ({_pct_fortegn(kor)}) ift. ref.</span>'
+                f'<span class="val">{_delta_mm(net_mm)}</span></span>'
             )
 
     # φ-korrektion — kun når φ afviger fra basis (Brugerdefineret). Placeres
@@ -2009,13 +2017,11 @@ def _rt_reduktion_linjer(
     if t_basis is not None and abs(phi - PHI_BASIS) > 0.05:
         phi_kor = K_PHI * (phi - PHI_BASIS)
         phi_mm = round(t_basis * phi_kor)
-        phi_pct = round(phi_kor * 100)
-        phi_str = f"{phi:.1f}".replace(".", ",")
         css = "rt-spar" if phi_mm <= 0 else "rt-pen"
         linjer.append(
             f'<span class="rt-dlinje {css}">'
-            f'<span>φ-korrektion ({phi_pct:+d} %, φ = {phi_str}°)</span>'
-            f'<span class="val">{phi_mm:+d} mm</span></span>'
+            f'<span>φ-korrektion ({_pct_fortegn(phi_kor)}, φ = {ui.grader(phi)})</span>'
+            f'<span class="val">{_delta_mm(phi_mm)}</span></span>'
         )
 
     if t_uarm is not None:
@@ -2023,7 +2029,7 @@ def _rt_reduktion_linjer(
         linjer.append(
             '<span class="rt-dlinje rt-graa rt-samlet">'
             '<span>Samlet reduktion</span>'
-            f'<span class="val">{samlet_delta:+d} mm</span></span>'
+            f'<span class="val">{_delta_mm(samlet_delta)}</span></span>'
         )
 
     return "".join(linjer)
@@ -2053,7 +2059,7 @@ def _rt_baerelag_linjer(p: dict | None) -> str:
         f'<span class="val">{ui.mm(t_uarm)}</span></span>'
         '<span class="rt-dlinje rt-graa">'
         '<span>Reduktion i alt</span>'
-        f'<span class="val">{reduktion_delta:+d} mm</span></span>'
+        f'<span class="val">{_delta_mm(reduktion_delta)}</span></span>'
         '<span class="rt-dlinje rt-graa rt-samlet">'
         '<span>Stabiliseret bærelagstykkelse</span>'
         f'<span class="val">{ui.mm(t_arm)}</span></span>'
@@ -2066,6 +2072,9 @@ def _rt_optimal_tip_html(p: dict | None, phi: float = PHI_BASIS) -> str:
     Returnerer "" hvis produktet ikke er et interval-produkt (intet
     t_armeret_mm_min). Genbruger _rt_reduktion_linjer med de optimale værdier.
     Reduktionsprocenten måles mod rå t_uarmeret_mm (som resten af tabellen).
+
+    Opdelingen på basis-, net- og φ-korrektion er en mellemregning; er
+    kontakten slået fra, vises alene den optimale tykkelse, jf. afsnit 8.
     """
     if not _rt_gyldig(p) or p.get("t_armeret_mm_min") is None:
         return ""
@@ -2073,15 +2082,18 @@ def _rt_optimal_tip_html(p: dict | None, phi: float = PHI_BASIS) -> str:
     t_opt = p["t_armeret_mm_min"]
     t_uarm = p.get("t_uarmeret_mm")
     pct_opt = (t_uarm - t_opt) / t_uarm if t_uarm else None
-    linjer = _rt_reduktion_linjer(p, False, kor=kor_opt, t_arm=t_opt, phi=phi)
-    pct_txt = f" (−{ui.procent(pct_opt * 100)})" if pct_opt is not None else ""
+    linjer = (
+        _rt_reduktion_linjer(p, False, kor=kor_opt, t_arm=t_opt, phi=phi)
+        if ui.mellemregninger() else ""
+    )
+    pct_txt = f" ({ui.procent(pct_opt * 100)} tyndere)" if pct_opt is not None else ""
     return (
         '<span class="rt-tip-box">'
         '<span class="rt-tip-titel">Under optimale forhold</span>'
         f'{linjer}'
         '<span class="rt-dlinje rt-tip-resultat">'
         '<span>Optimal bærelagstykkelse</span>'
-        f'<span class="val">{int(round(t_opt))} mm{pct_txt}</span></span>'
+        f'<span class="val">{ui.mm(t_opt)}{pct_txt}</span></span>'
         '</span>'
     )
 
@@ -2116,6 +2128,9 @@ def _rt_detalje_html(
     Produkt/klasse); under 'Bærelagstykkelse, x lag geonet' vises det simple
     regnestykke (ustabiliseret → reduktion → stabiliseret); under
     'Reduktion i alt, x lag' vises reduktionen opdelt på basis/net/φ.
+
+    Opdelingen på basis-, net- og φ-korrektion er en mellemregning og vises
+    alene, når kontakten i topbjælken er slået til, jf. afsnit 8.
     """
     if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
         return (
@@ -2148,6 +2163,16 @@ def _rt_detalje_html(
 
     bt1 = _rt_baerelag_linjer(p1)
     bt2 = _rt_baerelag_linjer(p2)
+
+    if not ui.mellemregninger():
+        return (
+            '<div class="rt-detalje">'
+            f'{krav_html}'
+            f'<div class="rt-d-bt rt-d-bt1">{bt1}</div>'
+            f'<div class="rt-d-bt rt-d-bt2">{bt2}</div>'
+            '</div>'
+        )
+
     bd1 = _rt_reduktion_linjer(p1, is_ref, phi=phi)
     bd2 = _rt_reduktion_linjer(p2, is_ref, phi=phi)
 
@@ -3191,7 +3216,8 @@ def _render_oversigt_expanders(
                 )
 
     # --- Sådan beregnes det -----------------------------------------------
-    with st.expander("Sådan beregnes det"):
+    # Afsnittet åbnes af sig selv, når mellemregningerne er slået til.
+    with st.expander("Sådan beregnes det", expanded=ui.mellemregninger()):
         if eo_interpoleret:
             st.info(
                 "**Trafikklasse-tilstand:** trin 2 nedenfor (kravet til Eo) "
@@ -3651,6 +3677,15 @@ def _pct_fortegn(v: float) -> str:
     return f"{v * 100:+.0f} %".replace("-", "−")
 
 
+def _delta_mm(v: float) -> str:
+    """Difference i mm med fortegn og typografisk minus: '−375 mm', '+49 mm'.
+
+    ui.fortegn() angiver intet plus. I reduktionsopdelingen er fortegnet
+    meningsbærende, idet net-korrektionen kan både spare og koste tykkelse.
+    """
+    return f"{v:+,.0f} mm".replace(",", ".").replace("-", "−")
+
+
 def _phi_tabel_data(materialer: list[dict]) -> dict:
     """Byg data til φ-beregningstabel — genbruges af opsummeringsboks og trin 3.
 
@@ -3711,7 +3746,14 @@ def _vis_phi_opsummeringsboks(
     materialer: list[dict],
     phi_final: float,
 ) -> None:
-    """Opsummeringsboks under lag-inputs: tabel, formel, φ-korrektion, mm-ækvivalent."""
+    """Opsummeringsboks under lag-inputs: tabel, formel, φ-korrektion, mm-ækvivalent.
+
+    Boksen er en mellemregning og vises alene, når kontakten i topbjælken er
+    slået til. Den vægtede φ fremgår fortsat af inputkolonnen.
+    """
+    if not ui.mellemregninger():
+        return
+
     data = _phi_tabel_data(materialer)
     phi_weighted = data["phi_weighted"]
     overskrevet = abs(phi_final - phi_weighted) > 0.005

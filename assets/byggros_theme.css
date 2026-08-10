@@ -194,6 +194,29 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   [data-testid="column"]{ min-width:100% !important; }
 }
 
+/* ---- 15. Topbjælke ------------------------------------------------------
+   Bjælken trækkes ud til skærmens kant med negative margener og bærer
+   kontakten for mellemregninger. Højden holdes af indholdet, så kontakten
+   ikke klippes. */
+.st-key-bg_topbar{
+  background:var(--bg-ink);
+  margin:-1.75rem -3rem 1.5rem;
+  padding:.55rem 1.5rem;
+}
+.st-key-bg_topbar [data-testid="stVerticalBlock"]{ gap:0; }
+.st-key-bg_topbar [data-testid="stElementContainer"]{ margin:0; }
+
+/* Kontakten står lyst på den mørke bund og højrestilles. */
+.st-key-bg_topbar [data-testid="stToggle"]{ justify-content:flex-end; }
+.st-key-bg_topbar [data-testid="stWidgetLabel"] p,
+.st-key-bg_topbar label p{
+  color:rgba(255,255,255,.82) !important;
+  font-size:11.5px !important; font-weight:500;
+}
+.st-key-bg_topbar [data-testid="stTooltipHoverTarget"] svg{
+  fill:rgba(255,255,255,.5);
+}
+
 /* ---- 14. Flyttet fra app.py ---------------------------------------------
    Regler, som stylesheetets øvrige afsnit ikke dækker: den foldbare
    resultattabel, Cv→Eu-opslagstabellen og enkelte placeringsjusteringer.

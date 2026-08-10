@@ -105,27 +105,53 @@ def opsaet_side(titel: str = "Geonet-dimensionering · BG Byggros") -> None:
 
 # -------------------------------------------------------------------- topbar
 
-def topbjaelke(version: str = "v0.4", vis_mellemregninger: bool = False) -> None:
-    """Mørk bjælke med logo, værktøjsnavn og de to globale handlinger.
+def topbjaelke(version: str = "v0.4") -> None:
+    """Mørk bjælke med logo, værktøjsnavn og kontakten for mellemregninger.
 
-    Selve kontakten og knappen tegnes som Streamlit-widgets ovenpå bjælken via
-    columns, så de kan aflæses i session_state; her tegnes rammen.
+    Kontakten tegnes som en Streamlit-widget inde i bjælken, så dens tilstand
+    kan aflæses i st.session_state["vis_mellemregninger"]. Bjælken gentages på
+    alle sider, så kontakten gælder hele værktøjet.
+
+    Logoet ligger på en hvid brik: firmamærket er mørkt og ville forsvinde
+    direkte på bjælken.
     """
-    st.html(
-        f"""
-        <div style="display:flex;align-items:center;gap:14px;padding:0 20px;
-                    height:52px;background:{FARVE['ink']};margin:-1.75rem -1rem 1.25rem;">
-          <div style="background:#fff;border-radius:3px;padding:6px 9px;display:flex;align-items:center">
-            <img src="app/static/byggros_logo.png" alt="BG Byggros"
-                 style="height:15px;width:auto;display:block">
-          </div>
-          <div style="width:1px;height:20px;background:rgba(255,255,255,.22)"></div>
-          <div style="font:600 13px/1 {SANS};color:#fff;letter-spacing:-.01em">Geonet-dimensionering</div>
-          <div style="font:500 10px/1 {MONO};color:rgba(255,255,255,.5);
-                      padding:3px 6px;border:1px solid rgba(255,255,255,.2);border-radius:3px">{escape(version)}</div>
-        </div>
-        """
-    )
+    if "vis_mellemregninger" not in st.session_state:
+        st.session_state.vis_mellemregninger = False
+
+    with st.container(key="bg_topbar"):
+        navn_kol, handling_kol = st.columns([3, 2], vertical_alignment="center")
+        with navn_kol:
+            st.html(
+                f"""
+                <div style="display:flex;align-items:center;gap:14px">
+                  <div style="background:#fff;border-radius:3px;padding:5px 8px;
+                              display:flex;align-items:center">
+                    <img src="app/static/byggros_logo.png" alt="BG Byggros"
+                         style="height:15px;width:auto;display:block">
+                  </div>
+                  <div style="width:1px;height:20px;background:rgba(255,255,255,.22)"></div>
+                  <div style="font:600 13px/1 {SANS};color:#fff;letter-spacing:-.01em">
+                    Geonet-dimensionering</div>
+                  <div style="font:500 10px/1 {MONO};color:rgba(255,255,255,.5);
+                              padding:3px 6px;border:1px solid rgba(255,255,255,.2);
+                              border-radius:3px">{escape(version)}</div>
+                </div>
+                """
+            )
+        with handling_kol:
+            st.toggle(
+                "Vis mellemregninger",
+                key="vis_mellemregninger",
+                help=(
+                    "Viser φ-beregningen, korrektionsleddene og "
+                    "interpolationsdetaljerne bag de viste tykkelser."
+                ),
+            )
+
+
+def mellemregninger() -> bool:
+    """Er kontakten for mellemregninger slået til."""
+    return bool(st.session_state.get("vis_mellemregninger", False))
 
 
 def etiket(tekst: str) -> None:
