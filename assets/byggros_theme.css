@@ -393,7 +393,6 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
 /* --- 14.3 Placering af diagrammer ---------------------------------------
    margin-top = højde (+ ned / − op), margin-left = side (+ højre / − venstre). */
 .st-key-kl_diagram_wrap{ margin-top:-4rem; margin-left:10rem; }
-.st-key-bd_dd_wrap{ margin-top:0; margin-left:-10rem; max-width:100%; }
 .diagram-række-afstand{ height:1.8rem; }
 
 /* --- 14.4 Beskedbokse ----------------------------------------------------

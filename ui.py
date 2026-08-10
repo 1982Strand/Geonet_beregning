@@ -261,21 +261,41 @@ def snit(
     reference_mm: float | None = None,
     hoejde_px: int = 230,
     jord_px: int = 26,
+    geonet_navn: str | None = None,
 ) -> None:
     """Tegner opbygningssnittene i HTML — erstatter matplotlib-figuren.
 
     kolonner: liste af
-        {"titel", "lag": [(navn, mm, "baerelag"|"bundsikring")],
+        {"titel",
+         "lag": [(navn, mm, "baerelag"|"bundsikring")],
          "geonet_mm": [kote målt fra underbundens overkant],
-         "total_mm", "status": (tekst, "gron"|"kritisk"|"neutral")}
+         "total_mm": float | None,
+         "status": (tekst, "gron"|"advarsel"|"kritisk"|"neutral"),
+         "underbund_tekst": str,
+         "tom_tekst": str,          # vises i stedet for søjlen, når total_mm er None
+         "best_case_mm": float,     # optimal tykkelse ved interval-produkter
+         "advarsler": [str]}        # fx krav til geonettets placering
+
+    Lagnavnene er frie; "slags" styrer alene fladens farve. Der kan indgå op
+    til tre materialelag, og navnene tages fra materialevalget.
+
     reference_mm: den indtastede tykkelse; tegnes som fælles stiplet linje.
                   None i Standard-tilstand, hvor der ikke indtastes lag.
+    geonet_navn:  navnet, geonet-linjerne benævnes med i signaturen.
 
     Alle kolonner deler skala, så søjlerne kan sammenlignes direkte.
     """
-    maks = max(k["total_mm"] for k in kolonner)
+    hoejder = [k["total_mm"] for k in kolonner if k.get("total_mm")]
+    hoejder += [k["best_case_mm"] for k in kolonner if k.get("best_case_mm")]
     if reference_mm:
-        maks = max(maks, reference_mm)
+        hoejder.append(reference_mm)
+    if not hoejder:
+        st.html(
+            f'<div style="font:400 11.5px/1.55 {SANS};color:{FARVE["ink_45"]};'
+            f'padding:14px 0">Ingen gyldige beregninger at vise.</div>'
+        )
+        return
+    maks = max(hoejder)
     skala = (hoejde_px - jord_px - 8) / maks          # px pr. mm
 
     def px(v: float) -> float:
@@ -292,7 +312,7 @@ def snit(
     celler = []
     for i, k in enumerate(kolonner):
         lag_html = []
-        for navn, tykkelse, slags in k["lag"]:
+        for navn, tykkelse, slags in k.get("lag", []):
             flade = FARVE["baerelag"] if slags == "baerelag" else FARVE["bundsikring"]
             kant = FARVE["baerelag_kant"] if slags == "baerelag" else FARVE["bundsikring_kant"]
             h = px(tykkelse)
@@ -321,11 +341,60 @@ def snit(
 
         status_tekst, status_slags = k.get("status", ("", "neutral"))
         status_farve = {
-            "gron": FARVE["gron"], "kritisk": FARVE["kritisk"],
+            "gron": FARVE["gron"],
+            "advarsel": FARVE["advarsel"],
+            "kritisk": FARVE["kritisk"],
         }.get(status_slags, FARVE["ink_45"])
         vaegt = 600 if status_slags == "gron" else 500
 
         titel_farve = FARVE["gron"] if status_slags == "gron" else FARVE["ink"]
+
+        # Den optimale tykkelse ved produkter med korrektionsinterval markeres
+        # med en fin stiplet linje inde i søjlen, så spændet kan aflæses.
+        best = k.get("best_case_mm")
+        best_html = ""
+        if best and k.get("total_mm") and best < k["total_mm"]:
+            best_html = (
+                f'<div style="position:absolute;left:50%;transform:translateX(-50%);'
+                f'bottom:{px(best) + jord_px}px;width:104px;'
+                f'border-top:1px dashed {FARVE["gron"]}"></div>'
+                f'<div style="position:absolute;left:calc(50% + 58px);'
+                f'bottom:{px(best) + jord_px - 5}px;font:500 9px/1 {MONO};'
+                f'color:{FARVE["gron"]};white-space:nowrap">{mm(best)} optimalt</div>'
+            )
+
+        # Søjler uden gyldig beregning tegnes som en tom, stiplet ramme.
+        if not k.get("total_mm"):
+            soejle_html = (
+                f'<div style="position:absolute;left:50%;transform:translateX(-50%);'
+                f'bottom:{jord_px}px;width:104px;height:{hoejde_px - jord_px - 8}px;'
+                f'border:1px dashed {FARVE["linje"]};display:flex;'
+                f'align-items:center;justify-content:center;padding:6px;'
+                f'box-sizing:border-box">'
+                f'<div style="font:400 9.5px/1.35 {SANS};color:{FARVE["ink_45"]};'
+                f'text-align:center">{escape(k.get("tom_tekst", "Ikke defineret"))}</div>'
+                f'</div>'
+            )
+            maal_html = ""
+        else:
+            soejle_html = (
+                f'<div style="position:absolute;left:50%;transform:translateX(-50%);'
+                f'bottom:{jord_px}px;width:104px;display:flex;flex-direction:column">'
+                f'{"".join(lag_html)}</div>'
+                f'{geonet_html}{best_html}'
+            )
+            maal_html = (
+                f'<div style="position:absolute;left:calc(50% + 58px);'
+                f'bottom:{px(k["total_mm"]) / 2 + jord_px}px;'
+                f'font:600 10.5px/1 {MONO};color:{FARVE["ink"]};white-space:nowrap">'
+                f'{mm(k["total_mm"])}</div>'
+            )
+
+        advarsel_html = "".join(
+            f'<div style="font:400 9.5px/1.4 {SANS};color:{FARVE["advarsel"]};'
+            f'text-align:center;max-width:150px">{escape(a)}</div>'
+            for a in k.get("advarsler", [])
+        )
 
         celler.append(
             f"""
@@ -333,31 +402,39 @@ def snit(
               <div style="font:600 11.5px/1 {SANS};color:{titel_farve}">{escape(k['titel'])}</div>
               <div style="position:relative;width:100%;height:{hoejde_px}px">
                 {ref_linje}
-                <div style="position:absolute;left:50%;transform:translateX(-50%);
-                            bottom:{jord_px}px;width:104px;display:flex;flex-direction:column">
-                  {''.join(lag_html)}
-                </div>
-                {geonet_html}
+                {soejle_html}
                 <div style="position:absolute;left:0;right:0;bottom:0;height:{jord_px}px;
                             background:repeating-linear-gradient(45deg,{FARVE['jord']},{FARVE['jord']} 3px,#7A6449 3px,#7A6449 6px);
                             display:flex;align-items:center;justify-content:center">{jord_tekst}</div>
-                <div style="position:absolute;left:calc(50% + 58px);
-                            bottom:{px(k['total_mm']) / 2 + jord_px}px;
-                            font:600 10.5px/1 {MONO};color:{FARVE['ink']};white-space:nowrap">
-                  {mm(k['total_mm'])}</div>
+                {maal_html}
               </div>
-              <div style="font:{vaegt} 10.5px/1 {SANS};color:{status_farve}">{escape(status_tekst)}</div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+                <div style="font:{vaegt} 10.5px/1 {SANS};color:{status_farve}">{escape(status_tekst)}</div>
+                {advarsel_html}
+              </div>
             </div>
             """
         )
+
+    har_geonet = any(k.get("geonet_mm") for k in kolonner)
+    har_best = any(k.get("best_case_mm") for k in kolonner)
 
     signatur = [
         (f'<div style="width:16px;height:9px;background:{FARVE["baerelag"]};'
          f'border:1px solid {FARVE["baerelag_kant"]}"></div>', "Bærelag"),
         (f'<div style="width:16px;height:9px;background:{FARVE["bundsikring"]};'
          f'border:1px solid {FARVE["bundsikring_kant"]}"></div>', "Bundsikring"),
-        (f'<div style="width:16px;height:2px;background:{FARVE["kritisk"]}"></div>', "Geonet"),
     ]
+    if har_geonet:
+        signatur.append(
+            (f'<div style="width:16px;height:2px;background:{FARVE["kritisk"]}"></div>',
+             geonet_navn or "Geonet")
+        )
+    if har_best:
+        signatur.append(
+            (f'<div style="width:16px;border-top:1px dashed {FARVE["gron"]}"></div>',
+             "Optimal korrektion")
+        )
     if reference_mm:
         signatur.append(
             (f'<div style="width:16px;border-top:1.5px dashed {FARVE["ink_25"]}"></div>',

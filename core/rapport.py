@@ -166,6 +166,21 @@ BYGGROS_FOOTER = (
 
 # ---------------------------------------------------------------------------
 # 2. Visualisering (matplotlib)
+#
+# TODO — dobbelt tegneimplementering, jf. UI-omlægningen v0.4.
+#
+# Figurerne i dette afsnit tegnede tidligere både rapportens billeder og
+# skærmens. Skærmen tegner nu selv:
+#
+#     render_opbygning_png()                 → ui.snit()
+#     render_personligt_designdiagram_png()  → _plotly_designdiagram() i app.py
+#
+# Funktionerne her bruges alene af rapporten, som endnu ikke er gennemgået.
+# Ændres udseende eller talformat ét sted, skal det andet følge med, indtil
+# rapporten er lagt om og den ene af de to implementeringer kan udgå.
+#
+# Snit-dataklassen er fortsat fælles: app.py bygger snit_liste og oversætter
+# den til ui.snit()'s kolonner i _snit_til_kolonner().
 # ---------------------------------------------------------------------------
 
 @dataclass

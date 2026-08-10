@@ -1713,7 +1713,7 @@ def _render_trafik_kobling_forklaring(
                     dpi=120,
                     figsize=(7.4, 6.6),
                 )
-                st.image(png, use_container_width=True)
+                st.image(png, width="stretch")
                 # Kurverne er tegnet φ-korrigerede (rapport.py: f_uarm =
                 # 1 + phi_kor), så billedteksten skal nævne den korrigerede
                 # tykkelse — ikke diagrammets basisværdi.
@@ -2702,6 +2702,243 @@ def _status_for_krav(
     return f"{ui.mm(-diff_kons)} for lidt", "danger"
 
 
+def _plotly_designdiagram(
+    *,
+    eu: float,
+    eo: float,
+    phi: float,
+    geonet: dict | None,
+    t_indtastet_mm: float | None,
+    t_basis_table: dict,
+    t_1_lag_mm: float | None = None,
+    t_2_lag_mm: float | None = None,
+    t_1_lag_best_mm: float | None = None,
+    t_2_lag_best_mm: float | None = None,
+):
+    """Designdiagrammet som Plotly-figur til skærmen.
+
+    Kurverne dannes af designdiagram-tabellen ved det viste Eo og korrigeres
+    med φ og nettets korrektion, jf. afsnittet "Sådan dannes diagrammet".
+    Produkter med korrektionsinterval tegnes med et tonet bånd mellem den
+    optimale og den konservative kurve.
+
+    Der gøres opmærksom på, at rapporten fortsat tegnes af matplotlib i
+    core/rapport.py; ændres udtrykket her, bør rapporten følge med.
+    """
+    import plotly.graph_objects as go
+
+    phi_kor = K_PHI * (phi - PHI_BASIS)
+    net_kor_kons = float(geonet.get("korrektion", 0.0)) if geonet else 0.0
+    interval = geonet.get("korrektion_interval") if geonet else None
+    net_kor_best = float(interval[0]) if interval else None
+    geonet_navn = (geonet or {}).get("navn", "Referencenet")
+
+    eu_vals = sorted(t_basis_table.keys())
+
+    def _kurve(lag_mode: str, faktor: float) -> tuple[list[float], list[float]]:
+        xs: list[float] = []
+        ys: list[float] = []
+        for eu_v in eu_vals:
+            v = _slaa_op_interp(eu_v, eo, lag_mode, t_basis_table=t_basis_table)
+            if v is not None:
+                xs.append(v * faktor)      # cm
+                ys.append(eu_v)
+        return xs, ys
+
+    FARVE_UARM = "#8B7355"
+    FARVE_1LAG = "#15211A"
+    FARVE_2LAG = "#1B6B34"
+    HOVER = "%{x:.0f} cm · Eu %{y:.1f} MN/m²<extra>%{fullData.name}</extra>"
+
+    fig = go.Figure()
+
+    xs_u, ys_u = _kurve("uarmeret", 1.0 + phi_kor)
+    if xs_u:
+        fig.add_trace(go.Scatter(
+            x=xs_u, y=ys_u, mode="lines", name="Uden geonet",
+            line=dict(color=FARVE_UARM, width=2),
+            hovertemplate=HOVER,
+        ))
+
+    def _armeret(lag_mode: str, farve: str, navn: str) -> None:
+        xs_k, ys_k = _kurve(lag_mode, 1.0 + phi_kor + net_kor_kons)
+        if not xs_k:
+            return
+        if net_kor_best is not None:
+            xs_b, ys_b = _kurve(lag_mode, 1.0 + phi_kor + net_kor_best)
+            if xs_b and ys_b == ys_k:
+                # Båndet mellem den optimale og den konservative kurve.
+                fig.add_trace(go.Scatter(
+                    x=xs_b + xs_k[::-1], y=ys_b + ys_k[::-1],
+                    fill="toself", fillcolor=farve, opacity=0.10,
+                    line=dict(width=0), hoverinfo="skip",
+                    showlegend=False,
+                ))
+                fig.add_trace(go.Scatter(
+                    x=xs_b, y=ys_b, mode="lines",
+                    name=f"{navn} (optimal)",
+                    line=dict(color=farve, width=1.2, dash="dot"),
+                    hovertemplate=HOVER,
+                ))
+        fig.add_trace(go.Scatter(
+            x=xs_k, y=ys_k, mode="lines", name=navn,
+            line=dict(color=farve, width=2),
+            hovertemplate=HOVER,
+        ))
+
+    _armeret("1_lag", FARVE_1LAG, f"1 lag · {geonet_navn}")
+    _armeret("2_lag", FARVE_2LAG, f"2 lag · {geonet_navn}")
+
+    for t_mm, farve, navn in (
+        (t_1_lag_mm, FARVE_1LAG, "1 lag geonet"),
+        (t_2_lag_mm, FARVE_2LAG, "2 lag geonet"),
+    ):
+        if t_mm:
+            fig.add_trace(go.Scatter(
+                x=[t_mm / 10.0], y=[eu], mode="markers",
+                name=navn, showlegend=False,
+                marker=dict(color=farve, size=9,
+                            line=dict(color="#FFFFFF", width=1.5)),
+                hovertemplate=HOVER,
+            ))
+    for t_mm, farve, navn in (
+        (t_1_lag_best_mm, FARVE_1LAG, "1 lag geonet (optimal)"),
+        (t_2_lag_best_mm, FARVE_2LAG, "2 lag geonet (optimal)"),
+    ):
+        if t_mm:
+            fig.add_trace(go.Scatter(
+                x=[t_mm / 10.0], y=[eu], mode="markers",
+                name=navn, showlegend=False,
+                marker=dict(color="rgba(0,0,0,0)", size=10,
+                            line=dict(color=farve, width=2)),
+                hovertemplate=HOVER,
+            ))
+
+    # Den indtastede opbygning med lodret hjælpelinje, så aflæsningen på
+    # x-aksen kan foretages direkte.
+    if t_indtastet_mm and t_indtastet_mm > 0:
+        t_cm = t_indtastet_mm / 10.0
+        fig.add_shape(
+            type="line", x0=t_cm, x1=t_cm, y0=0, y1=eu,
+            line=dict(color=ui.FARVE["kritisk"], width=1, dash="dash"),
+        )
+        fig.add_trace(go.Scatter(
+            x=[t_cm], y=[eu], mode="markers",
+            name="Indtastet opbygning", showlegend=False,
+            marker=dict(color=ui.FARVE["kritisk"], size=11,
+                        line=dict(color="#FFFFFF", width=1.5)),
+            hovertemplate=HOVER,
+        ))
+        fig.add_annotation(
+            x=t_cm, y=0, yanchor="bottom", yshift=6,
+            text=f"Indtastet {t_cm:.0f} cm", showarrow=False,
+            font=dict(size=10, color="#FFFFFF"),
+            bgcolor=ui.FARVE["kritisk"], borderpad=3,
+        )
+
+    alle_x = list(xs_u)
+    for t in (t_indtastet_mm, t_1_lag_mm, t_2_lag_mm,
+              t_1_lag_best_mm, t_2_lag_best_mm):
+        if t:
+            alle_x.append(t / 10.0)
+    x_maks = max(alle_x) * 1.08 if alle_x else 160
+
+    akse = dict(
+        gridcolor="#EDEFED", zeroline=False,
+        linecolor=ui.FARVE["linje"], ticks="outside",
+        tickcolor=ui.FARVE["linje"], tickfont=dict(size=10),
+    )
+    fig.update_layout(
+        height=380,
+        margin=dict(l=60, r=20, t=10, b=60),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="IBM Plex Sans, system-ui, sans-serif", size=11,
+                  color=ui.FARVE["ink"]),
+        hovermode="closest",
+        legend=dict(orientation="h", yanchor="bottom", y=1.0,
+                    xanchor="right", x=1, font=dict(size=10),
+                    bgcolor="rgba(0,0,0,0)"),
+        xaxis=dict(title="Bærelagstykkelse [cm]", range=[0, max(x_maks, 80)], **akse),
+        yaxis=dict(
+            title="Bundmodul Eu [MN/m²]",
+            range=[0, max(max(eu_vals) * 1.05, eu * 1.2, 50)],
+            **akse,
+        ),
+    )
+    return fig
+
+
+def _lagtype_for_navn(navn: str, materialer: list[dict] | None) -> str:
+    """Fladefarve for et lag: bærelag eller bundsikring.
+
+    Lagtypen slås op i de indtastede materialer. Findes navnet ikke — søjlen
+    kan være dannet af en skaleret fordeling — afgøres den ud fra navnet.
+    """
+    for m in materialer or []:
+        if m.get("navn") == navn:
+            return (
+                "bundsikring"
+                if str(m.get("lagtype", "")).lower().startswith("bunds")
+                else "baerelag"
+            )
+    return "bundsikring" if "bundsikring" in navn.lower() else "baerelag"
+
+
+def _snit_til_kolonner(
+    snit_liste: list, materialer: list[dict] | None, eu: float,
+) -> list[dict]:
+    """Oversætter snit-listen til ui.snit()'s kolonner.
+
+    Snit-objekterne er den fælles beskrivelse, som også rapportens
+    matplotlib-figur tegnes af. Her omsættes de til opmærkningens format:
+
+    - geonet_y_fracs er brøkdele målt fra bærelagets overkant; ui.snit()
+      forventer koter over underbunden, altså total × (1 − frac).
+    - En søjle uden materialefordeling tegnes som ét ubundet lag.
+    - Statusfarverne følger stylesheetets tre statusfarver.
+    """
+    farve = {"danger": "kritisk", "warning": "advarsel", "success": "gron"}
+    kolonner: list[dict] = []
+    for s in snit_liste:
+        total = s.t_baerelag_mm
+        if s.sub_lag:
+            lag = [
+                (
+                    l["navn"],
+                    l["tykkelse_mm"],
+                    _lagtype_for_navn(l["navn"], materialer),
+                )
+                for l in s.sub_lag
+            ]
+        elif total:
+            lag = [("Ubunden opbygning", total, "baerelag")]
+        else:
+            lag = []
+
+        advarsler = list((s.placement or {}).get("placeringsadvarsler") or [])
+
+        kolonner.append({
+            "titel": s.titel,
+            "lag": lag,
+            "geonet_mm": [
+                total * (1 - frac) for frac in (s.geonet_y_fracs or []) if total
+            ],
+            "total_mm": total,
+            "tom_tekst": s.ikke_defineret_tekst or "Ikke defineret",
+            "best_case_mm": s.best_case_mm,
+            "advarsler": advarsler,
+            "status": (
+                s.status_tekst or "",
+                farve.get(s.status_farve or "", "neutral"),
+            ),
+        })
+
+    if kolonner:
+        kolonner[0]["underbund_tekst"] = f"UNDERBUND · Eu {eu:.0f} MPa"
+    return kolonner
+
+
 def _render_opbygningsvisualisering(
     eu: float,
     ref_1: dict | None,
@@ -2933,10 +3170,22 @@ def _render_opbygningsvisualisering(
         phi_vaegtet=har_indtastet,
     ))
 
-    png = rapport_mod.render_opbygning_png(
-        eu=eu, snit_liste=snit_liste, geonet_label=geonet_label,
+    ui.snit(
+        _snit_til_kolonner(snit_liste, materialer, eu),
+        reference_mm=t_indtastet_for_linje,
+        geonet_navn=geonet_label,
     )
-    _vis_opbygning_med_info(png)
+    st.caption(
+        "Snit i samme lodrette skala"
+        + (
+            f" · stiplet linje = indtastet {ui.mm(t_indtastet_for_linje)}"
+            if t_indtastet_for_linje else ""
+        )
+        + (
+            "" if har_indtastet
+            else " · uden materialelag vises kravet som ét ubundet lag"
+        )
+    )
 
 
 def _render_oversigt_expanders(
@@ -4490,10 +4739,7 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                 )
 
                 if geonet and geonet.get("navn"):
-                    from core import rapport as rapport_mod
-                    t_indtastet_total = sum(
-                        float(m.get("tykkelse_mm") or 0) for m in materialer
-                    ) or None
+                    t_indtastet_total = _indtastet_total(materialer)
                     produkt_1 = (
                         bedste_1["produkter"][0]
                         if bedste_1 and bedste_1.get("produkter") else None
@@ -4503,60 +4749,62 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                         if bedste_2 and bedste_2.get("produkter") else None
                     )
 
-                    st.markdown("")
-                    kol_chk, _kol_gap, kol_dd, _kol_spacer = st.columns(
-                        [2, 0.5, 4, 1], gap="small", vertical_alignment="center",
+                    st.markdown(
+                        f'<div class="bg-resultat-hoved" style="margin-top:1.5rem">'
+                        f'<h2>Designdiagram</h2>'
+                        f'<span>Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · '
+                        f'φ = {ui.grader(phi)}</span></div>',
+                        unsafe_allow_html=True,
                     )
-                    with kol_chk:
-                        vis_din_prik = st.checkbox(
-                            "Vis 'Indtastet opbygning'",
-                            value=True,
-                            key="bd_dd_vis_din_prik",
-                            disabled=t_indtastet_total is None,
-                        )
-                        vis_lag_prikker = st.checkbox(
-                            "Vis endepunkter for 1/2 lag geonet",
-                            value=True,
-                            key="bd_dd_vis_lag_prikker",
-                        )
 
-                    with kol_dd, st.container(key="bd_dd_wrap"):
-                        try:
-                            designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
-                                eu=float(eu),
-                                eo=float(eo),
-                                klasse=valgt_klasse,
-                                grundlag_label=(
-                                    f"Trafikklasse {grundlag['t_klasse']}"
-                                    if grundlag["type"] == "trafikklasse" else None
-                                ),
-                                phi=float(phi),
-                                geonet=geonet,
-                                t_indtastet_mm=t_indtastet_total if vis_din_prik else None,
-                                t_basis_table=t_basis_table,
-                                t_1_lag_mm=(
-                                    produkt_1.get("t_armeret_mm")
-                                    if produkt_1 and vis_lag_prikker else None
-                                ),
-                                t_2_lag_mm=(
-                                    produkt_2.get("t_armeret_mm")
-                                    if produkt_2 and vis_lag_prikker else None
-                                ),
-                                t_1_lag_best_mm=(
-                                    produkt_1.get("t_armeret_mm_min")
-                                    if produkt_1 and vis_lag_prikker else None
-                                ),
-                                t_2_lag_best_mm=(
-                                    produkt_2.get("t_armeret_mm_min")
-                                    if produkt_2 and vis_lag_prikker else None
-                                ),
-                            )
-                            _vis_designdiagram_med_info(
-                                designdiagram_png,
-                                use_container_width=True,
-                            )
-                        except Exception as e:
-                            st.warning(f"Kunne ikke generere designdiagram: {e}")
+                    vis_din_prik = st.checkbox(
+                        "Vis indtastet opbygning",
+                        value=True,
+                        key="bd_dd_vis_din_prik",
+                        disabled=t_indtastet_total is None,
+                    )
+                    vis_lag_prikker = st.checkbox(
+                        "Vis endepunkter for 1 og 2 lag geonet",
+                        value=True,
+                        key="bd_dd_vis_lag_prikker",
+                    )
+
+                    try:
+                        fig = _plotly_designdiagram(
+                            eu=float(eu),
+                            eo=float(eo),
+                            phi=float(phi),
+                            geonet=geonet,
+                            t_indtastet_mm=(
+                                t_indtastet_total if vis_din_prik else None
+                            ),
+                            t_basis_table=t_basis_table,
+                            t_1_lag_mm=(
+                                produkt_1.get("t_armeret_mm")
+                                if produkt_1 and vis_lag_prikker else None
+                            ),
+                            t_2_lag_mm=(
+                                produkt_2.get("t_armeret_mm")
+                                if produkt_2 and vis_lag_prikker else None
+                            ),
+                            t_1_lag_best_mm=(
+                                produkt_1.get("t_armeret_mm_min")
+                                if produkt_1 and vis_lag_prikker else None
+                            ),
+                            t_2_lag_best_mm=(
+                                produkt_2.get("t_armeret_mm_min")
+                                if produkt_2 and vis_lag_prikker else None
+                            ),
+                        )
+                        st.plotly_chart(
+                            fig,
+                            width="stretch",
+                            config={"displayModeBar": False},
+                        )
+                        with st.expander("Sådan dannes diagrammet"):
+                            st.markdown(INFO_DESIGNDIAGRAM_MD)
+                    except Exception as e:
+                        st.warning(f"Kunne ikke generere designdiagram: {e}")
 
         if kobling_args is not None:
             _render_trafik_kobling_forklaring(*kobling_args)
