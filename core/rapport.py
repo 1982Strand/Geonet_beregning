@@ -316,7 +316,7 @@ def render_opbygning_png(
             fontweight="bold", color="white",
         )
         ax.text(
-            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.18, f"Eu = {eu:g} MPa",
+            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.18, f"Eu = {eu:.0f} MPa",
             ha="center", va="center", fontsize=9, fontweight="bold", color="white",
         )
 
@@ -700,7 +700,7 @@ def render_personligt_designdiagram_png(
         ax.plot(
             [t_cm], [eu], "o", color="#D32F2F", markersize=10,
             zorder=11, markeredgecolor="white", markeredgewidth=1.5,
-            label=f"Indtastet opbygning ({t_cm:.0f} cm, Eu = {eu:g} MPa)",
+            label=f"Indtastet opbygning ({t_cm:.0f} cm, Eu = {eu:.0f} MPa)",
         )
 
     # Endepunkts-prikker — viser krævet tykkelse ved bruger-Eu for hver lag-mode.
@@ -759,10 +759,13 @@ def render_personligt_designdiagram_png(
     if grundlag_label:
         klasse_str = grundlag_label
     else:
-        klasse_str = f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:g}"
+        klasse_str = f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:.0f}"
     phi_str = f"{phi:.1f}".replace(".", ",")
+    # E-moduler angives uden decimaler. Ved dimensionering efter trafikklasse er
+    # Eo den tilbageberegnede ækvivalente værdi, og de decimaler, beregningen
+    # efterlader, angiver en nøjagtighed, grundlaget ikke har.
     ax.set_title(
-        f"Designdiagram for Eo = {eo:g} MN/m² · {klasse_str}\n"
+        f"Designdiagram for Eo = {eo:.0f} MN/m² · {klasse_str}\n"
         f"Materialer: φ = {phi_str}° · Geonet: {geonet_navn}",
         fontsize=11,
     )
@@ -814,7 +817,7 @@ def formatér_dimensioneringsgrundlag(
     er_trafikklasse = dim.get("grundlag_type") == "trafikklasse"
 
     rows: list[tuple[str, str]] = [
-        ("Underbundens E-modul (Eu)", f"{dim.get('eu', 0):g} MPa"),
+        ("Underbundens E-modul (Eu)", f"{dim.get('eu', 0):.0f} MPa"),
     ]
     if er_trafikklasse:
         # Trafikklasse-grundlag: vis T-klasse + den ækvivalente Eo (Eo_ækv),
