@@ -1,7 +1,6 @@
 .venv/
 venv/
 __pycache__/
-.streamlit/config.toml
 *.pyc
 .claude
 

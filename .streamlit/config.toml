@@ -1,0 +1,38 @@
+# .streamlit/config.toml — BG Byggros Geonet-beregning
+
+[theme]
+base = "light"
+primaryColor = "#1B6B34"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F6F4"
+textColor = "#15211A"
+linkColor = "#1B6B34"
+font = "IBM Plex Sans"
+headingFont = "IBM Plex Sans"
+codeFont = "IBM Plex Mono"
+borderColor = "#DCE1DD"
+showWidgetBorder = true
+baseRadius = "small"
+
+[theme.sidebar]
+backgroundColor = "#FBFCFB"
+secondaryBackgroundColor = "#EDF4EE"
+borderColor = "#DCE1DD"
+
+[client]
+toolbarMode = "minimal"
+# Slås fra ved udrulning. Under gennemgangen af omlægningen vises fejldetaljer,
+# så en fejl kan rapporteres i stedet for at fremstå som et tomt skærmbillede.
+showErrorDetails = true
+
+[server]
+headless = true
+# Kræves for at topbjælken kan hente static/byggros_logo.png.
+enableStaticServing = true
+
+[global]
+# Input-nøglerne i session_state "røres" øverst i hvert run for at bevare
+# Dimensionerings-felterne på tværs af sidenavigation. Det udløser ellers en
+# (harmløs) engangs-advarsel om, at en widget både har en default-værdi og en
+# session_state-værdi — den slås fra her.
+disableWidgetStateDuplicationWarning = true

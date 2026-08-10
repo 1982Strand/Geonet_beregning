@@ -5,19 +5,18 @@ Start med: streamlit run app.py
 """
 
 # ---------------------------------------------------------------------------
-# set_page_config SKAL stå som allerførste Streamlit-kald
+# Sideopsætningen SKAL stå som allerførste Streamlit-kald. ui.opsaet_side()
+# kalder selv st.set_page_config() og indlæser assets/byggros_theme.css.
 # ---------------------------------------------------------------------------
 import streamlit as st
 
-st.set_page_config(
-    page_title="Geonet Dimensionering",
-    page_icon="🏗️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+import ui
+
+ui.opsaet_side()
+ui.topbjaelke(version="v0.4")
 
 # ---------------------------------------------------------------------------
-# Imports — efter set_page_config
+# Imports — efter sideopsætningen
 # ---------------------------------------------------------------------------
 import json
 import hashlib
@@ -693,12 +692,16 @@ if "vejdim_koersel_raekker" not in st.session_state:
 
 # ---------------------------------------------------------------------------
 # Farvepalette
+#
+# Værdierne hentes fra ui.FARVE, så app.py, ui.py og assets/byggros_theme.css
+# deler én palet. Navnene er bevaret, fordi de bruges i inline-opmærkning
+# gennem hele filen.
 # ---------------------------------------------------------------------------
-GRØN   = "#2E7D32"
-GUL    = "#F9A825"
-RØD    = "#C62828"
-GRÅ    = "#9E9E9E"
-LYS_GR = "#E8F5E9"
+GRØN   = ui.FARVE["gron"]
+GUL    = ui.FARVE["advarsel"]
+RØD    = ui.FARVE["kritisk"]
+GRÅ    = ui.FARVE["ink_25"]
+LYS_GR = ui.FARVE["gron_050"]
 
 # ---------------------------------------------------------------------------
 # Serie-sortering til standard-oversigten
@@ -709,301 +712,11 @@ REFERENCE_KLASSER = [3, 4, 5, 6]
 
 # ---------------------------------------------------------------------------
 # CSS
+#
+# Farver, skrifter, knapper, tabeller og bredde fastlægges i
+# assets/byggros_theme.css, som indlæses af ui.opsaet_side(). De regler,
+# stylesheetet ikke dækker, står i dets afsnit 14.
 # ---------------------------------------------------------------------------
-st.markdown(f"""
-<style>
-  .block-container {{ padding-top: 1.5rem; padding-bottom: 2rem; }}
-
-  .res-kort {{
-    background: {LYS_GR};
-    border-left: 5px solid {GRØN};
-    border-radius: 6px;
-    padding: 1rem 1.25rem 0.75rem;
-    margin-bottom: 0.5rem;
-  }}
-  .res-tal   {{ font-size: 2.2rem; font-weight: 700; color: {GRØN}; line-height: 1.1; }}
-  .res-label {{ font-size: 0.78rem; color: #555; text-transform: uppercase;
-                letter-spacing: 0.06em; margin-bottom: 0.15rem; }}
-  .uarm-tal  {{ font-size: 1.5rem; font-weight: 600; color: {GRÅ}; }}
-
-  .boks-fejl  {{ background:#FFEBEE; border-left:4px solid {RØD};
-                 border-radius:4px; padding:0.6rem 1rem;
-                 margin:0.25rem 0; font-size:0.88rem; }}
-  .boks-adv   {{ background:#FFF8E1; border-left:4px solid {GUL};
-                 border-radius:4px; padding:0.6rem 1rem;
-                 margin:0.25rem 0; font-size:0.88rem; }}
-  .boks-tip   {{ background:#E3F2FD; border-left:4px solid #1565C0;
-                 border-radius:4px; padding:0.6rem 1rem;
-                 margin:0.25rem 0; font-size:0.88rem; }}
-
-  .uarm-banner {{
-    background:#F5F5F5; border-left:5px solid {GRÅ};
-    border-radius:6px; padding:0.75rem 1.25rem; margin-bottom:1rem;
-  }}
-  .uarm-banner-label {{ font-size:0.78rem; color:#555; text-transform:uppercase;
-                        letter-spacing:0.06em; }}
-  .uarm-banner-tal   {{ font-size:1.8rem; font-weight:700; color:{GRÅ};
-                        line-height:1.1; }}
-
-  .gruppe-kort {{
-    background:{LYS_GR}; border-left:5px solid {GRØN};
-    border-radius:6px; padding:0.75rem 1rem; margin:0.4rem 0 0.6rem 0;
-  }}
-  .gruppe-kort-rest {{
-    background:#FAFAFA; border-left:4px solid {GRÅ};
-    border-radius:6px; padding:0.6rem 0.9rem; margin:0.3rem 0;
-  }}
-  .gruppe-tal {{ font-size:1.6rem; font-weight:700; color:{GRØN}; line-height:1.1; }}
-  .gruppe-tal-rest {{ font-size:1.15rem; font-weight:600; color:#444; line-height:1.1; }}
-  /* Parentes-sekundærtekst: bruges ved interval-produkter til at vise
-     den optimale (best-case) værdi som mindre/gråtone supplerende info. */
-  .parentes {{ font-size:0.85em; color:#666; font-weight:400; }}
-  .gruppe-red {{ font-size:0.9rem; color:#555; margin-left:0.5rem; }}
-  .gruppe-red-linje {{ font-size:0.95rem; font-weight:600; color:{GRØN};
-                       margin-top:0.05rem; margin-bottom:0.1rem; }}
-  .gruppe-serie {{ font-size:0.88rem; margin-top:0.35rem; }}
-  .gruppe-serie b {{ color:#333; }}
-
-  /* Net-korrektionslinjer i gruppe-kort */
-  .net-kor-spar {{
-    font-size:0.82rem; font-weight:500; color:#1565C0;
-    margin:0.1rem 0 0.05rem;
-  }}
-  .net-kor-pen {{
-    font-size:0.82rem; font-weight:500; color:#BF360C;
-    margin:0.1rem 0 0.05rem;
-  }}
-  .net-kor-ref {{
-    font-size:0.80rem; color:{GRÅ}; font-style:italic;
-    margin:0.1rem 0 0.05rem;
-  }}
-  .bd-basis {{
-    font-size:0.82rem; font-weight:500; color:#555;
-    margin:0.1rem 0 0.05rem;
-  }}
-  .klasse-ok {{
-    font-size:0.80rem; color:#555;
-    margin:0.25rem 0 0.05rem;
-  }}
-  .klasse-advarsel {{
-    font-size:0.80rem; font-weight:500; color:#BF360C;
-    margin:0.25rem 0 0.05rem;
-  }}
-  .bedste-label {{
-    font-size:0.7rem; color:{GRØN}; text-transform:uppercase;
-    letter-spacing:0.08em; font-weight:600; margin:0.1rem 0 0.1rem 0;
-  }}
-  .kol-titel {{
-    font-size:0.95rem; font-weight:700; color:#333;
-    border-bottom:2px solid {GRØN}; padding-bottom:0.25rem;
-    margin-bottom:0.4rem;
-  }}
-
-  /* Resultat-tabel (Standard-tilstand) */
-  .rt-tabel {{ margin:0.2rem 0 0.3rem; }}
-  .rt-head, .rt-sum, .rt-detalje {{
-    display:grid;
-    grid-template-columns:1.5fr 0.8fr 1.1fr 1.2fr 1.1fr 1.2fr;
-    gap:0.5rem;
-  }}
-  .rt-head, .rt-sum {{ align-items:center; }}
-  .rt-head {{
-    font-size:0.72rem; color:#666; text-transform:uppercase;
-    letter-spacing:0.03em; padding:0 0.6rem 0.35rem;
-    border-bottom:2px solid {GRØN};
-  }}
-  .rt-head .num {{ text-align:right; }}
-  .rt-raekke {{ border-bottom:0.5px solid #EEE;
-                border-left:3px solid transparent; }}
-  .rt-sum {{
-    cursor:pointer; padding:0.5rem 0.6rem; font-size:0.92rem;
-    list-style:none;
-  }}
-  .rt-sum::-webkit-details-marker {{ display:none; }}
-  .rt-sum::marker {{ content:""; }}
-  .rt-sum .num {{ text-align:right; font-variant-numeric:tabular-nums; }}
-  .rt-tom {{ color:{GRÅ}; }}
-  /* Optimal-tooltip for interval-produkter (NX750/NX850) */
-  .rt-tip {{ position:relative; cursor:help;
-             border-bottom:1px dotted {GRØN}; }}
-  .rt-tip-mark {{ font-size:0.6rem; color:{GRØN}; vertical-align:super;
-                  margin-left:2px; font-weight:500; letter-spacing:0.02em; }}
-  .rt-tip-box {{ display:none; position:absolute; right:0; top:1.6em;
-                 width:300px; background:#fff; border:0.5px solid #CCC;
-                 border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,0.13);
-                 padding:0.5rem 0.7rem; z-index:60; text-align:left;
-                 font-weight:400; white-space:normal; }}
-  .rt-tip:hover .rt-tip-box {{ display:block; }}
-  .rt-tip-box .rt-dlinje {{ font-size:0.8rem; }}
-  .rt-tip-titel {{ display:block; font-size:0.7rem; color:{GRØN};
-                   text-transform:uppercase; letter-spacing:0.04em;
-                   font-weight:500; margin-bottom:0.25rem; }}
-  .rt-tip-resultat {{ border-top:0.5px solid #C0DD97; margin-top:0.15rem;
-                      padding-top:0.2rem; font-weight:500; color:#173404; }}
-  .rt-chev {{ display:inline-block; width:0.9em; color:{GRÅ};
-              transition:transform 0.12s; }}
-  details[open] > .rt-sum .rt-chev {{ transform:rotate(90deg); }}
-  .rt-navn {{ font-weight:500; }}
-  .rt-ref {{ background:#F5F5F5; }}
-  .rt-ref .rt-navn {{ font-style:italic; color:#555; font-weight:400; }}
-  /* Grøn markering følger den udfoldede række (ikke det tyndeste produkt). */
-  .rt-raekke[open] {{ background:{LYS_GR}; border-left-color:{GRØN}; }}
-  .rt-raekke[open] .rt-navn {{ color:#173404; }}
-  .rt-badge {{ font-size:0.78rem; padding:1px 9px; border-radius:12px;
-               white-space:nowrap; }}
-  .rt-badge-ok {{ background:{LYS_GR}; color:#173404; }}
-  .rt-badge-advarsel {{ background:#FBE9E7; color:#BF360C; }}
-  .rt-detalje {{ align-items:start; padding:0.3rem 0.6rem 0.7rem; }}
-  .rt-d-krav {{ grid-column:1 / 3; min-width:0; }}
-  .rt-d-krav .rt-dlinje {{ grid-template-columns:230px auto; }}
-  .rt-d-krav .rt-dlinje .val {{ text-align:left; padding-left:0; }}
-  .rt-d-bd, .rt-d-bt {{
-    min-width:0; display:flex; flex-direction:column; align-self:stretch;
-  }}
-  .rt-d-bd1 {{ grid-column:4 / 5; }}
-  .rt-d-bd2 {{ grid-column:6 / 7; }}
-  .rt-d-bd .rt-dlinje {{ font-size:0.8rem; }}
-  .rt-d-bt1 {{ grid-column:3 / 4; }}
-  .rt-d-bt2 {{ grid-column:5 / 6; }}
-  .rt-d-bt .rt-dlinje {{ font-size:0.8rem; }}
-  /* Skub 'Samlet reduktion' / 'Stabiliseret bærelagstykkelse' til bunds i
-     hver boks, så de grønne skillelinjer flugter på tværs af kolonnerne,
-     uanset at antallet af linjer ovenover varierer (φ-korrektion vises fx
-     kun ved brugerdefineret φ, og net-korrektions-teksten kan ombrydes). */
-  .rt-d-bd .rt-samlet, .rt-d-bt .rt-samlet {{ margin-top:auto; }}
-  .rt-bd-tom {{ color:{GRÅ}; font-size:0.85rem; text-align:right; }}
-  .rt-detalje-tom {{ color:#666; font-size:0.85rem;
-                     padding:0.3rem 0.6rem 0.7rem; }}
-  .rt-dlinje {{ display:grid; grid-template-columns:1fr auto;
-                font-size:0.85rem; padding:0.12rem 0; }}
-  .rt-dlinje .val {{ text-align:right; font-variant-numeric:tabular-nums;
-                     padding-left:0.75rem; }}
-  .rt-graa {{ color:#666; }}
-  .rt-spar {{ color:{GRØN}; }}
-  .rt-pen {{ color:#BF360C; }}
-  .rt-samlet {{ border-top:0.5px solid #C0DD97; margin-top:0.15rem;
-                padding-top:0.2rem; font-weight:500; }}
-  .rt-krav-titel {{ font-size:0.7rem; color:#888; text-transform:uppercase;
-                    letter-spacing:0.04em; margin-bottom:0.15rem; }}
-  .rt-caption {{ font-size:0.78rem; color:#666; margin-top:0.5rem; }}
-
-  .cv-eu-wrap {{ margin-top:-10.6rem; }}
-  .st-key-kl_diagram_wrap {{ margin-top:-4rem; margin-left:10rem; }}
-  /* Personligt designdiagram (Resultater → Vælg specifikt produkt).
-     margin-top = højde (+ ned / − op), margin-left = side (+ højre / − venstre),
-     max-width = størrelse (fx 80% gør det mindre). */
-  .st-key-bd_dd_wrap {{ margin-top:0rem; margin-left:-10rem; max-width:100%; }}
-  .cv-eu-tabel {{ width:100%; max-width:360px; border-collapse:collapse;
-                  font-size:0.85rem; margin-top:0.3rem; }}
-  .cv-eu-tabel th {{ text-align:left; font-size:0.72rem; color:{GRÅ};
-                     text-transform:uppercase; letter-spacing:0.03em;
-                     padding:0.25rem 0.5rem; border-bottom:1px solid #DDD; }}
-  .cv-eu-tabel td {{ padding:0.25rem 0.5rem; border-bottom:1px solid #EEE; }}
-  .cv-row-aktiv td {{ background:{LYS_GR}; font-weight:600; color:#173404; }}
-  .cv-eu-note {{ font-size:0.78rem; color:#666; margin-top:0.4rem; }}
-
-  .diagram-række-afstand {{
-    height: 1.8rem;
-  }}
-
-  hr {{ margin: 0.75rem 0; }}
-
-  /* ─── Sidebar ─────────────────────────────────────────── */
-  [data-testid="stSidebar"] {{
-    background: #FFFFFF;
-    border-right: 1px solid #E0E0E0;
-  }}
-  [data-testid="stSidebarContent"] > div:first-child {{
-    padding-top: 0 !important;
-  }}
-
-  .sb-header {{
-    padding: 1.4rem 1.1rem 1.1rem;
-    border-bottom: 1px solid #EEEEEE;
-    margin-bottom: 0.6rem;
-  }}
-  .sb-logo {{
-    font-size: 1.6rem;
-    line-height: 1;
-    margin-bottom: 0.3rem;
-  }}
-  .sb-title {{
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: #222;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-  }}
-  .sb-sub {{
-    font-size: 0.7rem;
-    color: #AAA;
-    margin-top: 0.15rem;
-  }}
-
-  [data-testid="stSidebar"] .stButton > button {{
-    width: 100% !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    border: none !important;
-    border-left: 3px solid transparent !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    color: #555 !important;
-    padding: 0.6rem 1.1rem !important;
-    font-size: 0.88rem !important;
-    font-weight: 500 !important;
-    box-shadow: none !important;
-    letter-spacing: 0.01em;
-  }}
-  /* Menupunkterne skal begynde samme sted. Knapindholdet venstrestilles, og
-     ikonet gives fast bredde, så navnene flugter uanset emojiens bredde. */
-  [data-testid="stSidebar"] .stButton > button > div {{
-    width: 100% !important;
-    justify-content: flex-start !important;
-    gap: 0.55rem !important;
-  }}
-  [data-testid="stSidebar"] .stButton > button [data-testid="stMarkdownContainer"] {{
-    text-align: left !important;
-  }}
-  [data-testid="stSidebar"] .stButton > button [data-testid="stIconEmoji"] {{
-    flex: 0 0 1.3rem !important;
-    width: 1.3rem !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    font-size: 0.95rem !important;
-    margin: 0 !important;
-  }}
-  [data-testid="stSidebar"] .stButton > button:hover {{
-    background: #F5F5F5 !important;
-    color: {GRØN} !important;
-    border-left-color: #C8E6C9 !important;
-  }}
-  [data-testid="stSidebar"] .stButton > button[kind="primaryFormSubmit"],
-  [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
-    background: {LYS_GR} !important;
-    color: {GRØN} !important;
-    border-left: 3px solid {GRØN} !important;
-    font-weight: 700 !important;
-  }}
-
-  .sb-divider {{
-    border: none;
-    border-top: 1px solid #EEEEEE;
-    margin: 0.5rem 0;
-  }}
-
-  .sb-footer {{
-    padding: 0 1.1rem;
-    font-size: 0.7rem;
-    color: #BBB;
-    display: flex;
-    justify-content: space-between;
-    margin-top: 1rem;
-  }}
-
-</style>
-""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Hjælpefunktioner til bokse

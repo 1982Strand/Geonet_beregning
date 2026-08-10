@@ -17,6 +17,7 @@ Kræver .streamlit/config.toml og assets/byggros_theme.css fra samme udrulning.
 
 from __future__ import annotations
 
+import re
 from html import escape
 from pathlib import Path
 
@@ -36,6 +37,7 @@ FARVE = {
     "gron": "#1B6B34",
     "gron_mork": "#12401F",
     "gron_lys": "#F7FBF8",
+    "gron_050": "#EDF4EE",
     "advarsel": "#A8600B",
     "advarsel_flade": "#FCF5E8",
     "kritisk": "#B42318",
@@ -95,6 +97,9 @@ def opsaet_side(titel: str = "Geonet-dimensionering · BG Byggros") -> None:
         initial_sidebar_state="expanded",
     )
     css = (ROD / "assets" / "byggros_theme.css").read_text(encoding="utf-8")
+    # En afsluttende style-tag i stylesheetet — også inde i en kommentar —
+    # ville afbryde style-elementet, så resten af filen blev vist som tekst.
+    css = re.sub(r"</\s*style", "<\\/style", css, flags=re.I)
     st.html(f"<style>{css}</style>")
 
 
