@@ -372,20 +372,25 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
 }
 
 /* --- 14.6 Sidebar-navigation --------------------------------------------
-   Menupunkterne tegnes som st.button. Afløses af den grupperede navigation. */
-.sb-header{
-  padding:1.4rem 1.1rem 1.1rem;
-  border-bottom:1px solid var(--bg-line-soft); margin-bottom:.6rem;
-}
-.sb-title{
-  font:600 9.5px/1 'IBM Plex Mono',monospace;
-  letter-spacing:.1em; text-transform:uppercase; color:var(--bg-ink);
-}
-.sb-sub{ font-size:10.5px; color:var(--bg-ink-25); margin-top:.25rem; }
+   Menupunkterne tegnes som st.button, grupperet under versale
+   gruppeoverskrifter (st.caption). Firmalogoet står i topbjælken. */
 .sb-divider{ border:none; border-top:1px solid var(--bg-line-soft); margin:.5rem 0; }
 .sb-footer{
-  padding:0 1.1rem; font-size:10.5px; color:var(--bg-ink-25);
-  display:flex; justify-content:space-between; margin-top:1rem;
+  padding:0 1.1rem; font-size:10.5px; line-height:1.5;
+  color:var(--bg-ink-25); margin-top:1rem;
+}
+
+/* Gruppeoverskrifterne. Den første må ikke skubbes ned af afsnit 3's
+   luft over de efterfølgende. */
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"]:first-child,
+[data-testid="stSidebar"] .stCaption:first-child{ padding-top:.25rem; }
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{
+  font:600 9.5px/1 'IBM Plex Mono',monospace;
+  letter-spacing:.1em; text-transform:uppercase;
+  color:var(--bg-ink-25); margin:0;
+}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{
+  padding:1.1rem 0 .35rem;
 }
 
 [data-testid="stSidebar"] .stButton > button{

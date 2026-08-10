@@ -4278,50 +4278,54 @@ def render_brugerdefineret() -> None:
 # Sidebar navigation
 # ===========================================================================
 
-_NAV_ITEMS = [
-    (":material/straighten:",   "Dimensionering",           "dimensionering"),
-    (":material/layers:",       "Materialer",               "materialer"),
-    (":material/grid_on:",      "Geonet-database",          "geonet_database"),
-    (":material/show_chart:",   "Designdiagrammer",         "designdiagrammer"),
-    (":material/table_chart:",  "Trafikklasse-korrelation", "trafikklasse_korrelation"),
-    (":material/description:",  "Rapport",                  "rapport"),
+# Navigationen er delt i to blokke. Beregning er arbejdsgangen fra
+# dimensionering til færdig rapport; Opslag er de tabelværker, beregningen
+# hviler på, og som redigeres uafhængigt af den enkelte sag.
+_NAV_GRUPPER = [
+    ("Beregning", [
+        (":material/straighten:",   "Dimensionering",           "dimensionering"),
+        (":material/description:",  "Rapport",                  "rapport"),
+    ]),
+    ("Opslag", [
+        (":material/layers:",       "Materialer",               "materialer"),
+        (":material/grid_on:",      "Geonet-database",          "geonet_database"),
+        (":material/show_chart:",   "Designdiagrammer",         "designdiagrammer"),
+        (":material/table_chart:",  "Trafikklasse-korrelation", "trafikklasse_korrelation"),
+    ]),
 ]
+
+_NAV_ITEMS = [punkt for _, punkter in _NAV_GRUPPER for punkt in punkter]
 
 
 def render_sidebar() -> str:
-    """Render venstre navigationsmenu. Returnerer nøglen for den aktive side."""
+    """Render venstre navigationsmenu. Returnerer nøglen for den aktive side.
+
+    Firmalogoet står i topbjælken og gentages ikke her.
+    """
     if "aktiv_side" not in st.session_state:
         st.session_state.aktiv_side = "dimensionering"
 
     with st.sidebar:
-        st.image(str(ui.ROD / "static" / "byggros_logo.png"), width=150)
-        st.markdown(
-            '<div class="sb-header" style="padding-top:.4rem">'
-            '<div class="sb-title">Beregningsværktøj</div>'
-            '<div class="sb-sub">BG Byggros · v0.4</div>'
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        for gruppe, punkter in _NAV_GRUPPER:
+            st.caption(gruppe)
+            for ikon, navn, nøgle in punkter:
+                aktiv = st.session_state.aktiv_side == nøgle
+                # Ikonet sættes som selvstændigt element (ikke som en del af
+                # teksten), så det kan gives fast bredde i CSS og navnene flugter.
+                if st.button(
+                    navn,
+                    icon=ikon,
+                    key=f"_nav_{nøgle}",
+                    width="stretch",
+                    type="primary" if aktiv else "secondary",
+                ):
+                    st.session_state.aktiv_side = nøgle
+                    st.rerun()
 
-        for ikon, navn, nøgle in _NAV_ITEMS:
-            aktiv = st.session_state.aktiv_side == nøgle
-            # Ikonet sættes som selvstændigt element (ikke som en del af
-            # teksten), så det kan gives fast bredde i CSS og navnene flugter.
-            if st.button(
-                navn,
-                icon=ikon,
-                key=f"_nav_{nøgle}",
-                width="stretch",
-                type="primary" if aktiv else "secondary",
-            ):
-                st.session_state.aktiv_side = nøgle
-                st.rerun()
-
-        # Fyld-spacer + footer nederst
         st.markdown(
             '<hr class="sb-divider" style="margin-top:1.5rem">'
             '<div class="sb-footer">'
-            "<span>© BG Byggros</span>"
+            "<span>BG Byggros A/S<br>Beregningsværktøj v0.4</span>"
             "</div>",
             unsafe_allow_html=True,
         )
