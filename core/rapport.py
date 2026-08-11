@@ -165,22 +165,20 @@ BYGGROS_FOOTER = (
 
 
 # ---------------------------------------------------------------------------
-# 2. Visualisering (matplotlib)
+# 2. Visualisering
 #
-# TODO — dobbelt tegneimplementering, jf. UI-omlægningen v0.4.
+# Designdiagrammet tegnes ét sted — core/diagram.py — og bruges af både skærm
+# og rapport: app.py viser figuren med st.plotly_chart, og
+# render_personligt_designdiagram_png() eksporterer den samme figur til PNG.
+# De to visninger kan derfor ikke divergere.
 #
-# Figurerne i dette afsnit tegnede tidligere både rapportens billeder og
-# skærmens. Skærmen tegner nu selv:
+# TODO — opbygningssnittene tegnes fortsat to steder:
 #
-#     render_opbygning_png()                 → ui.snit()
-#     render_personligt_designdiagram_png()  → _plotly_designdiagram() i app.py
+#     render_opbygning_png()  (matplotlib, herunder)  →  ui.snit() (skærmen)
 #
-# Funktionerne her bruges alene af rapporten, som endnu ikke er gennemgået.
-# Ændres udseende eller talformat ét sted, skal det andet følge med, indtil
-# rapporten er lagt om og den ene af de to implementeringer kan udgå.
-#
-# Snit-dataklassen er fortsat fælles: app.py bygger snit_liste og oversætter
-# den til ui.snit()'s kolonner i _snit_til_kolonner().
+# Snit-dataklassen er fælles: app.py bygger snit_liste og oversætter den til
+# ui.snit()'s kolonner i _snit_til_kolonner(). Ændres udseende eller talformat
+# ét sted, skal det andet følge med, indtil snittene ligeledes er samlet.
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -287,14 +285,14 @@ def render_opbygning_png(
 
     # Højde-enheder i "data": baerelag rækker fra y=0 (bund af bærelag)
     # op til t_max + lidt luft. Underbund tegnes som blok under y=0.
-    underbund_h = 100.0  # mm "højde" på underbundsblokken (kun visuelt)
+    underbund_h = 140.0  # mm "højde" på underbundsblokken (kun visuelt)
     top_y = t_max * 1.05
     bund_y = -underbund_h
 
     # Koordinater i akse-data (x går fra 0 til 1)
-    BOX_X1, BOX_X2 = 0.26, 0.78
-    LABEL_X = BOX_X1 - 0.035  # total-label højrestilles lige udenfor boksen
-    GEONET_LBL_X = 0.80       # geonet-navn til højre for boksen
+    BOX_X1, BOX_X2 = 0.34, 0.66
+    LABEL_X = BOX_X2 + 0.04   # tykkelseslabel til højre for søjlen
+    GEONET_LBL_X = BOX_X2 + 0.04
 
     def _wrap_material_label(navn: str, tykkelse_mm: float, label_h_mm: float) -> tuple[str, float]:
         navn = str(navn or "Lag").strip()
@@ -321,7 +319,7 @@ def render_opbygning_png(
     def _draw_underbund(ax):
         ub = Rectangle(
             (BOX_X1, bund_y), BOX_X2 - BOX_X1, underbund_h,
-            facecolor="#A89377", edgecolor="#5C4A33", linewidth=1,
+            facecolor="#8B7355", edgecolor="#7A6449", linewidth=1,
             hatch="///",
         )
         ax.add_patch(ub)
@@ -331,7 +329,7 @@ def render_opbygning_png(
             fontweight="bold", color="white",
         )
         ax.text(
-            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.18, f"Eu = {eu:.0f} MPa",
+            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.18, f"{eu:.0f} MPa",
             ha="center", va="center", fontsize=9, fontweight="bold", color="white",
         )
 
@@ -351,7 +349,7 @@ def render_opbygning_png(
             besked = s.ikke_defineret_tekst or "Ikke defineret"
             rect = Rectangle(
                 (BOX_X1, 0), BOX_X2 - BOX_X1, t_max,
-                facecolor="#F5F5F5", edgecolor="#BDBDBD",
+                facecolor="#EDEFED", edgecolor="#C4CAC5",
                 linewidth=1, linestyle="--",
             )
             ax.add_patch(rect)
@@ -370,7 +368,7 @@ def render_opbygning_png(
         if s.er_krav_soejle:
             baerelag = Rectangle(
                 (BOX_X1, 0), BOX_X2 - BOX_X1, t,
-                facecolor="#E0E0E0", edgecolor="#666", linewidth=1,
+                facecolor="#D9DDD9", edgecolor="#B9C0BA", linewidth=1,
                 hatch=None,
             )
             ax.add_patch(baerelag)
@@ -403,19 +401,12 @@ def render_opbygning_png(
                     y, BOX_X1 - 0.015, BOX_X2 + 0.015,
                     colors="#D32F2F", linestyles=(0, (4, 2)), linewidth=1.8,
                 )
-                ax.annotate(
-                    geonet_label,
-                    xy=(GEONET_LBL_X + 0.03, y),
-                    ha="left", va="center",
-                    fontsize=8, color="#D32F2F",
-                )
             # Total-label: konservativ stor + (optimal) parentes nedenunder
             ax.annotate(
-                f"↕ {t:.0f} mm",
+                f"{t:.0f} mm",
                 xy=(LABEL_X, t / 2),
-                ha="right", va="center",
+                ha="left", va="center",
                 fontsize=9.5, fontweight="bold", color="#333",
-                bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.5},
             )
             if s.best_case_mm is not None and round(s.best_case_mm) < round(t):
                 ax.annotate(
@@ -457,7 +448,7 @@ def render_opbygning_png(
         # Bærelagets ydre rektangel (ingen hatch — sub-lag tegnes ovenpå)
         baerelag = Rectangle(
             (BOX_X1, 0), BOX_X2 - BOX_X1, t,
-            facecolor="#E8E8E8", edgecolor="#666", linewidth=1,
+            facecolor="#D9DDD9", edgecolor="#B9C0BA", linewidth=1,
         )
         ax.add_patch(baerelag)
 
@@ -473,7 +464,7 @@ def render_opbygning_png(
             if sum_lag > 0:
                 # Skift fyldfarve pr. lag for visuel adskillelse — ingen hatch,
                 # så materialeteksten forbliver læsbar.
-                lag_farver = ["#ECECEC", "#E0E0E0"]
+                lag_farver = ["#D9DDD9", "#EDEFED"]
                 y_top = t
                 for idx, lag in enumerate(sl):
                     h = lag["tykkelse_mm"]
@@ -524,20 +515,13 @@ def render_opbygning_png(
                 y, BOX_X1 - 0.015, BOX_X2 + 0.015,
                 colors="#D32F2F", linestyles=(0, (4, 2)), linewidth=1.8,
             )
-            ax.annotate(
-                geonet_label,
-                xy=(GEONET_LBL_X + 0.03, y),
-                ha="left", va="center",
-                fontsize=8, color="#D32F2F",
-            )
 
         # Total-tykkelse label UDENFOR boksen, til venstre
         ax.annotate(
-            f"↕ {t:.0f} mm",
+            f"{t:.0f} mm",
             xy=(LABEL_X, t / 2),
-            ha="right", va="center",
+            ha="left", va="center",
             fontsize=9.5, fontweight="bold", color="#333",
-            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.5},
         )
         # Interval-produkter (NX750/NX850): vis best-case under hovedtallet.
         # Kun sat fra dim-preview — rapporten lader feltet være None.
@@ -587,11 +571,27 @@ def render_opbygning_png(
         for ax in axes:
             ax.hlines(
                 t_indtastet, 0.02, 0.98,
-                colors="#1565C0", linestyles=(0, (5, 3)), linewidth=1.4,
+                colors="#9AA39C", linestyles=(0, (5, 3)), linewidth=1.4,
                 zorder=10,
             )
 
-    fig.tight_layout()
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    legend_handles = [
+        Patch(facecolor="#D9DDD9", edgecolor="#B9C0BA", label="Bærelag"),
+        Patch(facecolor="#EDEFED", edgecolor="#C4CAC5", label="Bundsikring"),
+        Line2D([0], [0], color="#B42318", linewidth=1.5, label=geonet_label),
+    ]
+    if t_indtastet is not None and t_indtastet > 0:
+        legend_handles.append(
+            Line2D([0], [0], color="#9AA39C", linestyle=(0, (3, 2)),
+                   linewidth=1.2, label="Indtastet niveau")
+        )
+    fig.legend(
+        handles=legend_handles, loc="lower center", ncol=len(legend_handles),
+        frameon=False, fontsize=8, bbox_to_anchor=(0.5, -0.01),
+    )
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
     buf = io.BytesIO()
     fig.savefig(buf, format="png", bbox_inches="tight", dpi=dpi)
     plt.close(fig)
@@ -615,183 +615,60 @@ def render_personligt_designdiagram_png(
     dpi: int = 300,
     figsize: tuple[float, float] = (9.0, 5.5),
 ) -> bytes:
-    """Designdiagram tilpasset brugerens opbygning + geonet.
+    """Designdiagrammet som PNG til rapporten.
 
-    Tegner tre φ-(og evt. net-)korrigerede kurver (uarmeret, 1 lag, 2 lag)
-    for det valgte Eo, sammen med brugerens Eu og opbygning som referencer.
-    For interval-produkter (NX750/NX850) tegnes 1-lag og 2-lag som tonet
-    bånd mellem best-case og konservativ ende.
+    Figuren er den samme, som skærmen viser: den bygges af
+    core.diagram.byg_designdiagram() og eksporteres til billede. Rapporten og
+    dimensioneringen kan derfor ikke vise forskellige diagrammer.
 
-    Stilen mimer de originale designdiagrammer (gul/blå/lilla farveskema,
-    Eu på y-akse, tykkelse i cm på x-akse).
+    Forudsætningerne står på skærmen i kortets sidehoved. Rapporten har intet
+    sådant hoved, og de samme oplysninger sættes derfor som figurtekst.
+
+    dpi og figsize bevares i signaturen af hensyn til kaldere; billedets
+    størrelse fastlægges af figsize i tommer gange dpi.
     """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    from .diagram import byg_designdiagram
 
-    # Lokal import for at undgå cirkulær afhængighed
-    from .data import K_PHI, PHI_BASIS
-    from .calculator import _slaa_op_interp
-
-    phi_kor = K_PHI * (phi - PHI_BASIS)
-
-    # Net-korrektion: konservativ værdi + best-case for interval-produkter
-    net_kor_kons = float(geonet.get("korrektion", 0.0)) if geonet else 0.0
-    interval = geonet.get("korrektion_interval") if geonet else None
-    net_kor_best = float(interval[0]) if interval else None
-
-    eu_vals = sorted(t_basis_table.keys())
-
-    def _kurve(lag_mode: str, faktor: float) -> tuple[list[float], list[float]]:
-        xs: list[float] = []
-        ys: list[float] = []
-        for eu_v in eu_vals:
-            # Interpolerende opslag: tegner også kurven ved en ækvivalent Eo
-            # (Eo_ækv) mellem kolonnerne i trafikklasse-tilstand. Ved en præcis
-            # Eo-kolonne er resultatet identisk med et direkte opslag.
-            v = _slaa_op_interp(eu_v, eo, lag_mode, t_basis_table=t_basis_table)
-            if v is not None:
-                xs.append(v * faktor)  # cm
-                ys.append(eu_v)
-        return xs, ys
-
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-
-    # Farveskema matcher de originale diagrambilleder
-    farve_uarm = "#E0BB00"   # gul
-    farve_1lag = "#1F4E9C"   # blå
-    farve_2lag = "#7B1FA2"   # lilla
-
-    # Kurver — uarmeret (φ-korrigeret)
-    f_uarm = 1.0 + phi_kor
-    xs_u, ys_u = _kurve("uarmeret", f_uarm)
-    if xs_u:
-        ax.plot(
-            xs_u, ys_u, "-", color=farve_uarm, linewidth=2.2,
-            marker="^", markersize=5,
-            label="Ustabiliseret (φ-kor.)",
-        )
-
-    geonet_navn = (geonet or {}).get("navn", "Reference")
-
-    def _plot_armeret(lag_mode: str, color: str, marker: str, label_prefix: str):
-        # Konservativ kurve (altid)
-        f_kons = 1.0 + phi_kor + net_kor_kons
-        xs_k, ys_k = _kurve(lag_mode, f_kons)
-        if not xs_k:
-            return
-        har_interval = False
-        if net_kor_best is not None:
-            f_best = 1.0 + phi_kor + net_kor_best
-            xs_b, ys_b = _kurve(lag_mode, f_best)
-            # Tonet bånd mellem best-case og konservativ. fill_betweenx
-            # kræver fælles y-koordinater — vi kører over fælles eu-rækker.
-            if xs_b and ys_b == ys_k:
-                har_interval = True
-                ax.fill_betweenx(
-                    ys_k, xs_b, xs_k, color=color, alpha=0.15,
-                    label=None,
-                )
-            # Stiplet linje ved best-case-kanten
-            ax.plot(
-                xs_b, ys_b, ":", color=color, linewidth=1.3,
-                label=f"{label_prefix} {geonet_navn} (optimal)",
-            )
-        # Heltrukken kurve med marker
-        kons_suffix = " (konservativ)" if har_interval else ""
-        ax.plot(
-            xs_k, ys_k, "-", color=color, linewidth=2.2,
-            marker=marker, markersize=5,
-            label=f"{label_prefix} {geonet_navn}{kons_suffix}",
-        )
-
-    _plot_armeret("1_lag", farve_1lag, "D", "1 lag")
-    _plot_armeret("2_lag", farve_2lag, "s", "2 lag")
-
-    # "Intastet opbygning"-prik — placering ved (indtastet tykkelse, Eu).
-    # Værdierne flyttet ind i label, så der ikke skal stiplede hjælpelinjer til.
-    if t_indtastet_mm is not None and t_indtastet_mm > 0:
-        t_cm = t_indtastet_mm / 10.0
-        ax.plot(
-            [t_cm], [eu], "o", color="#D32F2F", markersize=10,
-            zorder=11, markeredgecolor="white", markeredgewidth=1.5,
-            label=f"Indtastet opbygning ({t_cm:.0f} cm, Eu = {eu:.0f} MPa)",
-        )
-
-    # Endepunkts-prikker — viser krævet tykkelse ved bruger-Eu for hver lag-mode.
-    # Interval-produkter (NX750/NX850) får to prikker pr. lag-mode:
-    # fyldt for konservativ, hul cirkel i samme farve for optimal.
-    def _slut_prik(
-        t_mm: float | None, color: str, marker: str,
-        label_prefix: str, optimal: bool = False,
-    ) -> None:
-        if t_mm is None or t_mm <= 0:
-            return
-        suffix = " (optimal)" if optimal else ""
-        label = f"Opbygning med {label_prefix}: {t_mm / 10:.0f} cm{suffix}"
-        if optimal:
-            ax.plot(
-                [t_mm / 10.0], [eu], marker, color=color, markersize=10,
-                markerfacecolor="none", markeredgewidth=2.0,
-                zorder=10, label=label,
-            )
-        else:
-            ax.plot(
-                [t_mm / 10.0], [eu], marker, color=color, markersize=9,
-                markeredgecolor="white", markeredgewidth=1.2,
-                zorder=10, label=label,
-            )
-
-    _slut_prik(t_1_lag_mm, farve_1lag, "D", "1 lag geonet")
-    _slut_prik(t_1_lag_best_mm, farve_1lag, "D", "1 lag geonet", optimal=True)
-    _slut_prik(t_2_lag_mm, farve_2lag, "s", "2 lag geonet")
-    _slut_prik(t_2_lag_best_mm, farve_2lag, "s", "2 lag geonet", optimal=True)
-
-    # Akse-grænser: dækker hele datasættet plus lidt luft
-    alle_xs: list[float] = []
-    for mode, faktor in (
-        ("uarmeret", f_uarm),
-        ("1_lag", 1.0 + phi_kor + net_kor_kons),
-        ("2_lag", 1.0 + phi_kor + net_kor_kons),
-    ):
-        xs, _ = _kurve(mode, faktor)
-        alle_xs.extend(xs)
-    if t_indtastet_mm is not None:
-        alle_xs.append(t_indtastet_mm / 10.0)
-    for t in (t_1_lag_mm, t_2_lag_mm, t_1_lag_best_mm, t_2_lag_best_mm):
-        if t is not None:
-            alle_xs.append(t / 10.0)
-    if alle_xs:
-        x_max = max(alle_xs) * 1.08
-        ax.set_xlim(0, max(x_max, 80))
-    else:
-        ax.set_xlim(0, 160)
-    ax.set_ylim(0, max(max(eu_vals) * 1.05, eu * 1.2, 50))
-
-    ax.set_xlabel("Bærelagstykkelse [cm]", fontsize=11, fontweight="bold")
-    ax.set_ylabel(r"Bundmodul $E_u$ [MN/m²]", fontsize=11, fontweight="bold")
+    fig = byg_designdiagram(
+        eu=eu,
+        eo=eo,
+        phi=phi,
+        geonet=geonet,
+        t_indtastet_mm=t_indtastet_mm,
+        t_basis_table=t_basis_table,
+        t_1_lag_mm=t_1_lag_mm,
+        t_2_lag_mm=t_2_lag_mm,
+        t_1_lag_best_mm=t_1_lag_best_mm,
+        t_2_lag_best_mm=t_2_lag_best_mm,
+    )
 
     if grundlag_label:
         klasse_str = grundlag_label
     else:
-        klasse_str = f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:.0f}"
+        klasse_str = (
+            f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:.0f}"
+        )
     phi_str = f"{phi:.1f}".replace(".", ",")
-    # E-moduler angives uden decimaler. Ved dimensionering efter trafikklasse er
-    # Eo den tilbageberegnede ækvivalente værdi, og de decimaler, beregningen
-    # efterlader, angiver en nøjagtighed, grundlaget ikke har.
-    ax.set_title(
-        f"Designdiagram for Eo = {eo:.0f} MN/m² · {klasse_str}\n"
-        f"Materialer: φ = {phi_str}° · Geonet: {geonet_navn}",
-        fontsize=11,
+    fig.update_layout(
+        title=dict(
+            text=(
+                f"Eo = {eo:.0f} MN/m² · {klasse_str} · φ = {phi_str}°"
+            ),
+            x=0, xanchor="left", y=0.98, yanchor="top",
+            font=dict(size=13),
+        ),
+        margin=dict(l=70, r=20, t=70, b=60),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
     )
-    ax.grid(True, alpha=0.4)
-    ax.legend(loc="upper right", fontsize=8.5, framealpha=0.92)
 
-    fig.tight_layout()
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", dpi=dpi)
-    plt.close(fig)
-    return buf.getvalue()
+    # Skærmen lader figuren fylde kolonnen; rapporten har en fast billedbredde.
+    bredde = int(figsize[0] * 100)
+    hoejde = int(figsize[1] * 100)
+    return fig.to_image(
+        format="png", width=bredde, height=hoejde, scale=dpi / 100,
+    )
+
 
 
 # ---------------------------------------------------------------------------

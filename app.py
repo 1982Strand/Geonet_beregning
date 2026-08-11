@@ -69,6 +69,7 @@ from core.calculator import (
     _slaa_op_interp,
 )
 from core.validators import valider_input
+from core.diagram import byg_designdiagram
 from core.placement import (
     check_geonet_placement,
     overlap_krav_mm,
@@ -794,6 +795,69 @@ def _cv_eu_tabel_html(eu_opslag: float | None) -> str:
     )
 
 
+def _vis_cv_eu_korrelation(cv: int, eu_opslag: float) -> None:
+    """Vis det aktuelle Cv→Eu-opslag med graf og den fulde opslagstabel."""
+    import plotly.graph_objects as go
+
+    interval = next(
+        (
+            (cv_min, cv_max)
+            for cv_min, cv_max, eu in CV_TIL_EU
+            if eu == eu_opslag and cv_min <= cv <= cv_max
+        ),
+        None,
+    )
+    if interval is None:
+        interval_txt = "det valgte interval"
+    else:
+        cv_min, cv_max = interval
+        interval_txt = (
+            f"0–{cv_max} kN/m²" if cv_min == 0
+            else f"{cv_min + 1}–{cv_max} kN/m²"
+        )
+
+    st.markdown("**Udledt E-modul**")
+    st.markdown(f"## {ui.mpa(eu_opslag)}")
+    st.code(
+        f"Cv = {cv} kN/m² ligger i intervallet {interval_txt}\n"
+        f"Eu = {ui.mpa(eu_opslag)}",
+        language=None,
+    )
+    st.caption(
+        "Eu er et tabelopslag fra den ukorrigerede vingestyrke Cv."
+    )
+
+    xs: list[float] = []
+    ys: list[float] = []
+    for cv_min, cv_max, eu in CV_TIL_EU:
+        xs.extend([cv_min, cv_max])
+        ys.extend([eu, eu])
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=xs, y=ys, mode="lines", name="Cv–Eu-korrelation",
+        line=dict(color="#15211A", width=2, shape="hv"),
+        hovertemplate="Cv %{x:.0f} kN/m² · Eu %{y:.0f} MPa<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=[cv], y=[eu_opslag], mode="markers", name="Valgt værdi",
+        marker=dict(color="#1B6B34", size=10, line=dict(color="white", width=2)),
+        hovertemplate=f"Cv {cv} kN/m² · Eu {ui.mpa(eu_opslag)}<extra></extra>",
+    ))
+    fig.update_layout(
+        height=230,
+        margin=dict(l=10, r=10, t=24, b=10),
+        showlegend=False,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        xaxis=dict(title="Cv (kN/m²)", range=[0, 180], dtick=30, gridcolor="#E6EAE6"),
+        yaxis=dict(title="Eu (MPa)", range=[0, 32], dtick=5, gridcolor="#E6EAE6"),
+    )
+    st.markdown("**Sammenhæng**")
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    st.markdown(_cv_eu_tabel_html(eu_opslag), unsafe_allow_html=True)
+
+
 def input_underbund(
     key_prefix: str, kompakt: bool = False, uden_etiket: bool = False,
 ) -> float:
@@ -846,7 +910,7 @@ def input_underbund(
     tabel_html = _cv_eu_tabel_html(eu_opslag)
     if kompakt:
         with st.popover("Se korrelationstabel", width="stretch"):
-            st.markdown(tabel_html, unsafe_allow_html=True)
+            _vis_cv_eu_korrelation(cv, eu_opslag)
     else:
         st.markdown(
             f'<div class="cv-eu-wrap">{tabel_html}</div>', unsafe_allow_html=True
@@ -909,10 +973,6 @@ def input_belastning(
 
     info = BELASTNINGSKLASSER[valgt]
     eo = float(info["eo"])
-    st.caption(
-        f"**Klasse {valgt}** · {info['belastning']} · "
-        f"Eo = {ui.mpa(eo)} · _{info['anvendelse']}_"
-    )
 
     sti = _klasse_diagram_sti(valgt)
     if sti:
@@ -1524,7 +1584,7 @@ def _render_trafik_kobling_forklaring(
     if t_krav is None:
         with st.expander(
         "Kobling imellem trafikklasse og designdiagram",
-        expanded=ui.mellemregninger(),
+        expanded=True,
     ):
             st.caption(
                 "Designdiagrammet indeholder ingen ustabiliseret kurve i dette "
@@ -1662,7 +1722,7 @@ def _render_trafik_kobling_forklaring(
     # --- Layout: forklaring til venstre, designdiagram til højre --------
     with st.expander(
         "Kobling imellem trafikklasse og designdiagram",
-        expanded=ui.mellemregninger(),
+        expanded=True,
     ):
         kol_forklaring, kol_figur = st.columns([1.05, 0.95], gap="large")
         with kol_forklaring:
@@ -2087,8 +2147,8 @@ def _rt_optimal_tip_html(p: dict | None, phi: float = PHI_BASIS) -> str:
     t_armeret_mm_min). Genbruger _rt_reduktion_linjer med de optimale værdier.
     Reduktionsprocenten måles mod rå t_uarmeret_mm (som resten af tabellen).
 
-    Opdelingen på basis-, net- og φ-korrektion er en mellemregning; er
-    kontakten slået fra, vises alene den optimale tykkelse, jf. afsnit 8.
+    Opdelingen på basis-, net- og φ-korrektion vises sammen med den optimale
+    tykkelse, jf. afsnit 8.
     """
     if not _rt_gyldig(p) or p.get("t_armeret_mm_min") is None:
         return ""
@@ -2096,10 +2156,7 @@ def _rt_optimal_tip_html(p: dict | None, phi: float = PHI_BASIS) -> str:
     t_opt = p["t_armeret_mm_min"]
     t_uarm = p.get("t_uarmeret_mm")
     pct_opt = (t_uarm - t_opt) / t_uarm if t_uarm else None
-    linjer = (
-        _rt_reduktion_linjer(p, False, kor=kor_opt, t_arm=t_opt, phi=phi)
-        if ui.mellemregninger() else ""
-    )
+    linjer = _rt_reduktion_linjer(p, False, kor=kor_opt, t_arm=t_opt, phi=phi)
     pct_txt = f" ({ui.procent(pct_opt * 100)} tyndere)" if pct_opt is not None else ""
     return (
         '<span class="rt-tip-box">'
@@ -2144,8 +2201,8 @@ def _rt_detalje_html(
     regnestykke (ustabiliseret → reduktion → stabiliseret); under
     'Reduktion i alt, x lag' vises reduktionen opdelt på basis/net/φ.
 
-    Opdelingen på basis-, net- og φ-korrektion er en mellemregning og vises
-    alene, når kontakten i topbjælken er slået til, jf. afsnit 8.
+    Opdelingen på basis-, net- og φ-korrektion vises i fold-ud-detaljen,
+    jf. afsnit 8.
     """
     if not (_rt_gyldig(p1) or _rt_gyldig(p2)):
         return (
@@ -2178,15 +2235,6 @@ def _rt_detalje_html(
 
     bt1 = _rt_baerelag_linjer(p1)
     bt2 = _rt_baerelag_linjer(p2)
-
-    if not ui.mellemregninger():
-        return (
-            '<div class="rt-detalje">'
-            f'{krav_html}'
-            f'<div class="rt-d-bt rt-d-bt1">{bt1}</div>'
-            f'<div class="rt-d-bt rt-d-bt2">{bt2}</div>'
-            '</div>'
-        )
 
     bd1 = _rt_reduktion_linjer(p1, is_ref, phi=phi)
     bd2 = _rt_reduktion_linjer(p2, is_ref, phi=phi)
@@ -2278,6 +2326,7 @@ def _rt_raekke_html(
     trafik_eu: float | None = None,
     eu: float | None = None,
     vis_indeks: bool = False,
+    udfoldet: bool = False,
 ) -> str:
     """Byg én foldbar tabelrække (<details>) for et produkt/referencenet.
 
@@ -2311,23 +2360,19 @@ def _rt_raekke_html(
     red1_cls = "num" if v1 else "num rt-tom"
     red2_cls = "num" if v2 else "num rt-tom"
 
-    # Reduktionens opdeling er en mellemregning og står som egne kolonner,
-    # når kontakten er slået til, jf. afsnit 6b.
-    vis_kor = ui.mellemregninger()
-
     raekke_css = "rt-raekke rt-ref" if is_ref else "rt-raekke"
     if vis_indeks:
         raekke_css += " rt-med-indeks"
-    if vis_kor:
-        raekke_css += " rt-med-kor"
+    raekke_css += " rt-med-kor"
     indeks_html = (
         f'<span class="num rt-indeks">{_effektindeks(navn, is_ref)}</span>'
         if vis_indeks else ""
     )
-    kor_html = _rt_kor_celler(p1 if v1 else p2, phi) if vis_kor else ""
+    kor_html = _rt_kor_celler(p1 if v1 else p2, phi)
 
     return (
-        f'<details class="{raekke_css}" name="rt-produkt">'
+        f'<details class="{raekke_css}" name="rt-produkt"'
+        f'{" open" if udfoldet else ""}>'
         f'<summary class="rt-sum">'
         f'<span class="rt-navn"><span class="rt-chev">▸</span> {navn}</span>'
         f'{indeks_html}'
@@ -2356,6 +2401,7 @@ def _render_produkt_tabel(
     trafik_eu: float | None = None,
     eu: float | None = None,
     grupperet: bool = False,
+    udfoldet_navn: str | None = None,
 ) -> None:
     """Resultattabel: én foldbar række pr. produkt. Bruges af både Standard og
     Brugerdefineret (sidstnævnte sender φ ≠ 37, som giver en φ-korrektionslinje
@@ -2406,20 +2452,15 @@ def _render_produkt_tabel(
         'style="cursor:help">Indeks</span>'
         if grupperet else ""
     )
-    # Reduktionens tre led vises som egne kolonner, når mellemregningerne er
-    # slået til, jf. afsnit 6b.
-    vis_kor = ui.mellemregninger()
     kor_kol = (
         '<span class="num">Basisreduktion</span>'
         '<span class="num">Net-korr.</span>'
         '<span class="num">φ-korr.</span>'
-        if vis_kor else ""
     )
     hoved_css = "rt-head"
     if grupperet:
         hoved_css += " rt-head-indeks"
-    if vis_kor:
-        hoved_css += " rt-med-kor"
+    hoved_css += " rt-med-kor"
     dele = ['<div class="rt-tabel">']
     dele.append(
         f'<div class="{hoved_css}">'
@@ -2439,7 +2480,8 @@ def _render_produkt_tabel(
         dele.append(
             _rt_raekke_html(REFERENCE_NAVN_TABEL, refp1, refp2, is_ref=True,
                             phi=phi, trafik_eu=trafik_eu, eu=eu,
-                            vis_indeks=grupperet)
+                            vis_indeks=grupperet,
+                            udfoldet=udfoldet_navn == REFERENCE_NAVN_TABEL)
         )
 
     if grupperet:
@@ -2468,7 +2510,8 @@ def _render_produkt_tabel(
                 sidste_serie = serie
                 dele.append(f'<div class="rt-gruppe">{html.escape(serie)}</div>')
         dele.append(_rt_raekke_html(n, p1, p2, phi=phi, trafik_eu=trafik_eu,
-                                    eu=eu, vis_indeks=grupperet))
+                                    eu=eu, vis_indeks=grupperet,
+                                    udfoldet=udfoldet_navn == n))
     dele.append('</div>')
     if grupperet:
         caption = (
@@ -2486,6 +2529,155 @@ def _render_produkt_tabel(
         caption = "Klik på rækken for flere detaljer"
     dele.append(f'<div class="rt-caption">{caption}</div>')
     st.markdown("".join(dele), unsafe_allow_html=True)
+
+
+def _render_valgt_net_detaljer(
+    produkt_1: dict | None,
+    produkt_2: dict | None,
+    *,
+    net_navn: str,
+    phi: float,
+    er_reference: bool = False,
+) -> None:
+    """Vis det valgte nets beregning i den kompakte designvisning."""
+    def _lag_html(label: str, produkt: dict | None) -> str:
+        if not _rt_gyldig(produkt):
+            return (
+                f'<section class="rt-detaljer-lag">'
+                f'<div class="rt-detaljer-lag-titel">{html.escape(label)}</div>'
+                '<div class="rt-detaljer-tom">Ingen gyldig beregning.</div></section>'
+            )
+
+        t_uarm = produkt.get("t_uarmeret_mm")
+        t_basis = produkt.get("t_basis_arm_mm")
+        t_arm = produkt.get("t_armeret_mm")
+        net_kor = 0.0 if er_reference else float(produkt.get("korrektion") or 0.0)
+        phi_kor = K_PHI * (phi - PHI_BASIS)
+        index = _effektindeks(net_navn, is_ref=er_reference)
+        basis_mm = -round(t_uarm - t_basis) if t_uarm is not None and t_basis is not None else None
+        net_mm = round(t_basis * net_kor) if t_basis is not None else None
+        phi_mm = round(t_basis * phi_kor) if t_basis is not None else None
+        reduktion_mm = round(t_uarm - t_arm) if t_uarm is not None else None
+        reduktion_pct = reduktion_mm / t_uarm if t_uarm else None
+
+        def _raekke(tegn: str, titel: str, vaerdi: str, klasse: str = "") -> str:
+            return (
+                f'<div class="rt-detaljer-raekke {klasse}">'
+                f'<span class="rt-detaljer-tegn">{html.escape(tegn)}</span>'
+                f'<span>{html.escape(titel)}</span>'
+                f'<span class="rt-detaljer-vaerdi">{html.escape(vaerdi)}</span>'
+                '</div>'
+            )
+
+        phi_tekst = _pct_fortegn(phi_kor, 1)
+        rows = [
+            _raekke("", "Ustabiliseret bærelagstykkelse", ui.mm(t_uarm)),
+            _raekke("−", "Basisreduktion, referencenet", ui.mm(abs(basis_mm or 0))),
+            _raekke(
+                "−" if (net_mm or 0) < 0 else "+",
+                f"Net-korrektion, indeks {index}",
+                ui.mm(abs(net_mm or 0)),
+            ),
+        ]
+        if abs(phi_kor) > 0.0005:
+            rows.append(
+                _raekke(
+                    "−" if (phi_mm or 0) < 0 else "+",
+                    f"φ-korrektion, {phi_tekst}",
+                    ui.mm(abs(phi_mm or 0)),
+                )
+            )
+
+        return (
+            f'<section class="rt-detaljer-lag">'
+            f'<div class="rt-detaljer-lag-titel">{html.escape(label)}</div>'
+            f'{"".join(rows)}'
+            '<div class="rt-detaljer-resultat">'
+            '<div><strong>Stabiliseret bærelagstykkelse</strong></div>'
+            f'<div class="rt-detaljer-resultat-tal">{html.escape(ui.mm(t_arm))}</div>'
+            '</div>'
+            '<div class="rt-detaljer-samlet">Reduktion i alt '
+            f'{html.escape(_delta_mm(-(reduktion_mm or 0)))} · '
+            f'{html.escape(ui.procent((reduktion_pct or 0) * 100))}</div>'
+            '</section>'
+        )
+
+    st.markdown(
+        '<div class="rt-detaljer-grid">'
+        f'{_lag_html("1 LAG GEONET", produkt_1)}'
+        f'{_lag_html("2 LAG GEONET", produkt_2)}'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_alle_produkter_overblik(
+    prod_1lag: list[dict],
+    prod_2lag: list[dict],
+    *,
+    valgt_navn: str | None = None,
+) -> None:
+    """Vis alle produkter som en enkel, effektivitetssorteret oversigt."""
+    p1_by = {p["navn"]: p for p in prod_1lag}
+    p2_by = {p["navn"]: p for p in prod_2lag}
+    navne = list(p1_by)
+    navne.extend(n for n in p2_by if n not in p1_by)
+
+    def _effektivitet_noegle(navn: str) -> tuple:
+        p1 = p1_by.get(navn) or {}
+        p2 = p2_by.get(navn) or {}
+        t1 = p1.get("t_armeret_mm") if _rt_gyldig(p1) else None
+        t2 = p2.get("t_armeret_mm") if _rt_gyldig(p2) else None
+        return (
+            t1 is None and t2 is None,
+            float(t1) if t1 is not None else float("inf"),
+            float(t2) if t2 is not None else float("inf"),
+            -_indeks_tal(navn),
+            navn,
+        )
+
+    def _tykkelse(produkt: dict | None) -> str:
+        return ui.mm(produkt.get("t_armeret_mm")) if _rt_gyldig(produkt) else "—"
+
+    def _sparet(produkt: dict | None) -> str:
+        if not _rt_gyldig(produkt) or produkt.get("t_uarmeret_mm") is None:
+            return "—"
+        t_uarm = produkt["t_uarmeret_mm"]
+        t_arm = produkt["t_armeret_mm"]
+        return f"{_delta_mm(-(t_uarm - t_arm))} · {ui.procent((t_uarm - t_arm) / t_uarm * 100)}"
+
+    rækker = []
+    for navn in sorted(navne, key=_effektivitet_noegle):
+        p1 = p1_by.get(navn)
+        p2 = p2_by.get(navn)
+        valgt = navn == valgt_navn
+        valgt_p = p1 if _rt_gyldig(p1) else p2
+        klasser = format_klasse_interval(valgt_p.get("klasser", [])) if valgt_p else "—"
+        rækker.append(
+            f'<div class="rt-alle-raekke{" rt-alle-valgt" if valgt else ""}">'
+            f'<div class="rt-alle-produkt">{html.escape(navn)}</div>'
+            f'<div>{html.escape(klasser)}</div>'
+            f'<div class="rt-alle-num">{html.escape(_effektindeks(navn))}</div>'
+            f'<div class="rt-alle-num">{html.escape(_tykkelse(p1))}</div>'
+            f'<div class="rt-alle-sparet">{html.escape(_sparet(p1))}</div>'
+            f'<div class="rt-alle-num">{html.escape(_tykkelse(p2))}</div>'
+            f'<div class="rt-alle-sparet">{html.escape(_sparet(p2))}</div>'
+            '</div>'
+        )
+
+    st.markdown(
+        '<div class="rt-alle-tabel">'
+        '<div class="rt-alle-hoved">'
+        '<span>Produkt</span><span>Klasse</span><span class="rt-alle-num">Indeks</span>'
+        '<span class="rt-alle-num">1 lag</span><span class="rt-alle-num">Sparet</span>'
+        '<span class="rt-alle-num">2 lag</span><span class="rt-alle-num">Sparet</span>'
+        '</div>'
+        f'{"".join(rækker)}'
+        '</div>'
+        '<div class="rt-caption">Produkterne er sorteret efter den tyndeste gyldige '
+        'opbygning under de aktuelle forudsætninger.</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _navne_kort(gruppe: dict) -> str:
@@ -2804,173 +2996,6 @@ def _status_for_krav(
     return f"{ui.mm(-diff_kons)} for lidt", "danger"
 
 
-def _plotly_designdiagram(
-    *,
-    eu: float,
-    eo: float,
-    phi: float,
-    geonet: dict | None,
-    t_indtastet_mm: float | None,
-    t_basis_table: dict,
-    t_1_lag_mm: float | None = None,
-    t_2_lag_mm: float | None = None,
-    t_1_lag_best_mm: float | None = None,
-    t_2_lag_best_mm: float | None = None,
-):
-    """Designdiagrammet som Plotly-figur til skærmen.
-
-    Kurverne dannes af designdiagram-tabellen ved det viste Eo og korrigeres
-    med φ og nettets korrektion, jf. afsnittet "Sådan dannes diagrammet".
-    Produkter med korrektionsinterval tegnes med et tonet bånd mellem den
-    optimale og den konservative kurve.
-
-    Der gøres opmærksom på, at rapporten fortsat tegnes af matplotlib i
-    core/rapport.py; ændres udtrykket her, bør rapporten følge med.
-    """
-    import plotly.graph_objects as go
-
-    phi_kor = K_PHI * (phi - PHI_BASIS)
-    net_kor_kons = float(geonet.get("korrektion", 0.0)) if geonet else 0.0
-    interval = geonet.get("korrektion_interval") if geonet else None
-    net_kor_best = float(interval[0]) if interval else None
-    geonet_navn = (geonet or {}).get("navn", "Referencenet")
-
-    eu_vals = sorted(t_basis_table.keys())
-
-    def _kurve(lag_mode: str, faktor: float) -> tuple[list[float], list[float]]:
-        xs: list[float] = []
-        ys: list[float] = []
-        for eu_v in eu_vals:
-            v = _slaa_op_interp(eu_v, eo, lag_mode, t_basis_table=t_basis_table)
-            if v is not None:
-                xs.append(v * faktor)      # cm
-                ys.append(eu_v)
-        return xs, ys
-
-    FARVE_UARM = "#8B7355"
-    FARVE_1LAG = "#15211A"
-    FARVE_2LAG = "#1B6B34"
-    HOVER = "%{x:.0f} cm · Eu %{y:.1f} MN/m²<extra>%{fullData.name}</extra>"
-
-    fig = go.Figure()
-
-    xs_u, ys_u = _kurve("uarmeret", 1.0 + phi_kor)
-    if xs_u:
-        fig.add_trace(go.Scatter(
-            x=xs_u, y=ys_u, mode="lines", name="Uden geonet",
-            line=dict(color=FARVE_UARM, width=2),
-            hovertemplate=HOVER,
-        ))
-
-    def _armeret(lag_mode: str, farve: str, navn: str) -> None:
-        xs_k, ys_k = _kurve(lag_mode, 1.0 + phi_kor + net_kor_kons)
-        if not xs_k:
-            return
-        if net_kor_best is not None:
-            xs_b, ys_b = _kurve(lag_mode, 1.0 + phi_kor + net_kor_best)
-            if xs_b and ys_b == ys_k:
-                # Båndet mellem den optimale og den konservative kurve.
-                fig.add_trace(go.Scatter(
-                    x=xs_b + xs_k[::-1], y=ys_b + ys_k[::-1],
-                    fill="toself", fillcolor=farve, opacity=0.10,
-                    line=dict(width=0), hoverinfo="skip",
-                    showlegend=False,
-                ))
-                fig.add_trace(go.Scatter(
-                    x=xs_b, y=ys_b, mode="lines",
-                    name=f"{navn} (optimal)",
-                    line=dict(color=farve, width=1.2, dash="dot"),
-                    hovertemplate=HOVER,
-                ))
-        fig.add_trace(go.Scatter(
-            x=xs_k, y=ys_k, mode="lines", name=navn,
-            line=dict(color=farve, width=2),
-            hovertemplate=HOVER,
-        ))
-
-    _armeret("1_lag", FARVE_1LAG, f"1 lag · {geonet_navn}")
-    _armeret("2_lag", FARVE_2LAG, f"2 lag · {geonet_navn}")
-
-    for t_mm, farve, navn in (
-        (t_1_lag_mm, FARVE_1LAG, "1 lag geonet"),
-        (t_2_lag_mm, FARVE_2LAG, "2 lag geonet"),
-    ):
-        if t_mm:
-            fig.add_trace(go.Scatter(
-                x=[t_mm / 10.0], y=[eu], mode="markers",
-                name=navn, showlegend=False,
-                marker=dict(color=farve, size=9,
-                            line=dict(color="#FFFFFF", width=1.5)),
-                hovertemplate=HOVER,
-            ))
-    for t_mm, farve, navn in (
-        (t_1_lag_best_mm, FARVE_1LAG, "1 lag geonet (optimal)"),
-        (t_2_lag_best_mm, FARVE_2LAG, "2 lag geonet (optimal)"),
-    ):
-        if t_mm:
-            fig.add_trace(go.Scatter(
-                x=[t_mm / 10.0], y=[eu], mode="markers",
-                name=navn, showlegend=False,
-                marker=dict(color="rgba(0,0,0,0)", size=10,
-                            line=dict(color=farve, width=2)),
-                hovertemplate=HOVER,
-            ))
-
-    # Den indtastede opbygning med lodret hjælpelinje, så aflæsningen på
-    # x-aksen kan foretages direkte.
-    if t_indtastet_mm and t_indtastet_mm > 0:
-        t_cm = t_indtastet_mm / 10.0
-        fig.add_shape(
-            type="line", x0=t_cm, x1=t_cm, y0=0, y1=eu,
-            line=dict(color=ui.FARVE["kritisk"], width=1, dash="dash"),
-        )
-        fig.add_trace(go.Scatter(
-            x=[t_cm], y=[eu], mode="markers",
-            name="Indtastet opbygning", showlegend=False,
-            marker=dict(color=ui.FARVE["kritisk"], size=11,
-                        line=dict(color="#FFFFFF", width=1.5)),
-            hovertemplate=HOVER,
-        ))
-        fig.add_annotation(
-            x=t_cm, y=0, yanchor="bottom", yshift=6,
-            text=f"Indtastet {t_cm:.0f} cm", showarrow=False,
-            font=dict(size=10, color="#FFFFFF"),
-            bgcolor=ui.FARVE["kritisk"], borderpad=3,
-        )
-
-    alle_x = list(xs_u)
-    for t in (t_indtastet_mm, t_1_lag_mm, t_2_lag_mm,
-              t_1_lag_best_mm, t_2_lag_best_mm):
-        if t:
-            alle_x.append(t / 10.0)
-    x_maks = max(alle_x) * 1.08 if alle_x else 160
-
-    akse = dict(
-        gridcolor="#EDEFED", zeroline=False,
-        linecolor=ui.FARVE["linje"], ticks="outside",
-        tickcolor=ui.FARVE["linje"], tickfont=dict(size=10),
-    )
-    fig.update_layout(
-        height=380,
-        margin=dict(l=60, r=20, t=10, b=60),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="IBM Plex Sans, system-ui, sans-serif", size=11,
-                  color=ui.FARVE["ink"]),
-        hovermode="closest",
-        legend=dict(orientation="h", yanchor="bottom", y=1.0,
-                    xanchor="right", x=1, font=dict(size=10),
-                    bgcolor="rgba(0,0,0,0)"),
-        xaxis=dict(title="Bærelagstykkelse [cm]", range=[0, max(x_maks, 80)], **akse),
-        yaxis=dict(
-            title="Bundmodul Eu [MN/m²]",
-            range=[0, max(max(eu_vals) * 1.05, eu * 1.2, 50)],
-            **akse,
-        ),
-    )
-    return fig
-
-
 def _tegn_designdiagram(
     eu: float,
     eo: float,
@@ -2983,7 +3008,7 @@ def _tegn_designdiagram(
 ) -> None:
     """Tegner designdiagrammet og forklaringen bag det."""
     try:
-        fig = _plotly_designdiagram(
+        fig = byg_designdiagram(
             eu=float(eu),
             eo=float(eo),
             phi=float(phi),
@@ -3082,7 +3107,7 @@ def _snit_til_kolonner(
         })
 
     if kolonner:
-        kolonner[0]["underbund_tekst"] = f"UNDERBUND · Eu {eu:.0f} MPa"
+        kolonner[0]["underbund_tekst"] = f"UNDERBUND\n{eu:.0f} MPa"
     return kolonner
 
 
@@ -3095,6 +3120,7 @@ def _render_opbygningsvisualisering(
     materialer: list[dict] | None = None,
     phi: float = PHI_BASIS,
     tvunget_produkt: str | None = None,
+    laas_valg: bool = False,
 ) -> None:
     """Tre eller fire opbygnings-snit side om side (Koncept A).
 
@@ -3142,12 +3168,13 @@ def _render_opbygningsvisualisering(
         navne_sorteret = sorted(navne_set.keys(), key=lambda n: navne_set[n])
 
     valg = _REF_VALG
-    if tvunget_produkt is not None:
+    if laas_valg:
+        valg = tvunget_produkt or _REF_VALG
+    elif tvunget_produkt is not None:
         # Brugerdefineret 'Vælg specifikt produkt': dropdown skjules, det
         # valgte produkt bruges direkte. Hvis produktet ikke er i listen
         # (fx kun gyldigt i én lag-mode) bruges det alligevel.
         valg = tvunget_produkt
-        st.caption(f"Viser opbygning for: **{tvunget_produkt}**")
     elif navne_sorteret:
         def _format_valg(navn: str) -> str:
             if navn == _REF_VALG:
@@ -3325,6 +3352,45 @@ def _render_opbygningsvisualisering(
     )
 
 
+def _render_opbygning_afsnit(
+    eu: float,
+    ref_1: dict | None,
+    ref_2: dict | None,
+    *,
+    prod_1lag: list[dict] | None = None,
+    prod_2lag: list[dict] | None = None,
+    materialer: list[dict] | None = None,
+    phi: float = PHI_BASIS,
+    geonet_navn: str | None = None,
+    laas_geonetvalg: bool = False,
+    som_kort: bool = False,
+) -> None:
+    """Opbygning som et primært resultatkort, lige efter resultatkortene."""
+    if ref_1 is None and ref_2 is None:
+        return
+    materialer = materialer or []
+    indtastet = _indtastet_total(materialer)
+    note = "Snit i samme lodrette skala"
+    if indtastet:
+        note += f" · stiplet linje = indtastet {ui.mm(indtastet)}"
+    else:
+        note += " · uden materialelag vises kravet som ét ubundet lag"
+    def _vis_indhold() -> None:
+        _render_opbygningsvisualisering(
+            eu, ref_1, ref_2,
+            prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+            materialer=materialer, phi=phi, tvunget_produkt=geonet_navn,
+            laas_valg=laas_geonetvalg,
+        )
+
+    if som_kort:
+        with ui.kort("Opbygning", note):
+            _vis_indhold()
+    else:
+        ui.underhoved("Opbygning", note)
+        _vis_indhold()
+
+
 def _render_oversigt_expanders(
     eu: float,
     eo: float,
@@ -3342,6 +3408,7 @@ def _render_oversigt_expanders(
     materialer: list[dict] | None = None,
     t_basis_table: dict | None = None,
     eo_interpoleret: bool = False,
+    vis_opbygning: bool = True,
 ) -> None:
     """De 3 informations-expandere under resultaterne.
 
@@ -3356,20 +3423,11 @@ def _render_oversigt_expanders(
     materialer = materialer or []
 
     # --- Opbygningsvisualisering (referencenet eller valgt produkt) -----
-    if ref_1 is not None or ref_2 is not None:
-        indtastet = _indtastet_total(materialer)
-        note = "Snit i samme lodrette skala"
-        if indtastet:
-            note += f" · stiplet linje = indtastet {ui.mm(indtastet)}"
-        else:
-            note += " · uden materialelag vises kravet som ét ubundet lag"
-        ui.underhoved("Opbygning", note)
-        _render_opbygningsvisualisering(
+    if vis_opbygning:
+        _render_opbygning_afsnit(
             eu, ref_1, ref_2,
             prod_1lag=prod_1lag, prod_2lag=prod_2lag,
-            materialer=materialer,
-            phi=phi,
-            tvunget_produkt=geonet_navn,
+            materialer=materialer, phi=phi, geonet_navn=geonet_navn,
         )
 
     # --- Advarsler -------------------------------------------------------
@@ -3570,9 +3628,9 @@ def _render_oversigt_expanders(
         f"Advarsler og anbefalinger ({antal})"
         if antal else "Advarsler og anbefalinger"
     )
-    # Advarsler og udførelseskrav er konklusioner, ikke mellemregninger, og
-    # bliver liggende sammenfoldede uanset kontakten, jf. afsnit 6c. Antallet
-    # står i overskriften, så det fremgår, at der er noget at læse.
+    # Advarsler og udførelseskrav er konklusioner og bliver liggende
+    # sammenfoldede. Antallet står i overskriften, så det fremgår, at der er
+    # noget at læse.
     with st.expander(titel_adv):
         if antal == 0:
             st.caption(
@@ -3650,8 +3708,7 @@ def _render_oversigt_expanders(
                 )
 
     # --- Sådan beregnes det -----------------------------------------------
-    # Afsnittet åbnes af sig selv, når mellemregningerne er slået til.
-    with st.expander("Sådan beregnes det", expanded=ui.mellemregninger()):
+    with st.expander("Sådan beregnes det", expanded=True):
         if eo_interpoleret:
             st.info(
                 "**Trafikklasse-tilstand:** trin 2 nedenfor (kravet til Eo) "
@@ -4041,17 +4098,11 @@ def _faste_forudsaetninger() -> None:
     """
     ui.etiket("Faste forudsætninger")
     st.markdown(
-        _noegletal_tabel_html([
-            ("Friktionsvinkel φ", ui.grader(PHI_BASIS)),
-            ("φ-korrektion", "ingen"),
-            ("Materialelag", "indgår ikke"),
-        ]),
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        f"I standardberegningen sættes bærelagets friktionsvinkel "
-        f"φ = {ui.grader(PHI_BASIS)}, svarende til designmanualernes "
-        f"forudsætning. Der beregnes derfor ingen φ-korrektion."
+        "I standardberegningen forudsættes 1 samlet bærelag, med en "
+        f"friktionsvinkel φ = {PHI_BASIS:g}°. Der kan derfor ikke "
+        "vælges forskellige materialelag. Reduktion i bærelagstykkelser "
+        "korrigeres for de forskellige geonets effektindeks, som er "
+        "virkningsgraden set i forhold til referencenettene, med indeks 100."
     )
 
 
@@ -4148,10 +4199,8 @@ def _grundlag_tekst(grundlag: dict) -> str:
 
 
 def _produkttabel_note(eu: float) -> str:
-    """Produkttabellens undertekst. Skifter med kontakten, jf. afsnit 6b."""
-    if ui.mellemregninger():
-        return "Klik en række for reduktionsopdeling og udførelseskrav"
-    return f"Bærelagstykkelse ved Eu = {ui.mpa(eu)}"
+    """Produkttabellens undertekst med adgang til beregningsdetaljerne."""
+    return "Klik en række for reduktionsopdeling og udførelseskrav"
 
 
 def _resultat_note(eu: float, grundlag: dict) -> str:
@@ -4320,36 +4369,104 @@ def render_standard() -> None:
         if haard_fejl:
             vis_fejl(haard_fejl)
         else:
+            gyldige_geonet = sorted(
+                {
+                    p["navn"]
+                    for p in prod_1lag + prod_2lag
+                    if p.get("navn") != "Anden armering (manuel)"
+                    and p.get("fejl") is None
+                    and p.get("t_armeret_mm") is not None
+                },
+                key=lambda navn: (
+                    _produkt_t(prod_1lag, navn) or float("inf"),
+                    _produkt_t(prod_2lag, navn) or float("inf"),
+                    navn,
+                ),
+            )
+            resultat_geonet_valg = [_REF_VALG] + gyldige_geonet
+            if st.session_state.get("std_geonet") not in resultat_geonet_valg:
+                st.session_state.pop("std_geonet", None)
+
+            ui.underhoved(
+                "Vælg geonet",
+                "Resultat, opbygning og mellemregninger opdateres med det valgte net",
+            )
+            vaelger_kol, _ = st.columns([1, 1.6])
+            with vaelger_kol:
+                valgt_net = st.selectbox(
+                    "Produkt",
+                    resultat_geonet_valg,
+                    index=0,
+                    key="std_geonet",
+                    format_func=(
+                        lambda navn: navn if navn == _REF_VALG else _produkt_label(navn)
+                    ),
+                    label_visibility="collapsed",
+                )
+
+            er_reference = valgt_net == _REF_VALG
+            valgt_geonet = None if er_reference else find_geonet(valgt_net)
+            valgt_1 = (
+                ref_1["produkter"][0]
+                if er_reference and ref_1 and ref_1.get("produkter")
+                else next((p for p in prod_1lag if p.get("navn") == valgt_net), None)
+            )
+            valgt_2 = (
+                ref_2["produkter"][0]
+                if er_reference and ref_2 and ref_2.get("produkter")
+                else next((p for p in prod_2lag if p.get("navn") == valgt_net), None)
+            )
+
             if t_uarm is not None:
                 _vis_resultatkort(
                     t_uarm,
-                    bedste_1["t_armeret_mm"] if bedste_1 else None,
-                    bedste_2["t_armeret_mm"] if bedste_2 else None,
-                    standard=True,
+                    valgt_1.get("t_armeret_mm") if valgt_1 else None,
+                    valgt_2.get("t_armeret_mm") if valgt_2 else None,
+                    standard=False,
                     note_uarm=(
                         "Ubunden opbygning · interpoleret mellem Eo-kurverne"
                         if eo_interpoleret else "Ubunden opbygning"
                     ),
-                    navne_1=_navne_kort(bedste_1) if bedste_1 else "",
-                    navne_2=_navne_kort(bedste_2) if bedste_2 else "",
                 )
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
 
+            _render_opbygning_afsnit(
+                eu, ref_1, ref_2,
+                prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+                materialer=[], phi=PHI_BASIS,
+                geonet_navn=valgt_net, laas_geonetvalg=True, som_kort=True,
+            )
+
+            with ui.kort(
+                f"Detaljer · {valgt_net}",
+                "Mellemregninger for det valgte net",
+            ):
+                _render_valgt_net_detaljer(
+                    valgt_1,
+                    valgt_2,
+                    net_navn=valgt_net if not er_reference else REFERENCE_NAVN,
+                    phi=PHI_BASIS,
+                    er_reference=er_reference,
+                )
+                ui.underhoved(
+                    "Designdiagram",
+                    f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)}",
+                    skillelinje=True,
+                )
+                _tegn_designdiagram(
+                    eu, eo, PHI_BASIS, valgt_geonet, t_basis_table,
+                    None, valgt_1, valgt_2,
+                )
+
             vis_kobling = eo_interpoleret
 
-            ui.underhoved("Alle produkter", _produkttabel_note(eu))
-            _render_produkt_tabel(
-                ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                prod_1lag, prod_2lag, valgt_klasse, eu=eu,
-                trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
-                grupperet=True,
-            )
-            st.caption(
-                "I resultatoversigten vises, hvilke belastningsklasser "
-                "produkterne anbefales til. Der vises en advarsel, hvis et "
-                "produkt ikke anbefales anvendt til den valgte klasse."
-            )
+            with ui.kort("Alle produkter", _produkttabel_note(eu)):
+                _render_alle_produkter_overblik(
+                    prod_1lag,
+                    prod_2lag,
+                    valgt_navn=None if er_reference else valgt_net,
+                )
 
     if vis_kobling:
         _render_trafik_kobling_forklaring(
@@ -4364,6 +4481,7 @@ def render_standard() -> None:
         prod_1lag=prod_1lag, prod_2lag=prod_2lag,
         t_basis_table=t_basis_table,
         eo_interpoleret=eo_interpoleret,
+        vis_opbygning=False,
     )
 
 
@@ -4469,12 +4587,8 @@ def _vis_phi_opsummeringsboks(
 ) -> None:
     """Opsummeringsboks under lag-inputs: tabel, formel, φ-korrektion, mm-ækvivalent.
 
-    Boksen er en mellemregning og vises alene, når kontakten i topbjælken er
-    slået til. Den vægtede φ fremgår fortsat af inputkolonnen.
+    Boksen viser mellemregningen bag den vægtede φ.
     """
-    if not ui.mellemregninger():
-        return
-
     data = _phi_tabel_data(materialer)
     phi_weighted = data["phi_weighted"]
     overskrevet = abs(phi_final - phi_weighted) > 0.005
@@ -4557,15 +4671,13 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
         st.session_state.setdefault(f"bd_mat_{_idx}", _navn)
         st.session_state.setdefault(f"bd_t_{_idx}", _t)
 
-    # Bidraget t x phi er selve mellemregningen bag den vaegtede phi og vises
-    # alene, naar kontakten er slaaet til, jf. afsnit 6a.
-    vis_bidrag = ui.mellemregninger()
-    BREDDER = [0.35, 3.2, 1.5, 0.9] + ([1.0] if vis_bidrag else [])
+    # Bidraget t x phi er mellemregningen bag den vægtede φ.
+    BREDDER = [0.35, 3.2, 1.5, 0.9, 1.0]
     st.html(
-        '<div class="bg-lagtabel-hoved' + (' med-bidrag' if vis_bidrag else '') + '">'
+        '<div class="bg-lagtabel-hoved med-bidrag">'
         '<span>#</span><span>Materiale</span>'
         '<span class="num">Tykkelse</span><span class="num">&#966;</span>'
-        + ('<span class="num">t&#215;&#966;</span>' if vis_bidrag else '')
+        '<span class="num">t&#215;&#966;</span>'
         + '</div>'
     )
 
@@ -4587,7 +4699,7 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
 
         kolonner = st.columns(BREDDER, vertical_alignment="center")
         kol_nr, kol_mat, kol_t, kol_phi = kolonner[:4]
-        kol_bidrag = kolonner[4] if vis_bidrag else None
+        kol_bidrag = kolonner[4]
         with kol_nr:
             st.html(f'<div class="bg-lagtabel-nr">{i + 1}</div>')
         with kol_mat:
@@ -4669,12 +4781,11 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
                 "Laget behandles som manuel indtastning."
             )
 
-        if kol_bidrag is not None:
-            with kol_bidrag:
-                st.html(
-                    f'<div class="bg-lagtabel-bidrag">'
-                    f'{_tusind(float(t_i) * phi_i)}</div>'
-                )
+        with kol_bidrag:
+            st.html(
+                f'<div class="bg-lagtabel-bidrag">'
+                f'{_tusind(float(t_i) * phi_i)}</div>'
+            )
 
         materialer.append({
             "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
@@ -4688,11 +4799,11 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
 
     bidrag_sum = sum(m["tykkelse_mm"] * m["phi"] for m in materialer)
     st.html(
-        f'<div class="bg-lagtabel-sum{" med-bidrag" if vis_bidrag else ""}">'
+        '<div class="bg-lagtabel-sum med-bidrag">'
         f'<span></span><span>Samlet</span>'
         f'<span class="num">{ui.mm(total_t)}</span>'
         f'<span class="num">{ui.grader(phi_weighted)}</span>'
-        + (f'<span class="num">{_tusind(bidrag_sum)}</span>' if vis_bidrag else "")
+        f'<span class="num">{_tusind(bidrag_sum)}</span>'
         + '</div>'
     )
     st.caption(
@@ -4721,14 +4832,138 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
     return materialer, phi
 
 
-def render_brugerdefineret() -> None:
-    """Brugerdefineret-tilstand: tre nummererede trin og resultatet som blok.
+def _input_materialelag_med_korrektioner() -> tuple[list[dict], float]:
+    """Materialelag med φ-korrektioner i en højre kolonne ved mellemregning."""
+    for idx, (navn, tykkelse) in enumerate((
+        ("Stabilgrus SGII 0-32", 300),
+        ("Bundsikringssand", 400),
+    )):
+        st.session_state.setdefault(f"bd_mat_{idx}", navn)
+        st.session_state.setdefault(f"bd_t_{idx}", tykkelse)
 
-    Flow A: underbund og grundlag (trin 1), opbygningens materialelag
-    (trin 2) og geonettet (trin 3) står hver i sit kort, og resultatet
-    samles nedenunder. Trin 3 lader brugeren vælge mellem 'Alle produkter'
-    (oversigt med brugerdefineret φ) og 'Specifikt produkt' (detaljeret
-    resultat for ét produkt). Begge viser 1-lag og 2-lag side om side.
+    materiale_kol, korrektion_kol = st.columns([1.8, 1], gap="large")
+    materialer: list[dict] = []
+    dynamiske_navne = [m["navn"] for m in st.session_state.get("materialer", [])]
+    materiale_options = dynamiske_navne + ["Manuel indtastning"]
+
+    with materiale_kol:
+        etiket_kol, antal_kol = st.columns([3, 1], vertical_alignment="bottom")
+        with etiket_kol:
+            ui.etiket("Materialelag")
+        with antal_kol:
+            antal_lag = st.number_input(
+                "Antal lag", min_value=1, max_value=3, value=2, step=1,
+                key="bd_antal_lag", label_visibility="collapsed",
+                help="Antal materialelag i opbygningen.",
+            )
+        st.html(
+            '<div class="bg-lagtabel-hoved">'
+            '<span>#</span><span>Materiale</span>'
+            '<span class="num">Tykkelse</span><span class="num">&#966;</span>'
+            '</div>'
+        )
+        for i in range(int(antal_lag)):
+            mat_key = f"bd_mat_{i}"
+            if (
+                mat_key in st.session_state
+                and st.session_state[mat_key] not in materiale_options
+            ):
+                st.session_state[mat_key] = "Manuel indtastning"
+
+            kol_nr, kol_mat, kol_t, kol_phi = st.columns(
+                [0.35, 3.2, 1.5, 0.9], vertical_alignment="center",
+            )
+            with kol_nr:
+                st.html(f'<div class="bg-lagtabel-nr">{i + 1}</div>')
+            with kol_mat:
+                mat_navn = st.selectbox(
+                    "Materiale", materiale_options, key=mat_key,
+                    label_visibility="collapsed",
+                )
+            md = None if mat_navn == "Manuel indtastning" else _find_materiale_session(mat_navn)
+
+            t_key = f"bd_t_{i}"
+            if st.session_state.get(t_key, MIN_LAGTYKKELSE_MM) < MIN_LAGTYKKELSE_MM:
+                st.session_state[t_key] = MIN_LAGTYKKELSE_MM
+            with kol_t:
+                t_i = st.number_input(
+                    "Tykkelse (mm)", min_value=MIN_LAGTYKKELSE_MM,
+                    max_value=2000, step=50, key=t_key,
+                    label_visibility="collapsed",
+                )
+
+            if md is None:
+                with kol_phi:
+                    phi_i = st.number_input(
+                        "φ (°)", 20.0, 60.0, PHI_BASIS, 0.5,
+                        key=f"bd_phi_m_{i}", label_visibility="collapsed",
+                    )
+                _, kol_korn, kol_type = st.columns([0.35, 3.2, 2.4])
+                with kol_korn:
+                    korn_i = st.number_input("Max kornstørrelse (mm)", 0, 500, 32, key=f"bd_korn_m_{i}")
+                with kol_type:
+                    ltype_i = st.selectbox("Lagtype", ["Bærelag", "Bundsikring"], key=f"bd_lt_m_{i}")
+                lag_navn, krav_maske_i = "Manuel indtastning", None
+            else:
+                phi_i, korn_i, ltype_i = float(md["phi"]), md["max_korn"], md["lagtype"]
+                krav_maske_i = md.get("krav_maskestoerrelse_mm")
+                lag_navn = mat_navn
+                with kol_phi:
+                    st.html(f'<div class="bg-lagtabel-phi">{ui.grader(phi_i)}</div>')
+                krav_txt = f" · krav til geonet maskestørrelse {krav_maske_i} mm" if krav_maske_i is not None else ""
+                st.html(f'<div class="bg-lagtabel-note">{ltype_i} · maks. korn {korn_i} mm{krav_txt}</div>')
+
+            materialer.append({
+                "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
+                "lagtype": ltype_i, "tykkelse_mm": float(t_i), "pct": None,
+                "krav_maskestoerrelse_mm": krav_maske_i,
+            })
+
+        data = _phi_tabel_data(materialer)
+        phi_weighted = data["phi_weighted"]
+        total_t = sum(m["tykkelse_mm"] for m in materialer)
+        st.html(
+            '<div class="bg-lagtabel-sum">'
+            f'<span></span><span>Samlet</span><span class="num">{ui.mm(total_t)}</span>'
+            f'<span class="num">{ui.grader(phi_weighted)}</span></div>'
+        )
+        st.caption(f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm.")
+        overskrevet = st.checkbox("Overskriv φ manuelt", key="bd_phi_override")
+        if overskrevet:
+            phi = st.number_input("φ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5, key="bd_phi_man")
+        else:
+            phi = phi_weighted
+
+    phi_kor = K_PHI * (phi - PHI_BASIS)
+    with korrektion_kol:
+        ui.etiket("φ-korrektion")
+        with st.container(border=True):
+            st.markdown("**Vægtet friktionsvinkel**")
+            st.code(
+                f"φ = Σ(tᵢ × φᵢ) / Σ(tᵢ)\n"
+                f"  = {_dk_num(data['total_bidrag'], '.0f')} / {_dk_num(data['total_v'], '.0f')}"
+                f" = {_dk_num(phi_weighted, '.2f')}°",
+                language=None,
+            )
+        with st.container(border=True):
+            st.markdown("**φ-korrektionsfaktor**")
+            st.code(
+                f"k_φ = {_dk_num(K_PHI, '.2f')} × (φ − {PHI_BASIS:g}°)\n"
+                f"    = {_dk_num(K_PHI, '.2f')} × ({_dk_num(phi, '.2f')} − {PHI_BASIS:g})\n"
+                f"    = {_dk_num(phi_kor, '+.4f')} = {_dk_num(phi_kor * 100, '+.2f')} %",
+                language=None,
+            )
+        st.caption("Korrektionen anvendes på basistykkelsen.")
+
+    return materialer, phi
+
+
+def render_brugerdefineret() -> None:
+    """Brugerdefineret-tilstand: inputtrin og resultatet som samlet blok.
+
+    Underbund og grundlag (trin 1) samt opbygningens materialelag (trin 2)
+    indtastes først. Geonettet vælges derefter øverst i resultatblokken, så
+    resultat, opbygning og mellemregninger altid gælder samme produkt.
     """
 
     t_basis_table = _aktiv_t_basis_table()
@@ -4751,82 +4986,14 @@ def render_brugerdefineret() -> None:
     # opbygning og geonet ville alligevel ikke føre til et resultat.
     if not zone_blokerer:
         with ui.trin_kort(2, "Opbygning") as trin2:
-            materialer, phi = _input_materialelag(kompakt=True)
+            materialer, phi = _input_materialelag_med_korrektioner()
             total = _indtastet_total(materialer)
-            # Er mellemregningerne slået til, benævnes φ "vægtet", fordi
-            # udregningen af den vægtede værdi står i trinnet, jf. afsnit 6a.
-            phi_ord = "vægtet φ" if ui.mellemregninger() else "φ"
+            phi_ord = "vægtet φ"
             trin2.opsummering = (
                 f"{len(materialer)} lag · {ui.mm(total)} · "
                 f"{phi_ord} {ui.grader(phi)} · "
                 f"k_φ {_pct_fortegn(K_PHI * (phi - PHI_BASIS), 1)}"
             )
-
-        with ui.trin_kort(3, "Geonet") as trin3:
-            visning = st.segmented_control(
-                "Visning",
-                ["Alle produkter", "Specifikt produkt"],
-                default="Alle produkter",
-                key="bd_visning",
-                label_visibility="collapsed",
-                help=(
-                    "**Alle produkter:** samme oversigt som Standard-beregningen, "
-                    "men med den vægtede friktionsvinkel φ fra materialelagene.  \n"
-                    "**Specifikt produkt:** detaljeret resultat for ét valgt "
-                    "produkt, herunder produktets specifikke udførelseskrav."
-                ),
-            ) or "Alle produkter"
-            specifikt_mode = visning == "Specifikt produkt"
-
-            if specifikt_mode:
-                vaelger_kol, _ = st.columns([1, 1.6])
-                with vaelger_kol:
-                    geonet_navn = st.selectbox(
-                        "Produkt",
-                        GEONET_NAVNE,
-                        index=GEONET_NAVNE.index("GS-GRID SX160"),
-                        key="bd_geonet",
-                        format_func=_produkt_label,
-                        label_visibility="collapsed",
-                    )
-                geonet = find_geonet(geonet_navn)
-
-                if geonet:
-                    korn_txt = (
-                        f"{geonet['max_korn']} mm" if geonet["max_korn"] else "—"
-                    )
-                    kl_txt = _format_klasse_liste(geonet["klasser"])
-                    kor_txt = _pct_fortegn(geonet["korrektion"])
-                    rude_txt = geonet.get("rudeaabning") or "—"
-                    db_maske = geonet.get("maskestoerrelse_datablad_mm")
-                    if db_maske:
-                        rude_txt += f" (datablad: {db_maske} mm)"
-                    st.caption(
-                        f"Serie: **{geonet['serie']}** · Korrektion: {kor_txt} · "
-                        f"Max korn: {korn_txt} · "
-                        f"Rudeåbning/maskestørrelse: {rude_txt} · "
-                        f"Belastningsklasser: {kl_txt} · "
-                        f"Min dæklag: {geonet['min_daklag']} cm"
-                    )
-                    if geonet["navn"] == "Anden armering (manuel)":
-                        kor_man = st.number_input(
-                            "Korrektionsfaktor (−0.20 til +0.20)",
-                            min_value=-0.20, max_value=0.20,
-                            value=0.0, step=0.01, format="%.2f",
-                            key="bd_kor_man",
-                            help=(
-                                "0.00 = samme effektivitet som reference "
-                                "(TX160/SX160/T6)."
-                            ),
-                        )
-                        geonet = {**geonet, "korrektion": kor_man}
-            else:
-                st.caption(
-                    "Designdiagrammerne bruger Tensar TriAx TX160, "
-                    "GS-GRID SX160 eller E'GRID T6 som referencenet. Ved "
-                    "andre produkter skaleres tykkelsen med op til 20 %."
-                )
-            trin3.opsummering = geonet_navn or "Alle produkter"
 
     if zone_blokerer:
         st.session_state.pop("sidste_dim", None)
@@ -4856,8 +5023,51 @@ def render_brugerdefineret() -> None:
     )
     prod_1lag = _berig_produkter_med_placering(prod_1lag, "1_lag", materialer)
     prod_2lag = _berig_produkter_med_placering(prod_2lag, "2_lag", materialer)
+    gyldige_geonet = sorted(
+        {
+            p["navn"]
+            for p in prod_1lag + prod_2lag
+            if p.get("navn") != "Anden armering (manuel)"
+            and p.get("fejl") is None
+            and p.get("t_armeret_mm") is not None
+        },
+        key=lambda navn: (
+            _produkt_t(prod_1lag, navn) or float("inf"),
+            _produkt_t(prod_2lag, navn) or float("inf"),
+            navn,
+        ),
+    )
+    resultat_geonet_valg = [_REF_VALG] + gyldige_geonet
+    if st.session_state.get("bd_geonet") not in resultat_geonet_valg:
+        st.session_state.pop("bd_geonet", None)
 
     with ui.resultat_blok(_resultat_note(eu, grundlag)):
+        ui.underhoved(
+            "Vælg geonet",
+            "Resultat, opbygning og mellemregninger opdateres med det valgte net",
+        )
+        vaelger_kol, _ = st.columns([1, 1.6])
+        with vaelger_kol:
+            geonet_navn = st.selectbox(
+                "Produkt",
+                resultat_geonet_valg,
+                index=0,
+                key="bd_geonet",
+                format_func=(
+                    lambda navn: navn if navn == _REF_VALG else _produkt_label(navn)
+                ),
+                label_visibility="collapsed",
+            )
+        geonet = None if geonet_navn == _REF_VALG else find_geonet(geonet_navn)
+        if geonet and geonet["navn"] == "Anden armering (manuel)":
+                kor_man = st.number_input(
+                    "Korrektionsfaktor (−0.20 til +0.20)",
+                    min_value=-0.20, max_value=0.20,
+                    value=0.0, step=0.01, format="%.2f", key="bd_kor_man",
+                    help="0.00 = samme effektivitet som reference (TX160/SX160/T6).",
+                )
+                geonet = {**geonet, "korrektion": kor_man}
+        specifikt_mode = True
 
         if not specifikt_mode:
             # OVERSIGT-MODE — som Standard, men med custom phi
@@ -4906,6 +5116,11 @@ def render_brugerdefineret() -> None:
                     )
                 else:
                     _render_uarmeret_mangler_besked(eu, eo)
+                _render_opbygning_afsnit(
+                    eu, ref_1, ref_2,
+                    prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+                    materialer=materialer, phi=phi,
+                )
                 # Renderes nederst i resultatsektionen, lige over Opbygning.
                 if eo_interpoleret:
                     kobling_args = (
@@ -4932,8 +5147,12 @@ def render_brugerdefineret() -> None:
             res_1 = _berig_resultat_med_placering(res_1, geonet, materialer)
             res_2 = _berig_resultat_med_placering(res_2, geonet, materialer)
 
-            bedste_1 = _resultat_til_gruppe(res_1, geonet, valgt_klasse)
-            bedste_2 = _resultat_til_gruppe(res_2, geonet, valgt_klasse)
+            if geonet is None:
+                bedste_1 = _reference_resultat_til_gruppe(res_1, valgt_klasse)
+                bedste_2 = _reference_resultat_til_gruppe(res_2, valgt_klasse)
+            else:
+                bedste_1 = _resultat_til_gruppe(res_1, geonet, valgt_klasse)
+                bedste_2 = _resultat_til_gruppe(res_2, geonet, valgt_klasse)
 
             # Interval-produkter (NX750/NX850): kør beregn() en ekstra gang med
             # best-case-korrektionen og berig produkt-dict'en med min/max-felter.
@@ -5020,6 +5239,13 @@ def render_brugerdefineret() -> None:
                 else:
                     _render_uarmeret_mangler_besked(eu, eo)
 
+                _render_opbygning_afsnit(
+                    eu, ref_1, ref_2,
+                    prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+                    materialer=materialer, phi=phi, geonet_navn=geonet_navn,
+                    laas_geonetvalg=True, som_kort=True,
+                )
+
                 if eo_interpoleret:
                     # res_1/res_2 er beregnet med det VALGTE nets korrektion —
                     # ref_1/ref_2 er altid referencenettet. Forklaringen skal vise
@@ -5032,8 +5258,8 @@ def render_brugerdefineret() -> None:
                         t_basis_table, geonet,
                     )
 
-                # Ny tabel: referencerække + den valgte produkt-række. Enkelt-
-                # produkt-lister læses fra de interval-berigede grupper.
+                # Mellemregninger for det valgte net. Enkeltprodukt-listerne
+                # læses fra de interval-berigede grupper.
                 prod_1 = (
                     [bedste_1["produkter"][0]]
                     if bedste_1 and bedste_1.get("produkter") else []
@@ -5042,53 +5268,48 @@ def render_brugerdefineret() -> None:
                     [bedste_2["produkter"][0]]
                     if bedste_2 and bedste_2.get("produkter") else []
                 )
-                ui.underhoved(
-                    "Produktvalg", _produkttabel_note(eu)
-                )
-                if True:
-                    _render_produkt_tabel(
-                        ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                        prod_1, prod_2, valgt_klasse, phi=phi, eu=eu,
-                        vis_reference=False,
-                        trafik_eu=(
-                            eu if grundlag["type"] == "trafikklasse" else None
-                        ),
+                with ui.kort(
+                    f"Detaljer · {geonet_navn}",
+                    "Mellemregninger for det valgte net",
+                ):
+                    _render_valgt_net_detaljer(
+                        prod_1[0] if prod_1 else None,
+                        prod_2[0] if prod_2 else None,
+                        net_navn=geonet_navn or REFERENCE_NAVN,
+                        phi=phi,
+                        er_reference=geonet is None,
                     )
-
-                if geonet and geonet.get("navn"):
                     t_indtastet_total = _indtastet_total(materialer)
-                    produkt_1 = (
-                        bedste_1["produkter"][0]
-                        if bedste_1 and bedste_1.get("produkter") else None
+                    ui.underhoved(
+                        "Designdiagram",
+                        f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
+                        f"φ = {ui.grader(phi)}",
+                        skillelinje=True,
                     )
-                    produkt_2 = (
-                        bedste_2["produkter"][0]
-                        if bedste_2 and bedste_2.get("produkter") else None
+                    vis_din_prik = st.checkbox(
+                        "Vis indtastet opbygning",
+                        value=True,
+                        key="bd_dd_vis_din_prik",
+                        disabled=t_indtastet_total is None,
+                    )
+                    vis_lag_prikker = st.checkbox(
+                        "Vis endepunkter for 1 og 2 lag geonet",
+                        value=True,
+                        key="bd_dd_vis_lag_prikker",
+                    )
+                    _tegn_designdiagram(
+                        eu, eo, phi, geonet, t_basis_table,
+                        t_indtastet_total if vis_din_prik else None,
+                        prod_1[0] if vis_lag_prikker and prod_1 else None,
+                        prod_2[0] if vis_lag_prikker and prod_2 else None,
                     )
 
-                    kort_note = (
-                        f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
-                        f"φ = {ui.grader(phi)}"
+                with ui.kort("Alle produkter", _produkttabel_note(eu)):
+                    _render_alle_produkter_overblik(
+                        prod_1lag,
+                        prod_2lag,
+                        valgt_navn=geonet_navn if geonet else REFERENCE_NAVN,
                     )
-                    ui.underhoved("Designdiagram", kort_note)
-                    if True:
-                        vis_din_prik = st.checkbox(
-                            "Vis indtastet opbygning",
-                            value=True,
-                            key="bd_dd_vis_din_prik",
-                            disabled=t_indtastet_total is None,
-                        )
-                        vis_lag_prikker = st.checkbox(
-                            "Vis endepunkter for 1 og 2 lag geonet",
-                            value=True,
-                            key="bd_dd_vis_lag_prikker",
-                        )
-                        _tegn_designdiagram(
-                            eu, eo, phi, geonet, t_basis_table,
-                            t_indtastet_total if vis_din_prik else None,
-                            produkt_1 if vis_lag_prikker else None,
-                            produkt_2 if vis_lag_prikker else None,
-                        )
 
     if kobling_args is not None:
         _render_trafik_kobling_forklaring(*kobling_args)
@@ -5104,6 +5325,7 @@ def render_brugerdefineret() -> None:
         materialer=materialer,
         t_basis_table=t_basis_table,
         eo_interpoleret=eo_interpoleret,
+        vis_opbygning=False,
     )
 
 
@@ -6442,9 +6664,15 @@ def render_rapport() -> None:
             visu_png = rapport_mod.render_opbygning_png(
                 eu=sd["eu"], snit_liste=snit_liste, geonet_label=geonet_label,
             )
-            _vis_opbygning_med_info(
-                visu_png, caption="Preview af opbygnings-visualisering"
-            )
+            with ui.kort(
+                "Opbygning",
+                "Snit i samme lodrette skala · forhåndsvisning fra dimensioneringen",
+            ):
+                ui.snit(
+                    _snit_til_kolonner(snit_liste, materialer_dim, sd["eu"]),
+                    reference_mm=t_indtastet_for_snit,
+                    geonet_navn=geonet_label,
+                )
 
         # --- Personligt designdiagram (preview + rapport-PNG) ----------------
         designdiagram_png: bytes | None = None
@@ -6474,10 +6702,32 @@ def render_rapport() -> None:
                         sd.get("t_2_lag_best_mm") if vis_dd_lag_prikker else None
                     ),
                 )
-                _vis_designdiagram_med_info(
-                    designdiagram_png,
-                    caption="Preview af personligt designdiagram",
-                )
+                diagram_p1 = {
+                    **res_1,
+                    "t_armeret_mm_min": sd.get("t_1_lag_best_mm"),
+                } if t_1 is not None else None
+                diagram_p2 = {
+                    **res_2,
+                    "t_armeret_mm_min": sd.get("t_2_lag_best_mm"),
+                } if t_2 is not None else None
+                with ui.kort(
+                    "Designdiagram",
+                    f"Eo = {ui.mpa(sd['eo'])} · {grundlag_txt} · "
+                    f"φ = {ui.grader(sd.get('phi', PHI_BASIS))}",
+                ):
+                    _tegn_designdiagram(
+                        float(sd["eu"]),
+                        float(sd["eo"]),
+                        float(sd.get("phi", PHI_BASIS)),
+                        geonet,
+                        _aktiv_t_basis_table(),
+                        (
+                            indtastet_total_rap
+                            if har_indtastet_rap and vis_dd_din_prik else None
+                        ),
+                        diagram_p1 if vis_dd_lag_prikker else None,
+                        diagram_p2 if vis_dd_lag_prikker else None,
+                    )
             except Exception as e:
                 st.warning(f"Kunne ikke generere designdiagram: {e}")
                 designdiagram_png = None

@@ -230,6 +230,11 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 }
 .bg-underhoved .t{ font:600 12.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
 .bg-underhoved .n{ font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
+.bg-underhoved-skillelinje{
+  border-top:1px solid var(--bg-line-soft);
+  padding-top:1rem;
+  margin-top:1.25rem;
+}
 
 /* ---- 3c. Kort i resultatkolonnen ---------------------------------------- */
 [class*="st-key-bg_kort_"]{
@@ -383,7 +388,11 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 
   /* Topbjælken beholder sine felter side om side. */
   .st-key-bg_topbar [data-testid="column"]{ min-width:0 !important; }
-  .st-key-bg_topbar{ margin-left:-1.25rem; margin-right:-1.25rem; }
+  .st-key-bg_topbar{
+    left:0;
+    margin-left:-1.25rem;
+    margin-right:-1.25rem;
+  }
 
   /* Snittene klemmes ikke sammen: hver søjle holder en læsbar bredde, og
      figuren rulles vandret i stedet. */
@@ -409,6 +418,8 @@ code, .stMetricValue, [data-testid="stMetricValue"],
    ikke klippes. */
 .st-key-bg_topbar{
   background:var(--bg-ink);
+  position:relative;
+  left:3rem;
   margin:-1.75rem -3rem 1.5rem;
   padding:.55rem 1.5rem;
 }
@@ -451,6 +462,69 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .parentes{ font-size:.85em; color:var(--bg-ink-45); font-weight:400; }
 
 /* --- 14.1 Resultattabellen (Standard og Brugerdefineret) ----------------- */
+.rt-detaljer-grid{
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:0; margin:.15rem 0 .25rem;
+}
+.rt-detaljer-lag{ padding:.1rem 1.1rem .85rem; }
+.rt-detaljer-lag + .rt-detaljer-lag{ border-left:1px solid var(--bg-line); }
+.rt-detaljer-lag-titel{
+  font:600 9.5px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
+  color:var(--bg-green-700); margin:.25rem 0 .85rem;
+}
+.rt-detaljer-raekke{
+  display:grid; grid-template-columns:1.2rem 1fr auto; gap:.35rem;
+  align-items:baseline; padding:.48rem 0; border-bottom:1px solid var(--bg-line-soft);
+  font-size:12px; color:var(--bg-ink-70);
+}
+.rt-detaljer-tegn{ color:var(--bg-ink-45); font-family:'IBM Plex Mono',monospace; }
+.rt-detaljer-vaerdi{
+  color:var(--bg-ink); font-family:'IBM Plex Mono',monospace;
+  font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap;
+}
+.rt-detaljer-resultat{
+  display:flex; align-items:baseline; justify-content:space-between; gap:1rem;
+  margin-top:.45rem; padding-top:.65rem; border-top:1.5px solid var(--bg-green-700);
+  color:var(--bg-ink); font-size:12.5px;
+}
+.rt-detaljer-resultat-tal{
+  color:var(--bg-green-900); font:600 20px/1 'IBM Plex Mono',monospace;
+  white-space:nowrap;
+}
+.rt-detaljer-samlet{
+  margin-top:.3rem; color:var(--bg-green-700);
+  font:500 11px/1.3 'IBM Plex Mono',monospace; text-align:right;
+}
+.rt-detaljer-tom{ color:var(--bg-ink-45); font-size:11.5px; padding:.4rem 0; }
+
+.rt-alle-tabel{ border-top:1px solid var(--bg-line); }
+.rt-alle-hoved, .rt-alle-raekke{
+  display:grid; grid-template-columns:2fr 1fr .7fr 1fr 1.25fr 1fr 1.25fr;
+  gap:.65rem; align-items:center;
+}
+.rt-alle-hoved{
+  padding:.65rem .35rem .5rem; border-bottom:1px solid var(--bg-line);
+  font:600 9.5px/1.2 'IBM Plex Mono',monospace; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--bg-ink-45);
+}
+.rt-alle-raekke{
+  padding:.7rem .35rem; border-bottom:1px solid var(--bg-line-soft);
+  font-size:12px; color:var(--bg-ink-70);
+}
+.rt-alle-raekke.rt-alle-valgt{
+  background:var(--bg-green-lys); box-shadow:inset 3px 0 0 var(--bg-green-700);
+  color:var(--bg-green-900);
+}
+.rt-alle-produkt{ color:var(--bg-ink); font-weight:500; }
+.rt-alle-valgt .rt-alle-produkt{ font-weight:600; }
+.rt-alle-num, .rt-alle-sparet{
+  text-align:right; font-family:'IBM Plex Mono',monospace;
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.rt-alle-num{ color:var(--bg-ink); }
+.rt-alle-sparet{ color:var(--bg-ink-45); font-size:11px; }
+.rt-alle-valgt .rt-alle-num, .rt-alle-valgt .rt-alle-sparet{ color:var(--bg-green-900); }
+
 .rt-tabel{ margin:.2rem 0 .3rem; }
 .rt-head, .rt-sum, .rt-detalje{
   display:grid;

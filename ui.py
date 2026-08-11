@@ -8,7 +8,7 @@ Anvendelse i app.py:
     import ui
 
     ui.opsaet_side()                      # skal stå før alle andre st-kald
-    ui.topbjaelke(vis_mellemregninger=False)
+    ui.topbjaelke()
     ...
     input_col, resultat_col = st.columns([328, 1000], gap="large")
 
@@ -127,20 +127,13 @@ def _logo_data_uri() -> str:
 
 
 def topbjaelke(version: str = "v0.4") -> None:
-    """Mørk bjælke med logo, værktøjsnavn og kontakten for mellemregninger.
-
-    Kontakten tegnes som en Streamlit-widget inde i bjælken, så dens tilstand
-    kan aflæses i st.session_state["vis_mellemregninger"]. Bjælken gentages på
-    alle sider, så kontakten gælder hele værktøjet.
+    """Mørk bjælke med logo, værktøjsnavn og handlinger.
 
     Logoet ligger på en hvid brik: firmamærket er mørkt og ville forsvinde
     direkte på bjælken.
     """
-    if "vis_mellemregninger" not in st.session_state:
-        st.session_state.vis_mellemregninger = False
-
     with st.container(key="bg_topbar"):
-        navn_kol, handling_kol = st.columns([3, 2], vertical_alignment="center")
+        navn_kol, handling_kol = st.columns([3, 1.5], vertical_alignment="center")
         with navn_kol:
             st.html(
                 f"""
@@ -160,18 +153,7 @@ def topbjaelke(version: str = "v0.4") -> None:
                 """
             )
         with handling_kol:
-            kontakt_kol, nulstil_kol, rapport_kol = st.columns(
-                [2, 1, 1.4], vertical_alignment="center"
-            )
-            with kontakt_kol:
-                st.toggle(
-                    "Vis mellemregninger",
-                    key="vis_mellemregninger",
-                    help=(
-                        "Viser φ-beregningen, korrektionsleddene og "
-                        "interpolationsdetaljerne bag de viste tykkelser."
-                    ),
-                )
+            nulstil_kol, rapport_kol = st.columns([1, 1.4], vertical_alignment="center")
             # Knapperne aflæses af app.py gennem deres nøgler, når den aktive
             # side er bestemt. Nulstil gælder dimensioneringens felter; på de
             # øvrige sider er der intet at rydde, og knappen er slået fra.
@@ -200,11 +182,6 @@ def topbjaelke(version: str = "v0.4") -> None:
                     disabled=not paa_dimensionering,
                     help="Gå til rapportsiden med den aktuelle dimensionering.",
                 )
-
-
-def mellemregninger() -> bool:
-    """Er kontakten for mellemregninger slået til."""
-    return bool(st.session_state.get("vis_mellemregninger", False))
 
 
 def etiket(tekst: str) -> None:
@@ -277,10 +254,13 @@ def sidehoved(titel: str, beskrivelse: str = "") -> None:
     )
 
 
-def underhoved(titel: str, note: str = "") -> None:
+def underhoved(
+    titel: str, note: str = "", *, skillelinje: bool = False
+) -> None:
     """Underoverskrift inde i resultatblokken — Opbygning, Produktvalg m.fl."""
+    klasse = "bg-underhoved bg-underhoved-skillelinje" if skillelinje else "bg-underhoved"
     st.html(
-        f'<div class="bg-underhoved"><div class="t">{escape(titel)}</div>'
+        f'<div class="{klasse}"><div class="t">{escape(titel)}</div>'
         f'<div class="n">{note}</div></div>'
     )
 
@@ -382,7 +362,7 @@ def snit(
     kolonner: list[dict],
     reference_mm: float | None = None,
     hoejde_px: int = 230,
-    jord_px: int = 26,
+    jord_px: int = 42,
     geonet_navn: str | None = None,
 ) -> None:
     """Tegner opbygningssnittene i HTML — erstatter matplotlib-figuren.
@@ -428,7 +408,8 @@ def snit(
         ref_linje = (
             f'<div style="position:absolute;left:0;right:0;'
             f'bottom:{px(reference_mm) + jord_px}px;'
-            f'border-top:1.5px dashed {FARVE["ink_25"]}"></div>'
+            f'border-top:1.5px dashed {FARVE["ink_25"]};'
+            f'z-index:20;pointer-events:none"></div>'
         )
 
     celler = []
@@ -462,7 +443,7 @@ def snit(
 
         jord_tekst = (
             f'<div style="font:600 9px/1 {MONO};color:#fff;letter-spacing:.05em">'
-            f'{escape(k["underbund_tekst"])}</div>'
+            f'{escape(k["underbund_tekst"]).replace(chr(10), "<br>")}</div>'
             if k.get("underbund_tekst") else ""
         )
 
@@ -530,7 +511,8 @@ def snit(
               <div style="position:relative;width:100%;height:{hoejde_px}px">
                 {ref_linje}
                 {soejle_html}
-                <div style="position:absolute;left:0;right:0;bottom:0;height:{jord_px}px;
+                <div style="position:absolute;left:50%;transform:translateX(-50%);
+                            width:104px;bottom:0;height:{jord_px}px;
                             background:repeating-linear-gradient(45deg,{FARVE['jord']},{FARVE['jord']} 3px,#7A6449 3px,#7A6449 6px);
                             display:flex;align-items:center;justify-content:center">{jord_tekst}</div>
                 {maal_html}
@@ -546,12 +528,27 @@ def snit(
     har_geonet = any(k.get("geonet_mm") for k in kolonner)
     har_best = any(k.get("best_case_mm") for k in kolonner)
 
-    signatur = [
-        (f'<div style="width:16px;height:9px;background:{FARVE["baerelag"]};'
-         f'border:1px solid {FARVE["baerelag_kant"]}"></div>', "Bærelag"),
-        (f'<div style="width:16px;height:9px;background:{FARVE["bundsikring"]};'
-         f'border:1px solid {FARVE["bundsikring_kant"]}"></div>', "Bundsikring"),
-    ]
+    har_baerelag = any(
+        slags == "baerelag"
+        for kolonne in kolonner
+        for _, _, slags in kolonne.get("lag", [])
+    )
+    har_bundsikring = any(
+        slags == "bundsikring"
+        for kolonne in kolonner
+        for _, _, slags in kolonne.get("lag", [])
+    )
+    signatur = []
+    if har_baerelag:
+        signatur.append(
+            (f'<div style="width:16px;height:9px;background:{FARVE["baerelag"]};'
+             f'border:1px solid {FARVE["baerelag_kant"]}"></div>', "Bærelag")
+        )
+    if har_bundsikring:
+        signatur.append(
+            (f'<div style="width:16px;height:9px;background:{FARVE["bundsikring"]};'
+             f'border:1px solid {FARVE["bundsikring_kant"]}"></div>', "Bundsikring")
+        )
     if har_geonet:
         signatur.append(
             (f'<div style="width:16px;height:2px;background:{FARVE["kritisk"]}"></div>',
