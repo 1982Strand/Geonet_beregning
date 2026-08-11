@@ -249,25 +249,31 @@ def byg_snit(
     )
 
     for i, k in enumerate(kolonner, start=1):
-        # Underbunden som skraveret bånd under nulniveauet.
+        # Underbunden som skraveret bånd under nulniveauet, i samme bredde som
+        # opbygningen ovenover. Baggrunden er den fulde jordfarve, så den hvide
+        # angivelse af underbundens E-modul kan læses; skraveringen tegnes
+        # ovenpå i en mørkere tone.
         fig.add_trace(
             go.Bar(
                 x=[""], y=[jord], base=[-jord],
                 marker=dict(
                     color=FARVE_JORD,
-                    pattern=dict(shape="/", fgcolor="#7A6449", size=4),
+                    pattern=dict(
+                        shape="/", bgcolor=FARVE_JORD,
+                        fgcolor="#6E5A42", size=5, solidity=0.22,
+                    ),
                     line=dict(width=0),
                 ),
-                width=1.54, hoverinfo="skip", showlegend=False,
+                width=0.62, hoverinfo="skip", showlegend=False,
             ),
             row=1, col=i,
         )
         if k.get("underbund_tekst"):
             fig.add_annotation(
                 xref=f"x{i}" if i > 1 else "x", yref="y",
-                x=0.15, y=-jord / 2,
+                x=0, y=-jord / 2,
                 text=k["underbund_tekst"], showarrow=False,
-                font=dict(size=8.5, color="#FFFFFF"),
+                font=dict(size=8, color="#FFFFFF"),
             )
 
         total = k.get("total_mm")

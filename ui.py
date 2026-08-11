@@ -391,30 +391,43 @@ def snit(
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     # Signaturen står under figuren; Plotly-signaturen ville optage bredde,
-    # der tilhører søjlerne.
+    # der tilhører søjlerne. Hver post er (farve, kantfarve, tekst, slags),
+    # hvor slags er "flade", "linje" eller "stiplet" — de to sidste tegnes,
+    # som de fremtræder i figuren, så de kan skelnes fra hinanden.
     poster = [
-        (FARVE["baerelag"], FARVE["baerelag_kant"], "Bærelag", False),
-        (FARVE["bundsikring"], FARVE["bundsikring_kant"], "Bundsikring", False),
+        (FARVE["baerelag"], FARVE["baerelag_kant"], "Bærelag", "flade"),
+        (FARVE["bundsikring"], FARVE["bundsikring_kant"], "Bundsikring", "flade"),
     ]
     if any(k.get("geonet_mm") for k in kolonner):
         poster.append(
-            (FARVE["kritisk"], FARVE["kritisk"], geonet_navn or "Geonet", True)
+            (FARVE["kritisk"], FARVE["kritisk"], geonet_navn or "Geonet", "linje")
         )
     if any(k.get("best_case_mm") for k in kolonner):
-        poster.append((FARVE["gron"], FARVE["gron"], "Optimal korrektion", True))
+        poster.append(
+            (FARVE["gron"], FARVE["gron"], "Optimal korrektion", "stiplet")
+        )
     if reference_mm:
-        poster.append((FARVE["ink_25"], FARVE["ink_25"], "Indtastet niveau", True))
+        poster.append(
+            (FARVE["ink_25"], FARVE["ink_25"], "Indtastet niveau", "stiplet")
+        )
 
-    glyffer = "".join(
-        f'<div style="display:flex;align-items:center;gap:6px">'
-        + (
-            f'<div style="width:16px;height:2px;background:{flade}"></div>'
-            if linje else
+    def _glyf(flade: str, kant: str, slags: str) -> str:
+        if slags == "linje":
+            return f'<div style="width:18px;height:2px;background:{flade}"></div>'
+        if slags == "stiplet":
+            return (
+                f'<div style="width:18px;height:0;'
+                f'border-top:2px dashed {flade}"></div>'
+            )
+        return (
             f'<div style="width:16px;height:9px;background:{flade};'
             f'border:1px solid {kant}"></div>'
         )
-        + f'{escape(tekst)}</div>'
-        for flade, kant, tekst, linje in poster
+
+    glyffer = "".join(
+        f'<div style="display:flex;align-items:center;gap:6px">'
+        f'{_glyf(flade, kant, slags)}{escape(tekst)}</div>'
+        for flade, kant, tekst, slags in poster
     )
     st.html(
         f'<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;'
