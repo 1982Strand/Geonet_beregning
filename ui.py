@@ -266,6 +266,17 @@ def resultat_blok(note: str = ""):
         yield
 
 
+def sidehoved(titel: str, beskrivelse: str = "") -> None:
+    """Sidens navn og en kort beskrivelse af, hvad siden bruges til.
+
+    Alle sider indledes ens, jf. designgennemgangens tur 5.
+    """
+    st.html(
+        f'<div class="bg-sidehoved"><h1>{escape(titel)}</h1>'
+        f'<p>{escape(beskrivelse)}</p></div>'
+    )
+
+
 def underhoved(titel: str, note: str = "") -> None:
     """Underoverskrift inde i resultatblokken — Opbygning, Produktvalg m.fl."""
     st.html(

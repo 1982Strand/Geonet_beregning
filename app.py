@@ -5728,273 +5728,250 @@ gyldighedsområde. Der foretages ikke ekstrapolation; i stedet afvises cellen:
 """
 
 def render_trafikklasse_korrelation() -> None:
-    st.title("Trafikklasse-korrelation")
-    st.caption(
-        "Datagrundlaget bag trafikklasse-dimensioneringen: Vejdirektoratets "
-        "trafikklasser koblet til designdiagrammerne via de rå VejDim-kørsler. "
-        "Kørslerne kan redigeres — den ækvivalente Eo genberegnes og bruges live "
-        "i beregningen."
+    """Trafikklasse-korrelationen som nummererede trin, jf. afsnit 5c.
+
+    Tabellen er sidens hovedindhold og får hele bredden; metoden står ved
+    siden af datagrundlaget.
+    """
+    ui.sidehoved(
+        "Trafikklasse-korrelation",
+        "Vejledende kobling mellem Vejdirektoratets trafikklasser og "
+        "designmanualernes Eo-kurver. Kørslerne kan redigeres — den "
+        "ækvivalente Eo genberegnes og bruges med det samme i beregningen.",
     )
 
     raekker = berig_koersel_raekker(_aktiv_koersel_raekker())
 
-    with st.expander("Metode og fremgangsmåde", expanded=True):
-        st.markdown(_KORR_METODE_MD)
-    with st.expander("Datagrundlag og forudsætninger"):
-        st.markdown(_KORR_DATA_INTRO_MD.format(antal=len(raekker) or 36))
-        st.dataframe(
-            _asfaltpakke_rows(raekker),
-            width="content",
-            hide_index=True,
-        )
-        st.markdown(_KORR_DATA_NOTE_MD)
-    with st.expander("Zoner og forbehold"):
-        st.markdown(_KORR_ZONER_MD)
-    st.caption(
-        "Fuld dokumentation: *Dokumenter og data/Korrelation_trafikklasse_Eo.md*."
-    )
-
-    st.divider()
-
     import pandas as pd
 
-    st.subheader("VejDim-kørsler (redigerbar)")
-    st.caption(
-        "De oprindelige kørsler, præcis som de blev indtastet i VejDim — og "
-        "samtidig det grundlag, dimensioneringen regner på. Ret en værdi, og "
-        "Eo_ækv-tabellen nedenfor og trafikklasse-beregningen følger med med "
-        "det samme. **Ubundet** og **Samlet højde** beregnes automatisk og kan "
-        "ikke redigeres."
-    )
-
-    if st.button(
-        "Nulstil til standardværdier",
-        type="secondary",
-        help="Kasserer foretagne ændringer og gendanner de oprindelige "
-             "48 kørsler.",
-    ):
-        slet_koersler_json_og_nulstil()
-        st.session_state["vejdim_koersel_raekker"] = _standard_koersel_raekker()
-        st.session_state.pop("koersel_editor", None)
-        st.rerun()
-
-    editor_rows = [
-        {
-            "Trafikklasse": r["T"],
-            "Eu (MPa)": r["eu"],
-            "Slidlag": r["slidlag"],
-            "t slidlag (mm)": r["t_slid_mm"],
-            "Bindelag": r["bindelag"],
-            "t bindelag (mm)": r["t_bindelag_mm"],
-            "Bundet bærelag": r["bundet_baerelag"],
-            "t bundet (mm)": r["t_bundet_mm"],
-            "Asfalt-E (MPa)": r["E_asf_vist_MPa"],
-            "Ubundet bærelag": r.get(
-                "ubundet_baerelag", UBUNDET_BAERELAG_STANDARD),
-            "SG (mm)": r["t_SG_mm"],
-            "Bundsikringslag": r.get("bundsikring", BUNDSIKRING_STANDARD),
-            "BL (mm)": r["t_BL_mm"],
-            "Ubundet (mm)": r["t_ubundet_total_mm"],
-            "Samlet højde (mm)": r["t_befaestelse_total_mm"],
-            "Levetid (år)": r["levetid_styrende_aar"],
-            "Bemærkning": r["bemaerkning"],
-        }
-        for r in raekker
-    ]
-    _mm = dict(min_value=0.0, step=10.0, format="%.0f")
-    # Højde nok til alle rækker, så tabellen vises i fuld længde uden scroll.
-    # Streamlit bruger ca. 35 px pr. række + 35 px til overskriftsrækken.
-    editor_hoejde = 35 * (len(editor_rows) + 1) + 3
-    redigeret = st.data_editor(
-        pd.DataFrame(editor_rows),
-        width="stretch",
-        height=editor_hoejde,
-        hide_index=True,
-        column_config={
-            "Trafikklasse": st.column_config.TextColumn("Trafikklasse", disabled=True),
-            "Eu (MPa)": st.column_config.NumberColumn("Eu (MPa)", disabled=True, format="%.0f"),
-            "t slidlag (mm)": st.column_config.NumberColumn("t slidlag (mm)", **_mm),
-            "t bindelag (mm)": st.column_config.NumberColumn("t bindelag (mm)", **_mm),
-            "t bundet (mm)": st.column_config.NumberColumn("t bundet (mm)", **_mm),
-            "Asfalt-E (MPa)": st.column_config.NumberColumn(
-                "Asfalt-E (MPa)", min_value=0.0, step=100.0, format="%.0f"),
-            "Ubundet bærelag": st.column_config.TextColumn(
-                "Ubundet bærelag",
-                help="Materialet i det ubundne bærelag, som kørslen er "
-                     "udført med. Tykkelsen angives i kolonnen SG (mm)."),
-            "SG (mm)": st.column_config.NumberColumn("SG (mm)", **_mm),
-            "Bundsikringslag": st.column_config.TextColumn(
-                "Bundsikringslag",
-                help="Materialet i bundsikringslaget, som kørslen er udført "
-                     "med. Tykkelsen angives i kolonnen BL (mm)."),
-            "BL (mm)": st.column_config.NumberColumn("BL (mm)", **_mm),
-            # Afledte kolonner — beregnes, kan ikke redigeres.
-            "Ubundet (mm)": st.column_config.NumberColumn(
-                "Ubundet (mm)", disabled=True, format="%.0f",
-                help="SG + BL — det tal Eo_ækv beregnes ud fra."),
-            "Samlet højde (mm)": st.column_config.NumberColumn(
-                "Samlet højde (mm)", disabled=True, format="%.0f",
-                help="Asfaltpakke + SG + BL. Relevant for frostkontrollen."),
-            "Levetid (år)": st.column_config.NumberColumn(
-                "Levetid (år)", min_value=0.0, step=0.1, format="%.1f"),
-        },
-        key="koersel_editor",
-    )
-
-    nye_raekker = _normaliser_koersel_raekker([
-        {
-            "T": r["Trafikklasse"], "eu": r["Eu (MPa)"],
-            "slidlag": r["Slidlag"], "t_slid_mm": r["t slidlag (mm)"],
-            "bindelag": r["Bindelag"], "t_bindelag_mm": r["t bindelag (mm)"],
-            "bundet_baerelag": r["Bundet bærelag"], "t_bundet_mm": r["t bundet (mm)"],
-            "E_asf_vist_MPa": r["Asfalt-E (MPa)"],
-            "ubundet_baerelag": r["Ubundet bærelag"], "t_SG_mm": r["SG (mm)"],
-            "bundsikring": r["Bundsikringslag"], "t_BL_mm": r["BL (mm)"],
-            "levetid_styrende_aar": r["Levetid (år)"],
-            "bemaerkning": r["Bemærkning"],
-        }
-        for r in redigeret.to_dict("records")
-    ])
-    if nye_raekker != _aktiv_koersel_raekker():
-        st.session_state["vejdim_koersel_raekker"] = nye_raekker
-        gem_koersel_raekker(nye_raekker)
-        # Kør siden igen: de afledte visninger (asfaltpakke, Eo_ækv) står før
-        # editoren og ville ellers vise værdierne fra før redigeringen.
-        st.rerun()
-
-    if nye_raekker != _standard_koersel_raekker():
-        antal = sum(
-            1 for ny, std in zip(nye_raekker, _standard_koersel_raekker())
-            if ny != std
-        )
-        ui.besked(
-            f"<b>{antal} kørsel(er) er ændret</b> i forhold til de oprindelige "
-            f"værdier. Brug <i>Nulstil til standardværdier</i> for at gendanne dem.",
-            "advarsel",
+    with ui.trin_kort(1, "VejDim-kørsler") as t1:
+        t1.opsummering = f"{len(raekker)} kørsler · redigerbar"
+        st.subheader("VejDim-kørsler (redigerbar)")
+        st.caption(
+            "De oprindelige kørsler, præcis som de blev indtastet i VejDim — og "
+            "samtidig det grundlag, dimensioneringen regner på. Ret en værdi, og "
+            "Eo_ækv-tabellen nedenfor og trafikklasse-beregningen følger med med "
+            "det samme. **Ubundet** og **Samlet højde** beregnes automatisk og kan "
+            "ikke redigeres."
         )
 
-    st.divider()
+        if st.button(
+            "Nulstil til standardværdier",
+            type="secondary",
+            help="Kasserer foretagne ændringer og gendanner de oprindelige "
+                 "48 kørsler.",
+        ):
+            slet_koersler_json_og_nulstil()
+            st.session_state["vejdim_koersel_raekker"] = _standard_koersel_raekker()
+            st.session_state.pop("koersel_editor", None)
+            st.rerun()
 
-    st.subheader("Afledt: ækvivalent Eo (Eo_ækv)")
-    st.markdown(
-        "Tabellen angiver resultatet af tilbageberegningen for hver celle, "
-        "det vil sige opslagspunktet i designdiagrammet — den kurve, hvis "
-        "ustabiliserede lagtykkelse svarer til kørslens ubundne opbygning, "
-        "jf. metodeafsnittet ovenfor. Det er denne tabel, dimensioneringen "
-        "slår op i ved valg af trafikklasse.\n\n"
-        "Designdiagrammerne omfatter alene kurverne **Eo = 30–150 MPa**. En "
-        "celle kan derfor kun tildeles et opslagspunkt, hvis den ubundne "
-        "lagtykkelse fra VejDim ligger mellem den tyndeste og den tykkeste "
-        "kurve ved den pågældende E-værdi. I modsat fald angives:\n\n"
-        "- **under** — den ubundne lagtykkelse er mindre end diagrammets mest "
-        "konservative kurve (Eo = 30 MPa). Eksempelvis kræver T1 ved "
-        "Eu = 5 MPa 560 mm, mens kurven for Eo = 30 MPa ligger på 900 mm. Der "
-        "findes ingen kurve med så lille en lagtykkelse, og reduktionen kan "
-        "ikke bestemmes. Belastningsklassegrundlaget bør anvendes. I praksis "
-        "er frostkravet ofte styrende for totalhøjden i disse tilfælde.\n"
-        "- **over** — den ubundne lagtykkelse overstiger diagrammets stiveste "
-        "kurve (Eo = 150 MPa). Eksempelvis kræver T6 ved Eu = 10 MPa 1.146 mm, "
-        "mens kurven for Eo = 150 MPa slutter ved 1.100 mm. Kurverne "
-        "forlænges ikke ud over feltforsøgenes gyldighedsområde, og der "
-        "henvises til en konkret VejDim-beregning.\n\n"
-        "- **mangler** — cellen indeholder endnu ingen VejDim-kørsel, idet den "
-        "ubundne lagtykkelse er 0. Cellen indgår hverken i opslaget eller i "
-        "interpolationen, før den udfyldes i tabellen ovenfor.\n\n"
-        "Vælges en celle i zonen 'under' eller 'over' ved dimensioneringen, "
-        "vises den tilsvarende meddelelse i stedet for resultater. Der gøres "
-        "opmærksom på, at zonerne følger det aktive designdiagram. Ændres "
-        "diagramdata eller kørslerne ovenfor, kan celler skifte zone.\n\n"
-        "For E-værdier mellem to kørte punkter bestemmes den ubundne "
-        "lagtykkelse ved lineær interpolation i log(Eu), hvorefter den "
-        "ækvivalente Eo tilbageberegnes ved den valgte E-værdi. Lagtykkelsen "
-        "aftager tilnærmelsesvis retlinet med log(Eu), hvorfor denne "
-        "fremgangsmåde er mere nøjagtig end interpolation på den ækvivalente "
-        "Eo."
-    )
-    korr = korrelation_fra_koersler(
-        koersler_fra_raekker(raekker), _aktiv_t_basis_table()
-    )
-    _vis_korrelationstabel(korr)
-
-
-def render_materialer() -> None:
-    st.title("Materialer")
-    st.caption(
-        "Anvend standard materialerne til dimensioneringen, eller indtast egne materialer. Ændringer gemmes automatisk og anvendes ved beregninger "
-        "i Brugerdefineret-tilstand."
-    )
-    st.divider()
-
-    import pandas as pd
-
-    kol_a, kol_b, kol_c = st.columns([1, 1, 4])
-    with kol_a:
-        if st.button("Tilføj materiale", icon=":material/add:", width="stretch"):
-            eksisterende = {
-                m["navn"].casefold()
-                for m in st.session_state.get("materialer", [])
+        editor_rows = [
+            {
+                "Trafikklasse": r["T"],
+                "Eu (MPa)": r["eu"],
+                "Slidlag": r["slidlag"],
+                "t slidlag (mm)": r["t_slid_mm"],
+                "Bindelag": r["bindelag"],
+                "t bindelag (mm)": r["t_bindelag_mm"],
+                "Bundet bærelag": r["bundet_baerelag"],
+                "t bundet (mm)": r["t_bundet_mm"],
+                "Asfalt-E (MPa)": r["E_asf_vist_MPa"],
+                "Ubundet bærelag": r.get(
+                    "ubundet_baerelag", UBUNDET_BAERELAG_STANDARD),
+                "SG (mm)": r["t_SG_mm"],
+                "Bundsikringslag": r.get("bundsikring", BUNDSIKRING_STANDARD),
+                "BL (mm)": r["t_BL_mm"],
+                "Ubundet (mm)": r["t_ubundet_total_mm"],
+                "Samlet højde (mm)": r["t_befaestelse_total_mm"],
+                "Levetid (år)": r["levetid_styrende_aar"],
+                "Bemærkning": r["bemaerkning"],
             }
-            navn = "Nyt materiale"
-            nr = 2
-            while navn.casefold() in eksisterende:
-                navn = f"Nyt materiale {nr}"
-                nr += 1
-            st.session_state["materialer"].append({
-                "navn": navn,
-                "lagtype": "Bærelag",
-                "phi": int(PHI_BASIS),
-                "max_korn": 32,
-                "krav_maskestoerrelse_mm": None,
-                "anvendelse": "",
-            })
-            gem_materialer(st.session_state["materialer"])
+            for r in raekker
+        ]
+        _mm = dict(min_value=0.0, step=10.0, format="%.0f")
+        # Højde nok til alle rækker, så tabellen vises i fuld længde uden scroll.
+        # Streamlit bruger ca. 35 px pr. række + 35 px til overskriftsrækken.
+        editor_hoejde = 35 * (len(editor_rows) + 1) + 3
+        redigeret = st.data_editor(
+            pd.DataFrame(editor_rows),
+            width="stretch",
+            height=editor_hoejde,
+            hide_index=True,
+            column_config={
+                "Trafikklasse": st.column_config.TextColumn("Trafikklasse", disabled=True),
+                "Eu (MPa)": st.column_config.NumberColumn("Eu (MPa)", disabled=True, format="%.0f"),
+                "t slidlag (mm)": st.column_config.NumberColumn("t slidlag (mm)", **_mm),
+                "t bindelag (mm)": st.column_config.NumberColumn("t bindelag (mm)", **_mm),
+                "t bundet (mm)": st.column_config.NumberColumn("t bundet (mm)", **_mm),
+                "Asfalt-E (MPa)": st.column_config.NumberColumn(
+                    "Asfalt-E (MPa)", min_value=0.0, step=100.0, format="%.0f"),
+                "Ubundet bærelag": st.column_config.TextColumn(
+                    "Ubundet bærelag",
+                    help="Materialet i det ubundne bærelag, som kørslen er "
+                         "udført med. Tykkelsen angives i kolonnen SG (mm)."),
+                "SG (mm)": st.column_config.NumberColumn("SG (mm)", **_mm),
+                "Bundsikringslag": st.column_config.TextColumn(
+                    "Bundsikringslag",
+                    help="Materialet i bundsikringslaget, som kørslen er udført "
+                         "med. Tykkelsen angives i kolonnen BL (mm)."),
+                "BL (mm)": st.column_config.NumberColumn("BL (mm)", **_mm),
+                # Afledte kolonner — beregnes, kan ikke redigeres.
+                "Ubundet (mm)": st.column_config.NumberColumn(
+                    "Ubundet (mm)", disabled=True, format="%.0f",
+                    help="SG + BL — det tal Eo_ækv beregnes ud fra."),
+                "Samlet højde (mm)": st.column_config.NumberColumn(
+                    "Samlet højde (mm)", disabled=True, format="%.0f",
+                    help="Asfaltpakke + SG + BL. Relevant for frostkontrollen."),
+                "Levetid (år)": st.column_config.NumberColumn(
+                    "Levetid (år)", min_value=0.0, step=0.1, format="%.1f"),
+            },
+            key="koersel_editor",
+        )
+
+        nye_raekker = _normaliser_koersel_raekker([
+            {
+                "T": r["Trafikklasse"], "eu": r["Eu (MPa)"],
+                "slidlag": r["Slidlag"], "t_slid_mm": r["t slidlag (mm)"],
+                "bindelag": r["Bindelag"], "t_bindelag_mm": r["t bindelag (mm)"],
+                "bundet_baerelag": r["Bundet bærelag"], "t_bundet_mm": r["t bundet (mm)"],
+                "E_asf_vist_MPa": r["Asfalt-E (MPa)"],
+                "ubundet_baerelag": r["Ubundet bærelag"], "t_SG_mm": r["SG (mm)"],
+                "bundsikring": r["Bundsikringslag"], "t_BL_mm": r["BL (mm)"],
+                "levetid_styrende_aar": r["Levetid (år)"],
+                "bemaerkning": r["Bemærkning"],
+            }
+            for r in redigeret.to_dict("records")
+        ])
+        if nye_raekker != _aktiv_koersel_raekker():
+            st.session_state["vejdim_koersel_raekker"] = nye_raekker
+            gem_koersel_raekker(nye_raekker)
+            # Kør siden igen: de afledte visninger (asfaltpakke, Eo_ækv) står før
+            # editoren og ville ellers vise værdierne fra før redigeringen.
             st.rerun()
 
-    with kol_b:
-        if st.button("Nulstil til standard", icon=":material/refresh:",
-                     width="stretch", type="secondary"):
-            slet_json_og_nulstil()
-            st.session_state["materialer"] = indlaes_materialer()
-            st.rerun()
+        if nye_raekker != _standard_koersel_raekker():
+            antal = sum(
+                1 for ny, std in zip(nye_raekker, _standard_koersel_raekker())
+                if ny != std
+            )
+            ui.besked(
+                f"<b>{antal} kørsel(er) er ændret</b> i forhold til de oprindelige "
+                f"værdier. Brug <i>Nulstil til standardværdier</i> for at gendanne dem.",
+                "advarsel",
+            )
 
+        st.divider()
+
+        st.subheader("Afledt: ækvivalent Eo (Eo_ækv)")
+        st.markdown(
+            "Tabellen angiver resultatet af tilbageberegningen for hver celle, "
+            "det vil sige opslagspunktet i designdiagrammet — den kurve, hvis "
+            "ustabiliserede lagtykkelse svarer til kørslens ubundne opbygning, "
+            "jf. metodeafsnittet ovenfor. Det er denne tabel, dimensioneringen "
+            "slår op i ved valg af trafikklasse.\n\n"
+            "Designdiagrammerne omfatter alene kurverne **Eo = 30–150 MPa**. En "
+            "celle kan derfor kun tildeles et opslagspunkt, hvis den ubundne "
+            "lagtykkelse fra VejDim ligger mellem den tyndeste og den tykkeste "
+            "kurve ved den pågældende E-værdi. I modsat fald angives:\n\n"
+            "- **under** — den ubundne lagtykkelse er mindre end diagrammets mest "
+            "konservative kurve (Eo = 30 MPa). Eksempelvis kræver T1 ved "
+            "Eu = 5 MPa 560 mm, mens kurven for Eo = 30 MPa ligger på 900 mm. Der "
+            "findes ingen kurve med så lille en lagtykkelse, og reduktionen kan "
+            "ikke bestemmes. Belastningsklassegrundlaget bør anvendes. I praksis "
+            "er frostkravet ofte styrende for totalhøjden i disse tilfælde.\n"
+            "- **over** — den ubundne lagtykkelse overstiger diagrammets stiveste "
+            "kurve (Eo = 150 MPa). Eksempelvis kræver T6 ved Eu = 10 MPa 1.146 mm, "
+            "mens kurven for Eo = 150 MPa slutter ved 1.100 mm. Kurverne "
+            "forlænges ikke ud over feltforsøgenes gyldighedsområde, og der "
+            "henvises til en konkret VejDim-beregning.\n\n"
+            "- **mangler** — cellen indeholder endnu ingen VejDim-kørsel, idet den "
+            "ubundne lagtykkelse er 0. Cellen indgår hverken i opslaget eller i "
+            "interpolationen, før den udfyldes i tabellen ovenfor.\n\n"
+            "Vælges en celle i zonen 'under' eller 'over' ved dimensioneringen, "
+            "vises den tilsvarende meddelelse i stedet for resultater. Der gøres "
+            "opmærksom på, at zonerne følger det aktive designdiagram. Ændres "
+            "diagramdata eller kørslerne ovenfor, kan celler skifte zone.\n\n"
+            "For E-værdier mellem to kørte punkter bestemmes den ubundne "
+            "lagtykkelse ved lineær interpolation i log(Eu), hvorefter den "
+            "ækvivalente Eo tilbageberegnes ved den valgte E-værdi. Lagtykkelsen "
+            "aftager tilnærmelsesvis retlinet med log(Eu), hvorfor denne "
+            "fremgangsmåde er mere nøjagtig end interpolation på den ækvivalente "
+            "Eo."
+        )
+        korr = korrelation_fra_koersler(
+            koersler_fra_raekker(raekker), _aktiv_t_basis_table()
+        )
+        _vis_korrelationstabel(korr)
+
+
+    kol_metode, kol_data = st.columns([1.25, 1], gap="medium")
+    with kol_metode:
+        with ui.trin_kort(2, "Metode og fremgangsmåde") as t2:
+            st.markdown(_KORR_METODE_MD)
+            t2.opsummering = "Fra VejDim til designdiagram"
+    with kol_data:
+        with ui.trin_kort(3, "Datagrundlag") as t3:
+            st.markdown(_KORR_DATA_INTRO_MD.format(antal=len(raekker) or 36))
+            st.dataframe(
+                _asfaltpakke_rows(raekker),
+                width="content",
+                hide_index=True,
+            )
+            st.markdown(_KORR_DATA_NOTE_MD)
+            with st.expander("Zoner og forbehold"):
+                st.markdown(_KORR_ZONER_MD)
+            st.caption(
+                "Fuld dokumentation: *Dokumenter og data/"
+                "Korrelation_trafikklasse_Eo.md*."
+            )
+            t3.opsummering = "Kan redigeres"
+
+
+def _materiale_editor(lagtype: str, materialer: list[dict], noegle: str):
+    """Redigerbar tabel for én lagtype, jf. afsnit 5b.
+
+    Kolonnen Standard viser materialets oprindelige friktionsvinkel, så en
+    ændring altid kan aflæses i forhold til udgangspunktet.
+    """
+    import pandas as pd
+
+    std_phi = {
+        m["navn"]: m["phi"] for m in _standard_materialer()
+    }
+    raekker = [
+        {**m, "standard_phi": std_phi.get(m["navn"])}
+        for m in materialer if m.get("lagtype") == lagtype
+    ]
     df = pd.DataFrame(
-        st.session_state.get("materialer", []),
+        raekker,
         columns=[
-            "navn", "lagtype", "phi", "max_korn",
+            "navn", "phi", "standard_phi", "max_korn",
             "krav_maskestoerrelse_mm", "anvendelse",
         ],
     )
-
     redigeret = st.data_editor(
         df,
         width="stretch",
         hide_index=True,
         num_rows="dynamic",
         column_config={
-            "navn": st.column_config.TextColumn(
-                "Materiale",
-                required=True,
-            ),
-            "lagtype": st.column_config.SelectboxColumn(
-                "Lagtype",
-                options=["Bærelag", "Bundsikring"],
-                required=True,
-            ),
+            "navn": st.column_config.TextColumn("Materiale", required=True),
             "phi": st.column_config.NumberColumn(
-                "φ (°)",
-                min_value=20,
-                max_value=60,
-                step=1,
-                format="%d",
-                required=True,
+                "φ (°)", min_value=20, max_value=60, step=1,
+                format="%d", required=True,
+            ),
+            "standard_phi": st.column_config.NumberColumn(
+                "Standard",
+                help=(
+                    "Materialets oprindelige friktionsvinkel. Afviger φ "
+                    "herfra, er værdien tilpasset lokalt."
+                ),
+                format="%d", disabled=True,
             ),
             "max_korn": st.column_config.NumberColumn(
-                "Max korn (mm)",
-                min_value=0,
-                max_value=500,
-                step=1,
-                format="%d",
-                required=False,
+                "Maks. korn (mm)", min_value=0, max_value=500, step=1,
+                format="%d", required=False,
             ),
             "krav_maskestoerrelse_mm": st.column_config.NumberColumn(
                 "Krav til geonet — maskestørrelse (mm)",
@@ -6003,20 +5980,69 @@ def render_materialer() -> None:
                     "kræver af et biaksialt geonet. Sammenlignes kun med "
                     "biaksiale net i Brugerdefineret-tilstand."
                 ),
-                min_value=0,
-                max_value=500,
-                step=5,
-                format="%d",
-                required=False,
+                min_value=0, max_value=500, step=5,
+                format="%d", required=False,
             ),
-            "anvendelse": st.column_config.TextColumn(
-                "Anvendelse",
-            ),
+            "anvendelse": st.column_config.TextColumn("Bemærkning"),
         },
-        key="mat_editor",
+        key=noegle,
+    )
+    ud = []
+    for r in redigeret.to_dict("records"):
+        r.pop("standard_phi", None)
+        r["lagtype"] = lagtype
+        ud.append(r)
+    return ud
+
+
+def _antal_afvigende(materialer: list[dict]) -> int:
+    """Antal materialer, hvis friktionsvinkel afviger fra standarden."""
+    std = {m["navn"]: m["phi"] for m in _standard_materialer()}
+    return sum(
+        1 for m in materialer
+        if m["navn"] in std and m["phi"] != std[m["navn"]]
     )
 
-    ny_liste = _normaliser_materialer(redigeret.to_dict("records"))
+
+def render_materialer() -> None:
+    """Materialeopslaget som nummererede trin, jf. afsnit 5b."""
+    ui.sidehoved(
+        "Materialer",
+        "Friktionsvinkler og kornstørrelser anvendt i dimensioneringen. "
+        "Værdierne kan tilpasses; ændringer gemmes lokalt og indgår i "
+        "beregningen i Brugerdefineret-tilstand.",
+    )
+
+    materialer = st.session_state.get("materialer", [])
+    afvigende = _antal_afvigende(materialer)
+    if afvigende:
+        ui.besked(
+            f"{afvigende} værdi(er) afviger fra standarden. "
+            "Brug <i>Nulstil til standard</i> for at gendanne dem.",
+            "advarsel",
+        )
+
+    with ui.trin_kort(1, "Bærelagsmaterialer") as t1:
+        baerelag = _materiale_editor("Bærelag", materialer, "mat_editor_baere")
+        t1.opsummering = f"{len(baerelag)} materialer"
+
+    with ui.trin_kort(2, "Bundsikringsmaterialer") as t2:
+        bundsikring = _materiale_editor(
+            "Bundsikring", materialer, "mat_editor_bund"
+        )
+        t2.opsummering = f"{len(bundsikring)} materialer"
+
+    kol_a, kol_b, _ = st.columns([1, 1, 3])
+    with kol_a:
+        if st.button("Nulstil til standard", icon=":material/refresh:",
+                     width="stretch", type="secondary"):
+            slet_json_og_nulstil()
+            st.session_state["materialer"] = indlaes_materialer()
+            st.session_state.pop("mat_editor_baere", None)
+            st.session_state.pop("mat_editor_bund", None)
+            st.rerun()
+
+    ny_liste = _normaliser_materialer(baerelag + bundsikring)
     duplikater = _duplikerede_materialenavne(ny_liste)
 
     if not ny_liste:
@@ -6035,18 +6061,19 @@ def render_materialer() -> None:
         gem_materialer(ny_liste)
 
 
+
 def render_rapport() -> None:
     """Rapport-side — generér Word/PDF ud fra den seneste dimensionering."""
     from datetime import date as _date
 
     from core import rapport as rapport_mod
 
-    st.title("Rapport")
-    st.caption(
-        "Generér en notat-rapport (Word og PDF) baseret på den seneste "
-        "dimensionering. Standardtekster kan redigeres pr. rapport."
+    ui.sidehoved(
+        "Rapport",
+        "Dokumentation af beregningen til projektmateriale. Rapporten samler "
+        "forudsætninger, resultat og udførelseskrav i ét dokument i Word og "
+        "PDF. Standardteksterne kan redigeres pr. rapport.",
     )
-    st.divider()
 
     sd = st.session_state.get("sidste_dim")
     if not sd or not sd.get("geonet"):
@@ -6075,554 +6102,557 @@ def render_rapport() -> None:
         f"Produkt: **{sd['geonet_navn']}**  ·  φ = {ui.grader(sd['phi'])}"
     )
 
-    # --- A. Metadata --------------------------------------------------------
-    # Projekt-oplysningerne huskes til næste gang på disk (undtagen dato, der
-    # som udgangspunkt altid er dags dato).
-    if "rapport_metadata" not in st.session_state:
-        st.session_state["rapport_metadata"] = indlaes_rapport_metadata()
-    md_state = st.session_state["rapport_metadata"]
-    # Migrér gamle session-states der mangler nyere felter
-    md_state.setdefault("sagsbehandler_mail", "")
-    md_state.setdefault("kontrol", "")
+    with ui.trin_kort(1, "Sagsoplysninger") as t1:
+        # --- A. Metadata --------------------------------------------------------
+        # Projekt-oplysningerne huskes til næste gang på disk (undtagen dato, der
+        # som udgangspunkt altid er dags dato).
+        if "rapport_metadata" not in st.session_state:
+            st.session_state["rapport_metadata"] = indlaes_rapport_metadata()
+        md_state = st.session_state["rapport_metadata"]
+        # Migrér gamle session-states der mangler nyere felter
+        md_state.setdefault("sagsbehandler_mail", "")
+        md_state.setdefault("kontrol", "")
 
-    kol_a_titel, kol_a_reset = st.columns([4, 1])
-    with kol_a_titel:
-        st.subheader("A. Projekt-oplysninger")
-        st.caption(
-            "Felterne huskes automatisk til næste gang. "
-            "Brug **Nulstil felter** for at rydde dem."
-        )
-    with kol_a_reset:
-        if st.button(
-            "Nulstil felter", icon=":material/refresh:",
-            key="rap_nulstil_felter", width="stretch",
-            help="Rydder alle projekt-oplysninger og glemmer de gemte værdier.",
-        ):
-            st.session_state["rapport_metadata"] = _standard_rapport_metadata()
-            # Sæt widget-nøglerne eksplicit til den tomme værdi i stedet for
-            # blot at fjerne dem: browseren sender ellers de gamle værdier
-            # tilbage ved næste kørsel, så felterne kom til at stå urørte.
-            # En værdi lagt i session_state før widget'en oprettes vinder.
-            for _wk in (
-                "rap_projekt", "rap_omfang", "rap_sagsbehandler",
-                "rap_sagsbehandler_mail", "rap_kontrol", "rap_beskrivelse",
-                "rap_udfoeres_for",
-            ):
-                st.session_state[_wk] = ""
-            st.session_state["rap_dato"] = _date.today()
-            st.session_state.pop("_rapport_metadata_gemt", None)
-            slet_rapport_metadata_json()
-            st.rerun()
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        md_state["projekt"] = st.text_input(
-            "Projekt", value=md_state.get("projekt", ""), key="rap_projekt",
-        )
-        md_state["omfang"] = st.text_input(
-            "Omfang", value=md_state.get("omfang", ""), key="rap_omfang",
-        )
-        md_state["sagsbehandler"] = st.text_input(
-            "Sagsbehandler", value=md_state.get("sagsbehandler", ""),
-            key="rap_sagsbehandler",
-        )
-        md_state["sagsbehandler_mail"] = st.text_input(
-            "Sagsbehandler-mail",
-            value=md_state.get("sagsbehandler_mail", ""),
-            key="rap_sagsbehandler_mail",
-        )
-        md_state["kontrol"] = st.text_input(
-            "Kontrol", value=md_state.get("kontrol", ""),
-            key="rap_kontrol",
-        )
-    with col_b:
-        md_state["beskrivelse"] = st.text_area(
-            "Beskrivelse", value=md_state.get("beskrivelse", ""),
-            key="rap_beskrivelse", height=80,
-        )
-        md_state["udfoeres_for"] = st.text_input(
-            "Udføres for", value=md_state.get("udfoeres_for", ""),
-            key="rap_udfoeres_for",
-        )
-        valgt_dato = st.date_input(
-            "Dato",
-            value=_date.fromisoformat(md_state.get("dato")) if md_state.get("dato") else _date.today(),
-            key="rap_dato",
-            format="DD/MM/YYYY",
-        )
-        md_state["dato"] = valgt_dato.isoformat() if hasattr(valgt_dato, "isoformat") else str(valgt_dato)
-
-    # Gem oplysningerne på disk, når de ændrer sig, så de huskes til næste gang.
-    _md_disk = {f: md_state.get(f, "") for f in _RAPPORT_METADATA_DISK_FELTER}
-    if _md_disk != st.session_state.get("_rapport_metadata_gemt"):
-        gem_rapport_metadata(md_state)
-        st.session_state["_rapport_metadata_gemt"] = _md_disk
-
-    st.divider()
-
-    # --- B. Redigerbare skabelon-sektioner ---------------------------------
-    st.subheader("B. Skabelon-tekster")
-    st.caption(
-        "Standardteksterne fra BG Byggros' eksempelrapport er forudfyldt. "
-        "Teksterne kan redigeres pr. rapport eller nulstilles til standard."
-    )
-    tekster_state = st.session_state.setdefault("rapport_tekster", {})
-    # Versionsnummer pr. sektion — bumpes når Nulstil klikkes, så text_area
-    # får en ny widget-key og dermed glemmer det brugeren skrev.
-    reset_v = st.session_state.setdefault("rapport_reset_v", {})
-
-    for nøgle in rapport_mod.SECTION_KEYS:
-        titel = rapport_mod.SECTION_TITLER[nøgle]
-        std = rapport_mod.STANDARD_TEKSTER[nøgle]
-        nuvaerende = tekster_state.get(nøgle, std)
-        v = reset_v.get(nøgle, 0)
-        widget_key = f"rap_tekst_{nøgle}_v{v}"
-        with st.expander(titel, expanded=False):
-            kol_l, kol_r = st.columns([5, 1])
-            with kol_r:
-                if st.button("Nulstil", icon=":material/refresh:", key=f"rap_reset_{nøgle}",
-                             width="stretch"):
-                    tekster_state[nøgle] = std
-                    # Bump versionen — det giver text_area en ny key, så
-                    # Streamlit re-initialiserer widget'en med std-tekst.
-                    reset_v[nøgle] = v + 1
-                    st.rerun()
-            ny_tekst = st.text_area(
-                "Tekst", value=nuvaerende, height=220,
-                key=widget_key, label_visibility="collapsed",
+        kol_a_titel, kol_a_reset = st.columns([4, 1])
+        with kol_a_titel:
+            st.caption(
+                "Felterne huskes automatisk til næste gang. "
+                "Brug **Nulstil felter** for at rydde dem."
             )
-            tekster_state[nøgle] = ny_tekst
+        with kol_a_reset:
+            if st.button(
+                "Nulstil felter", icon=":material/refresh:",
+                key="rap_nulstil_felter", width="stretch",
+                help="Rydder alle projekt-oplysninger og glemmer de gemte værdier.",
+            ):
+                st.session_state["rapport_metadata"] = _standard_rapport_metadata()
+                # Sæt widget-nøglerne eksplicit til den tomme værdi i stedet for
+                # blot at fjerne dem: browseren sender ellers de gamle værdier
+                # tilbage ved næste kørsel, så felterne kom til at stå urørte.
+                # En værdi lagt i session_state før widget'en oprettes vinder.
+                for _wk in (
+                    "rap_projekt", "rap_omfang", "rap_sagsbehandler",
+                    "rap_sagsbehandler_mail", "rap_kontrol", "rap_beskrivelse",
+                    "rap_udfoeres_for",
+                ):
+                    st.session_state[_wk] = ""
+                st.session_state["rap_dato"] = _date.today()
+                st.session_state.pop("_rapport_metadata_gemt", None)
+                slet_rapport_metadata_json()
+                st.rerun()
 
-    st.divider()
+        col_a, col_b = st.columns(2)
+        with col_a:
+            md_state["projekt"] = st.text_input(
+                "Projekt", value=md_state.get("projekt", ""), key="rap_projekt",
+            )
+            md_state["omfang"] = st.text_input(
+                "Omfang", value=md_state.get("omfang", ""), key="rap_omfang",
+            )
+            md_state["sagsbehandler"] = st.text_input(
+                "Sagsbehandler", value=md_state.get("sagsbehandler", ""),
+                key="rap_sagsbehandler",
+            )
+            md_state["sagsbehandler_mail"] = st.text_input(
+                "Sagsbehandler-mail",
+                value=md_state.get("sagsbehandler_mail", ""),
+                key="rap_sagsbehandler_mail",
+            )
+            md_state["kontrol"] = st.text_input(
+                "Kontrol", value=md_state.get("kontrol", ""),
+                key="rap_kontrol",
+            )
+        with col_b:
+            md_state["beskrivelse"] = st.text_area(
+                "Beskrivelse", value=md_state.get("beskrivelse", ""),
+                key="rap_beskrivelse", height=80,
+            )
+            md_state["udfoeres_for"] = st.text_input(
+                "Udføres for", value=md_state.get("udfoeres_for", ""),
+                key="rap_udfoeres_for",
+            )
+            valgt_dato = st.date_input(
+                "Dato",
+                value=_date.fromisoformat(md_state.get("dato")) if md_state.get("dato") else _date.today(),
+                key="rap_dato",
+                format="DD/MM/YYYY",
+            )
+            md_state["dato"] = valgt_dato.isoformat() if hasattr(valgt_dato, "isoformat") else str(valgt_dato)
 
-    # --- C. Visualiseringsvalg + preview -----------------------------------
-    st.subheader("C. Visualisering")
+        # Gem oplysningerne på disk, når de ændrer sig, så de huskes til næste gang.
+        _md_disk = {f: md_state.get(f, "") for f in _RAPPORT_METADATA_DISK_FELTER}
+        if _md_disk != st.session_state.get("_rapport_metadata_gemt"):
+            gem_rapport_metadata(md_state)
+            st.session_state["_rapport_metadata_gemt"] = _md_disk
 
-    res_1 = sd.get("res_1") or {}
-    res_2 = sd.get("res_2") or {}
-    t_1 = res_1.get("t_armeret_mm") if not res_1.get("fejl") else None
-    t_2 = res_2.get("t_armeret_mm") if not res_2.get("fejl") else None
-    t_uarm = sd.get("t_uarmeret_mm")
+        st.divider()
+        t1.opsummering = " · ".join(x for x in (md_state.get("projekt"), md_state.get("sagsnummer")) if x) or "Ikke udfyldt"
 
-    uarm_muligt = t_uarm is not None
-    to_lag_muligt = t_1 is not None and t_1 >= 500.0
+    with ui.trin_kort(2, "Indhold") as t2:
+        # --- B. Redigerbare skabelon-sektioner ---------------------------------
+        st.caption(
+            "Standardteksterne fra BG Byggros' eksempelrapport er forudfyldt. "
+            "Teksterne kan redigeres pr. rapport eller nulstilles til standard."
+        )
+        tekster_state = st.session_state.setdefault("rapport_tekster", {})
+        # Versionsnummer pr. sektion — bumpes når Nulstil klikkes, så text_area
+        # får en ny widget-key og dermed glemmer det brugeren skrev.
+        reset_v = st.session_state.setdefault("rapport_reset_v", {})
 
-    # Materialelag fra brugerens dimensionering — bruges til at vise
-    # 'Indtastet opbygning'-søjlen og sammenligningslinjen på krav-søjlerne.
-    materialer_dim = sd.get("materialer") or []
-    in_mm_mode = any(m.get("tykkelse_mm") for m in materialer_dim)
-    indtastet_muligt = in_mm_mode and bool(materialer_dim)
+        for nøgle in rapport_mod.SECTION_KEYS:
+            titel = rapport_mod.SECTION_TITLER[nøgle]
+            std = rapport_mod.STANDARD_TEKSTER[nøgle]
+            nuvaerende = tekster_state.get(nøgle, std)
+            v = reset_v.get(nøgle, 0)
+            widget_key = f"rap_tekst_{nøgle}_v{v}"
+            with st.expander(titel, expanded=False):
+                kol_l, kol_r = st.columns([5, 1])
+                with kol_r:
+                    if st.button("Nulstil", icon=":material/refresh:", key=f"rap_reset_{nøgle}",
+                                 width="stretch"):
+                        tekster_state[nøgle] = std
+                        # Bump versionen — det giver text_area en ny key, så
+                        # Streamlit re-initialiserer widget'en med std-tekst.
+                        reset_v[nøgle] = v + 1
+                        st.rerun()
+                ny_tekst = st.text_area(
+                    "Tekst", value=nuvaerende, height=220,
+                    key=widget_key, label_visibility="collapsed",
+                )
+                tekster_state[nøgle] = ny_tekst
 
-    kol_v0, kol_v1, kol_v2, kol_v3 = st.columns(4)
-    with kol_v0:
-        vis_indtastet = st.checkbox(
-            "Indtastet opbygning",
-            value=indtastet_muligt,
-            disabled=not indtastet_muligt,
-            key="rap_vis_indtastet",
+        st.divider()
+        t2.opsummering = f"{len(rapport_mod.SECTION_KEYS)} afsnit"
+
+    with ui.trin_kort(3, "Gennemsyn") as t3:
+        # --- C. Visualiseringsvalg + preview -----------------------------------
+
+        res_1 = sd.get("res_1") or {}
+        res_2 = sd.get("res_2") or {}
+        t_1 = res_1.get("t_armeret_mm") if not res_1.get("fejl") else None
+        t_2 = res_2.get("t_armeret_mm") if not res_2.get("fejl") else None
+        t_uarm = sd.get("t_uarmeret_mm")
+
+        uarm_muligt = t_uarm is not None
+        to_lag_muligt = t_1 is not None and t_1 >= 500.0
+
+        # Materialelag fra brugerens dimensionering — bruges til at vise
+        # 'Indtastet opbygning'-søjlen og sammenligningslinjen på krav-søjlerne.
+        materialer_dim = sd.get("materialer") or []
+        in_mm_mode = any(m.get("tykkelse_mm") for m in materialer_dim)
+        indtastet_muligt = in_mm_mode and bool(materialer_dim)
+
+        kol_v0, kol_v1, kol_v2, kol_v3 = st.columns(4)
+        with kol_v0:
+            vis_indtastet = st.checkbox(
+                "Indtastet opbygning",
+                value=indtastet_muligt,
+                disabled=not indtastet_muligt,
+                key="rap_vis_indtastet",
+                help=(
+                    None if indtastet_muligt
+                    else "Ingen brugerindtastede lagtykkelser at vise."
+                ),
+            )
+        with kol_v1:
+            vis_uarm = st.checkbox(
+                "Ustabiliseret opbygning",
+                value=uarm_muligt,
+                disabled=not uarm_muligt,
+                key="rap_vis_uarm",
+                help=(
+                    None if uarm_muligt
+                    else "Ustabiliseret tykkelse er ikke defineret for denne "
+                         "Eu/Eo-kombination."
+                ),
+            )
+        with kol_v2:
+            vis_1lag = st.checkbox(
+                "1 lag geonet",
+                value=t_1 is not None,
+                disabled=t_1 is None,
+                key="rap_vis_1lag",
+            )
+        with kol_v3:
+            vis_2lag = st.checkbox(
+                "2 lag geonet",
+                value=to_lag_muligt,
+                disabled=not to_lag_muligt,
+                key="rap_vis_2lag",
+                help=(
+                    None if to_lag_muligt
+                    else "2 lag geonet anvendes kun ved opbygninger ≥ 500 mm "
+                         "(beregnet 1-lag tykkelse) — derfor ikke relevant her."
+                ),
+            )
+
+        geonet = sd.get("geonet") or {}
+        geonet_label = geonet.get("navn", "Geonet")
+
+        # --- Ekstra: Personligt designdiagram ---------------------------------
+        designdiagram_muligt = bool(geonet.get("navn"))
+        vis_designdiagram = st.checkbox(
+            "Personligt designdiagram",
+            value=designdiagram_muligt,
+            disabled=not designdiagram_muligt,
+            key="rap_vis_designdiagram",
             help=(
-                None if indtastet_muligt
-                else "Ingen brugerindtastede lagtykkelser at vise."
+                "Tegner designkurverne (ustabiliseret, 1 lag og 2 lag) tilpasset "
+                "de valgte materialer og det valgte geonet, med den indtastede "
+                "opbygning og E-værdi som referencer. Formen svarer til de "
+                "oprindelige designdiagrammer."
+                if designdiagram_muligt
+                else "Vælg et specifikt geonet under Dimensionering for at få "
+                     "kurverne med produktets net-korrektion."
             ),
         )
-    with kol_v1:
-        vis_uarm = st.checkbox(
-            "Ustabiliseret opbygning",
-            value=uarm_muligt,
-            disabled=not uarm_muligt,
-            key="rap_vis_uarm",
-            help=(
-                None if uarm_muligt
-                else "Ustabiliseret tykkelse er ikke defineret for denne "
-                     "Eu/Eo-kombination."
-            ),
-        )
-    with kol_v2:
-        vis_1lag = st.checkbox(
-            "1 lag geonet",
-            value=t_1 is not None,
-            disabled=t_1 is None,
-            key="rap_vis_1lag",
-        )
-    with kol_v3:
-        vis_2lag = st.checkbox(
-            "2 lag geonet",
-            value=to_lag_muligt,
-            disabled=not to_lag_muligt,
-            key="rap_vis_2lag",
-            help=(
-                None if to_lag_muligt
-                else "2 lag geonet anvendes kun ved opbygninger ≥ 500 mm "
-                     "(beregnet 1-lag tykkelse) — derfor ikke relevant her."
-            ),
-        )
-
-    geonet = sd.get("geonet") or {}
-    geonet_label = geonet.get("navn", "Geonet")
-
-    # --- Ekstra: Personligt designdiagram ---------------------------------
-    designdiagram_muligt = bool(geonet.get("navn"))
-    vis_designdiagram = st.checkbox(
-        "Personligt designdiagram",
-        value=designdiagram_muligt,
-        disabled=not designdiagram_muligt,
-        key="rap_vis_designdiagram",
-        help=(
-            "Tegner designkurverne (ustabiliseret, 1 lag og 2 lag) tilpasset "
-            "de valgte materialer og det valgte geonet, med den indtastede "
-            "opbygning og E-værdi som referencer. Formen svarer til de "
-            "oprindelige designdiagrammer."
-            if designdiagram_muligt
-            else "Vælg et specifikt geonet under Dimensionering for at få "
-                 "kurverne med produktets net-korrektion."
-        ),
-    )
-    kol_dd1, kol_dd2 = st.columns(2)
-    with kol_dd1:
-        vis_dd_din_prik = st.checkbox(
-            "Vis 'Indtastet opbygning'-prik i designdiagram",
-            value=True,
-            key="rap_dd_vis_din_prik",
-            disabled=not (vis_designdiagram and designdiagram_muligt),
-        )
-    with kol_dd2:
-        vis_dd_lag_prikker = st.checkbox(
-            "Vis endepunkter for 1/2 lag i designdiagram",
-            value=True,
-            key="rap_dd_vis_lag_prikker",
-            disabled=not (vis_designdiagram and designdiagram_muligt),
-        )
+        kol_dd1, kol_dd2 = st.columns(2)
+        with kol_dd1:
+            vis_dd_din_prik = st.checkbox(
+                "Vis 'Indtastet opbygning'-prik i designdiagram",
+                value=True,
+                key="rap_dd_vis_din_prik",
+                disabled=not (vis_designdiagram and designdiagram_muligt),
+            )
+        with kol_dd2:
+            vis_dd_lag_prikker = st.checkbox(
+                "Vis endepunkter for 1/2 lag i designdiagram",
+                value=True,
+                key="rap_dd_vis_lag_prikker",
+                disabled=not (vis_designdiagram and designdiagram_muligt),
+            )
 
 
-    def _sub_lag_skaleret(total_mm: float | None) -> list[dict]:
-        """Returnér brugerens materialer skaleret så summen = total_mm.
-        For mm-mode: forhold = tykkelse_mm / sum. For pct-mode: forhold = pct / sum.
-        """
-        if not materialer_dim or not total_mm:
-            return []
-        if in_mm_mode:
-            sum_t = sum((m.get("tykkelse_mm") or 0) for m in materialer_dim)
-            if sum_t <= 0:
+        def _sub_lag_skaleret(total_mm: float | None) -> list[dict]:
+            """Returnér brugerens materialer skaleret så summen = total_mm.
+            For mm-mode: forhold = tykkelse_mm / sum. For pct-mode: forhold = pct / sum.
+            """
+            if not materialer_dim or not total_mm:
+                return []
+            if in_mm_mode:
+                sum_t = sum((m.get("tykkelse_mm") or 0) for m in materialer_dim)
+                if sum_t <= 0:
+                    return []
+                return [
+                    {
+                        "navn": m.get("navn", "Lag"),
+                        "tykkelse_mm": (m.get("tykkelse_mm") or 0) * total_mm / sum_t,
+                    }
+                    for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
+                ]
+            # pct-mode
+            sum_p = sum((m.get("pct") or 0) for m in materialer_dim)
+            if sum_p <= 0:
                 return []
             return [
                 {
                     "navn": m.get("navn", "Lag"),
-                    "tykkelse_mm": (m.get("tykkelse_mm") or 0) * total_mm / sum_t,
+                    "tykkelse_mm": (m.get("pct") or 0) / sum_p * total_mm,
                 }
-                for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
+                for m in materialer_dim if (m.get("pct") or 0) > 0
             ]
-        # pct-mode
-        sum_p = sum((m.get("pct") or 0) for m in materialer_dim)
-        if sum_p <= 0:
-            return []
-        return [
-            {
-                "navn": m.get("navn", "Lag"),
-                "tykkelse_mm": (m.get("pct") or 0) / sum_p * total_mm,
-            }
-            for m in materialer_dim if (m.get("pct") or 0) > 0
-        ]
 
-    def _sub_lag_uarmeret() -> tuple[float | None, list[dict]]:
-        """For uarmeret-snittet: brug brugerens dimensionerede tykkelser
-        (mm-mode). I pct-mode falder vi tilbage på t_uarm-beregningen."""
-        if in_mm_mode and materialer_dim:
-            lag = [
-                {
-                    "navn": m.get("navn", "Lag"),
-                    "tykkelse_mm": float(m.get("tykkelse_mm") or 0),
-                }
-                for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
-            ]
-            total = sum(l["tykkelse_mm"] for l in lag)
-            return (total if total > 0 else None, lag)
-        # pct-mode fallback
-        return (t_uarm, _sub_lag_skaleret(t_uarm) if t_uarm else [])
+        def _sub_lag_uarmeret() -> tuple[float | None, list[dict]]:
+            """For uarmeret-snittet: brug brugerens dimensionerede tykkelser
+            (mm-mode). I pct-mode falder vi tilbage på t_uarm-beregningen."""
+            if in_mm_mode and materialer_dim:
+                lag = [
+                    {
+                        "navn": m.get("navn", "Lag"),
+                        "tykkelse_mm": float(m.get("tykkelse_mm") or 0),
+                    }
+                    for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
+                ]
+                total = sum(l["tykkelse_mm"] for l in lag)
+                return (total if total > 0 else None, lag)
+            # pct-mode fallback
+            return (t_uarm, _sub_lag_skaleret(t_uarm) if t_uarm else [])
 
-    # Koncept A: Indtastet opbygning + neutrale krav-søjler. φ fra
-    # dimensioneringen (sd["phi"]) styrer φ-korrektionen på uarmeret-kravet.
-    phi_dim = float(sd.get("phi", PHI_BASIS))
-    phi_kor_dim = K_PHI * (phi_dim - PHI_BASIS)
-    har_indtastet_rap = in_mm_mode and bool(materialer_dim)
-    indtastet_total_rap: float | None = None
-    if har_indtastet_rap:
-        indtastet_total_rap = sum(
-            float(m.get("tykkelse_mm") or 0) for m in materialer_dim
-        ) or None
-    t_uarm_krav_rap = (
-        round(t_uarm * (1 + phi_kor_dim)) if t_uarm is not None else None
-    )
-
-    # Når 'Indtastet opbygning' er fravalgt, slukkes både søjlen OG
-    # sammenligningslinjen — t_indtastet_for_snit styrer linjen via Snit-feltet.
-    vis_indtastet_aktiv = (
-        vis_indtastet and har_indtastet_rap and bool(indtastet_total_rap)
-    )
-    t_indtastet_for_snit = indtastet_total_rap if vis_indtastet_aktiv else None
-    # Statusteksten (for lidt / i overskud) giver kun mening sammen med linjen.
-    status_indtastet_ref = (
-        indtastet_total_rap if vis_indtastet_aktiv else None
-    )
-
-    snit_liste: list[rapport_mod.Snit] = []
-
-    # Søjle 1: Indtastet opbygning (styres af checkbox)
-    if vis_indtastet_aktiv:
-        _, indtastet_sub = _sub_lag_uarmeret()
-        snit_liste.append(rapport_mod.Snit(
-            titel="Indtastet opbygning",
-            t_baerelag_mm=indtastet_total_rap,
-            geonet_y_fracs=[], sub_lag=indtastet_sub,
-            t_indtastet_mm=t_indtastet_for_snit,
-        ))
-
-    if vis_uarm and uarm_muligt and t_uarm_krav_rap is not None:
-        status_tekst_u, status_farve_u = _status_for_krav(
-            status_indtastet_ref, t_uarm_krav_rap, None,
-        )
-        sub_red_u = _sub_lag_skaleret_fra_materialer(
-            materialer_dim, t_uarm_krav_rap
-        )
-        brug_sub_u = len(sub_red_u) >= 2
-        snit_liste.append(rapport_mod.Snit(
-            titel="Ustabiliseret basistykkelse (φ-korrigeret)"
-                  if har_indtastet_rap else "Ustabiliseret basistykkelse",
-            t_baerelag_mm=t_uarm_krav_rap,
-            geonet_y_fracs=[],
-            sub_lag=sub_red_u if brug_sub_u else None,
-            er_krav_soejle=not brug_sub_u,
-            t_indtastet_mm=t_indtastet_for_snit,
-            status_tekst=status_tekst_u,
-            status_farve=status_farve_u,
-            phi_vaegtet=har_indtastet_rap,
-        ))
-    if vis_1lag and t_1 is not None:
-        sub_red_1 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_1)
-        brug_sub_1 = len(sub_red_1) >= 2
-        fracs_1, placement_1 = _geonet_fracs_kravsoejle(
-            "1_lag", t_1, geonet,
-            sub_lag=sub_red_1 if brug_sub_1 else None,
-        )
-        status_tekst_1, status_farve_1 = _status_for_krav(
-            status_indtastet_ref, t_1, None,
-        )
-        snit_liste.append(rapport_mod.Snit(
-            titel="1 lag geonet", t_baerelag_mm=t_1,
-            geonet_y_fracs=fracs_1,
-            sub_lag=sub_red_1 if brug_sub_1 else None,
-            placement=placement_1,
-            er_krav_soejle=not brug_sub_1,
-            t_indtastet_mm=t_indtastet_for_snit,
-            status_tekst=status_tekst_1,
-            status_farve=status_farve_1,
-            phi_vaegtet=har_indtastet_rap,
-        ))
-    if vis_2lag and t_2 is not None and to_lag_muligt:
-        sub_red_2 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_2)
-        brug_sub_2 = len(sub_red_2) >= 2
-        fracs_2, placement_2 = _geonet_fracs_kravsoejle(
-            "2_lag", t_2, geonet,
-            sub_lag=sub_red_2 if brug_sub_2 else None,
-        )
-        status_tekst_2, status_farve_2 = _status_for_krav(
-            status_indtastet_ref, t_2, None,
-        )
-        snit_liste.append(rapport_mod.Snit(
-            titel="2 lag geonet", t_baerelag_mm=t_2,
-            geonet_y_fracs=fracs_2,
-            sub_lag=sub_red_2 if brug_sub_2 else None,
-            placement=placement_2,
-            er_krav_soejle=not brug_sub_2,
-            t_indtastet_mm=t_indtastet_for_snit,
-            status_tekst=status_tekst_2,
-            status_farve=status_farve_2,
-            phi_vaegtet=har_indtastet_rap,
-        ))
-
-    if not snit_liste:
-        st.warning(
-            "Vælg mindst ét snit (ustabiliseret / 1 lag / 2 lag) for at kunne "
-            "generere rapporten."
-        )
-        visu_png: bytes | None = None
-    else:
-        visu_png = rapport_mod.render_opbygning_png(
-            eu=sd["eu"], snit_liste=snit_liste, geonet_label=geonet_label,
-        )
-        _vis_opbygning_med_info(
-            visu_png, caption="Preview af opbygnings-visualisering"
+        # Koncept A: Indtastet opbygning + neutrale krav-søjler. φ fra
+        # dimensioneringen (sd["phi"]) styrer φ-korrektionen på uarmeret-kravet.
+        phi_dim = float(sd.get("phi", PHI_BASIS))
+        phi_kor_dim = K_PHI * (phi_dim - PHI_BASIS)
+        har_indtastet_rap = in_mm_mode and bool(materialer_dim)
+        indtastet_total_rap: float | None = None
+        if har_indtastet_rap:
+            indtastet_total_rap = sum(
+                float(m.get("tykkelse_mm") or 0) for m in materialer_dim
+            ) or None
+        t_uarm_krav_rap = (
+            round(t_uarm * (1 + phi_kor_dim)) if t_uarm is not None else None
         )
 
-    # --- Personligt designdiagram (preview + rapport-PNG) ----------------
-    designdiagram_png: bytes | None = None
-    if vis_designdiagram and designdiagram_muligt:
-        try:
-            designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
-                eu=float(sd["eu"]),
-                eo=float(sd["eo"]),
-                klasse=sd.get("valgt_klasse"),
-                grundlag_label=(
-                    f"Trafikklasse {sd.get('t_klasse')}"
-                    if sd.get("grundlag_type") == "trafikklasse" else None
-                ),
-                phi=float(sd.get("phi", PHI_BASIS)),
-                geonet=geonet,
-                t_indtastet_mm=(
-                    indtastet_total_rap
-                    if har_indtastet_rap and vis_dd_din_prik else None
-                ),
-                t_basis_table=_aktiv_t_basis_table(),
-                t_1_lag_mm=t_1 if vis_dd_lag_prikker else None,
-                t_2_lag_mm=t_2 if vis_dd_lag_prikker else None,
-                t_1_lag_best_mm=(
-                    sd.get("t_1_lag_best_mm") if vis_dd_lag_prikker else None
-                ),
-                t_2_lag_best_mm=(
-                    sd.get("t_2_lag_best_mm") if vis_dd_lag_prikker else None
-                ),
+        # Når 'Indtastet opbygning' er fravalgt, slukkes både søjlen OG
+        # sammenligningslinjen — t_indtastet_for_snit styrer linjen via Snit-feltet.
+        vis_indtastet_aktiv = (
+            vis_indtastet and har_indtastet_rap and bool(indtastet_total_rap)
+        )
+        t_indtastet_for_snit = indtastet_total_rap if vis_indtastet_aktiv else None
+        # Statusteksten (for lidt / i overskud) giver kun mening sammen med linjen.
+        status_indtastet_ref = (
+            indtastet_total_rap if vis_indtastet_aktiv else None
+        )
+
+        snit_liste: list[rapport_mod.Snit] = []
+
+        # Søjle 1: Indtastet opbygning (styres af checkbox)
+        if vis_indtastet_aktiv:
+            _, indtastet_sub = _sub_lag_uarmeret()
+            snit_liste.append(rapport_mod.Snit(
+                titel="Indtastet opbygning",
+                t_baerelag_mm=indtastet_total_rap,
+                geonet_y_fracs=[], sub_lag=indtastet_sub,
+                t_indtastet_mm=t_indtastet_for_snit,
+            ))
+
+        if vis_uarm and uarm_muligt and t_uarm_krav_rap is not None:
+            status_tekst_u, status_farve_u = _status_for_krav(
+                status_indtastet_ref, t_uarm_krav_rap, None,
             )
-            _vis_designdiagram_med_info(
-                designdiagram_png,
-                caption="Preview af personligt designdiagram",
+            sub_red_u = _sub_lag_skaleret_fra_materialer(
+                materialer_dim, t_uarm_krav_rap
             )
-        except Exception as e:
-            st.warning(f"Kunne ikke generere designdiagram: {e}")
-            designdiagram_png = None
+            brug_sub_u = len(sub_red_u) >= 2
+            snit_liste.append(rapport_mod.Snit(
+                titel="Ustabiliseret basistykkelse (φ-korrigeret)"
+                      if har_indtastet_rap else "Ustabiliseret basistykkelse",
+                t_baerelag_mm=t_uarm_krav_rap,
+                geonet_y_fracs=[],
+                sub_lag=sub_red_u if brug_sub_u else None,
+                er_krav_soejle=not brug_sub_u,
+                t_indtastet_mm=t_indtastet_for_snit,
+                status_tekst=status_tekst_u,
+                status_farve=status_farve_u,
+                phi_vaegtet=har_indtastet_rap,
+            ))
+        if vis_1lag and t_1 is not None:
+            sub_red_1 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_1)
+            brug_sub_1 = len(sub_red_1) >= 2
+            fracs_1, placement_1 = _geonet_fracs_kravsoejle(
+                "1_lag", t_1, geonet,
+                sub_lag=sub_red_1 if brug_sub_1 else None,
+            )
+            status_tekst_1, status_farve_1 = _status_for_krav(
+                status_indtastet_ref, t_1, None,
+            )
+            snit_liste.append(rapport_mod.Snit(
+                titel="1 lag geonet", t_baerelag_mm=t_1,
+                geonet_y_fracs=fracs_1,
+                sub_lag=sub_red_1 if brug_sub_1 else None,
+                placement=placement_1,
+                er_krav_soejle=not brug_sub_1,
+                t_indtastet_mm=t_indtastet_for_snit,
+                status_tekst=status_tekst_1,
+                status_farve=status_farve_1,
+                phi_vaegtet=har_indtastet_rap,
+            ))
+        if vis_2lag and t_2 is not None and to_lag_muligt:
+            sub_red_2 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_2)
+            brug_sub_2 = len(sub_red_2) >= 2
+            fracs_2, placement_2 = _geonet_fracs_kravsoejle(
+                "2_lag", t_2, geonet,
+                sub_lag=sub_red_2 if brug_sub_2 else None,
+            )
+            status_tekst_2, status_farve_2 = _status_for_krav(
+                status_indtastet_ref, t_2, None,
+            )
+            snit_liste.append(rapport_mod.Snit(
+                titel="2 lag geonet", t_baerelag_mm=t_2,
+                geonet_y_fracs=fracs_2,
+                sub_lag=sub_red_2 if brug_sub_2 else None,
+                placement=placement_2,
+                er_krav_soejle=not brug_sub_2,
+                t_indtastet_mm=t_indtastet_for_snit,
+                status_tekst=status_tekst_2,
+                status_farve=status_farve_2,
+                phi_vaegtet=har_indtastet_rap,
+            ))
 
-    st.divider()
-
-    # --- D. Generér rapport -----------------------------------------------
-    st.subheader("D. Generér rapport")
-
-    rapport_data = {
-        "metadata": dict(md_state),
-        "dim": sd,
-        "tekster": dict(tekster_state),
-        "visualisering_png": visu_png,
-        "designdiagram_png": designdiagram_png,
-        "valg": {},
-    }
-
-    filnavn_base = (
-        md_state.get("projekt") or "MSL-rapport"
-    ).strip().replace("/", "-").replace("\\", "-")[:60] or "MSL-rapport"
-    dato_kort = md_state.get("dato", "")
-    filnavn_base = f"Dimensionering - {filnavn_base} - {dato_kort}".rstrip(" -")
-
-    klar = snit_liste is not None and len(snit_liste) > 0
-
-    visu_hash = (
-        hashlib.sha256(visu_png).hexdigest()
-        if isinstance(visu_png, bytes)
-        else None
-    )
-    designdiagram_hash = (
-        hashlib.sha256(designdiagram_png).hexdigest()
-        if isinstance(designdiagram_png, bytes)
-        else None
-    )
-    rapport_fingerprint = hashlib.sha256(json.dumps(
-        {
-            "metadata": rapport_data["metadata"],
-            "dim": rapport_data["dim"],
-            "tekster": rapport_data["tekster"],
-            "valg": rapport_data["valg"],
-            "visualisering_sha256": visu_hash,
-            "designdiagram_sha256": designdiagram_hash,
-            "filnavn_base": filnavn_base,
-        },
-        sort_keys=True,
-        default=str,
-    ).encode("utf-8")).hexdigest()
-
-    if st.button(
-        "Generér rapport",
-        icon=":material/description:",
-        type="primary",
-        disabled=not klar,
-        width="stretch",
-    ):
-        with st.spinner("Genererer rapport..."):
-            try:
-                docx_bytes = rapport_mod.byg_rapport_docx(rapport_data)
-            except Exception as exc:
-                st.session_state.pop("rapport_genereret", None)
-                st.error(f"Rapportens Word-fil kunne ikke genereres: {exc}")
-            else:
-                pdf_bytes = None
-                pdf_error = None
-
-                try:
-                    pdf_bytes = rapport_mod.konverter_docx_til_pdf(docx_bytes)
-                except Exception as exc:
-                    pdf_error = str(exc)
-
-                st.session_state["rapport_genereret"] = {
-                    "fingerprint": rapport_fingerprint,
-                    "filnavn_base": filnavn_base,
-                    "docx_bytes": docx_bytes,
-                    "pdf_bytes": pdf_bytes,
-                    "pdf_error": pdf_error,
-                }
-
-                if pdf_error:
-                    st.warning(
-                        "Word-rapporten er genereret, men PDF-konverteringen "
-                        f"fejlede: {pdf_error}"
-                    )
-                else:
-                    st.success("Rapporten er genereret.")
-
-    if not klar:
-        st.caption("Vælg mindst ét snit for at kunne generere rapporten.")
-
-    genereret = st.session_state.get("rapport_genereret")
-    rapport_er_aktuel = (
-        genereret
-        and genereret.get("fingerprint") == rapport_fingerprint
-    )
-
-    if genereret and not rapport_er_aktuel:
-        st.info(
-            "Rapportinput er ændret siden sidste generering. Klik "
-            "**Generér rapport** igen for at hente opdaterede filer."
-        )
-
-    if rapport_er_aktuel:
-        if genereret.get("pdf_error"):
+        if not snit_liste:
             st.warning(
-                "PDF kunne ikke oprettes automatisk:\n\n"
-                f"`{genereret['pdf_error']}`\n\n"
-                "Word-filen kan hentes herunder og konverteres via 'Gem som "
-                "PDF' i Word."
+                "Vælg mindst ét snit (ustabiliseret / 1 lag / 2 lag) for at kunne "
+                "generere rapporten."
             )
-
-        if genereret.get("pdf_bytes"):
-            kol_d1, kol_d2 = st.columns(2)
+            visu_png: bytes | None = None
         else:
-            kol_d1 = st.container()
-            kol_d2 = None
-
-        with kol_d1:
-            st.download_button(
-                "Hent som Word (.docx)",
-                icon=":material/download:",
-                data=genereret["docx_bytes"],
-                file_name=f"{genereret['filnavn_base']}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                width="stretch",
+            visu_png = rapport_mod.render_opbygning_png(
+                eu=sd["eu"], snit_liste=snit_liste, geonet_label=geonet_label,
             )
-        if kol_d2 is not None:
-            with kol_d2:
-                st.download_button(
-                    "Hent som PDF (.pdf)",
-                    icon=":material/download:",
-                    data=genereret["pdf_bytes"],
-                    file_name=f"{genereret['filnavn_base']}.pdf",
-                    mime="application/pdf",
-                    width="stretch",
+            _vis_opbygning_med_info(
+                visu_png, caption="Preview af opbygnings-visualisering"
+            )
+
+        # --- Personligt designdiagram (preview + rapport-PNG) ----------------
+        designdiagram_png: bytes | None = None
+        if vis_designdiagram and designdiagram_muligt:
+            try:
+                designdiagram_png = rapport_mod.render_personligt_designdiagram_png(
+                    eu=float(sd["eu"]),
+                    eo=float(sd["eo"]),
+                    klasse=sd.get("valgt_klasse"),
+                    grundlag_label=(
+                        f"Trafikklasse {sd.get('t_klasse')}"
+                        if sd.get("grundlag_type") == "trafikklasse" else None
+                    ),
+                    phi=float(sd.get("phi", PHI_BASIS)),
+                    geonet=geonet,
+                    t_indtastet_mm=(
+                        indtastet_total_rap
+                        if har_indtastet_rap and vis_dd_din_prik else None
+                    ),
+                    t_basis_table=_aktiv_t_basis_table(),
+                    t_1_lag_mm=t_1 if vis_dd_lag_prikker else None,
+                    t_2_lag_mm=t_2 if vis_dd_lag_prikker else None,
+                    t_1_lag_best_mm=(
+                        sd.get("t_1_lag_best_mm") if vis_dd_lag_prikker else None
+                    ),
+                    t_2_lag_best_mm=(
+                        sd.get("t_2_lag_best_mm") if vis_dd_lag_prikker else None
+                    ),
+                )
+                _vis_designdiagram_med_info(
+                    designdiagram_png,
+                    caption="Preview af personligt designdiagram",
+                )
+            except Exception as e:
+                st.warning(f"Kunne ikke generere designdiagram: {e}")
+                designdiagram_png = None
+
+        st.divider()
+        t3.opsummering = "Sådan bliver siderne"
+
+    with ui.trin_kort(4, "Generér") as t4:
+        # --- D. Generér rapport -----------------------------------------------
+
+        rapport_data = {
+            "metadata": dict(md_state),
+            "dim": sd,
+            "tekster": dict(tekster_state),
+            "visualisering_png": visu_png,
+            "designdiagram_png": designdiagram_png,
+            "valg": {},
+        }
+
+        filnavn_base = (
+            md_state.get("projekt") or "MSL-rapport"
+        ).strip().replace("/", "-").replace("\\", "-")[:60] or "MSL-rapport"
+        dato_kort = md_state.get("dato", "")
+        filnavn_base = f"Dimensionering - {filnavn_base} - {dato_kort}".rstrip(" -")
+
+        klar = snit_liste is not None and len(snit_liste) > 0
+
+        visu_hash = (
+            hashlib.sha256(visu_png).hexdigest()
+            if isinstance(visu_png, bytes)
+            else None
+        )
+        designdiagram_hash = (
+            hashlib.sha256(designdiagram_png).hexdigest()
+            if isinstance(designdiagram_png, bytes)
+            else None
+        )
+        rapport_fingerprint = hashlib.sha256(json.dumps(
+            {
+                "metadata": rapport_data["metadata"],
+                "dim": rapport_data["dim"],
+                "tekster": rapport_data["tekster"],
+                "valg": rapport_data["valg"],
+                "visualisering_sha256": visu_hash,
+                "designdiagram_sha256": designdiagram_hash,
+                "filnavn_base": filnavn_base,
+            },
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")).hexdigest()
+
+        if st.button(
+            "Generér rapport",
+            icon=":material/description:",
+            type="primary",
+            disabled=not klar,
+            width="stretch",
+        ):
+            with st.spinner("Genererer rapport..."):
+                try:
+                    docx_bytes = rapport_mod.byg_rapport_docx(rapport_data)
+                except Exception as exc:
+                    st.session_state.pop("rapport_genereret", None)
+                    st.error(f"Rapportens Word-fil kunne ikke genereres: {exc}")
+                else:
+                    pdf_bytes = None
+                    pdf_error = None
+
+                    try:
+                        pdf_bytes = rapport_mod.konverter_docx_til_pdf(docx_bytes)
+                    except Exception as exc:
+                        pdf_error = str(exc)
+
+                    st.session_state["rapport_genereret"] = {
+                        "fingerprint": rapport_fingerprint,
+                        "filnavn_base": filnavn_base,
+                        "docx_bytes": docx_bytes,
+                        "pdf_bytes": pdf_bytes,
+                        "pdf_error": pdf_error,
+                    }
+
+                    if pdf_error:
+                        st.warning(
+                            "Word-rapporten er genereret, men PDF-konverteringen "
+                            f"fejlede: {pdf_error}"
+                        )
+                    else:
+                        st.success("Rapporten er genereret.")
+
+        if not klar:
+            st.caption("Vælg mindst ét snit for at kunne generere rapporten.")
+
+        genereret = st.session_state.get("rapport_genereret")
+        rapport_er_aktuel = (
+            genereret
+            and genereret.get("fingerprint") == rapport_fingerprint
+        )
+
+        if genereret and not rapport_er_aktuel:
+            st.info(
+                "Rapportinput er ændret siden sidste generering. Klik "
+                "**Generér rapport** igen for at hente opdaterede filer."
+            )
+
+        if rapport_er_aktuel:
+            if genereret.get("pdf_error"):
+                st.warning(
+                    "PDF kunne ikke oprettes automatisk:\n\n"
+                    f"`{genereret['pdf_error']}`\n\n"
+                    "Word-filen kan hentes herunder og konverteres via 'Gem som "
+                    "PDF' i Word."
                 )
 
+            if genereret.get("pdf_bytes"):
+                kol_d1, kol_d2 = st.columns(2)
+            else:
+                kol_d1 = st.container()
+                kol_d2 = None
+
+            with kol_d1:
+                st.download_button(
+                    "Hent som Word (.docx)",
+                    icon=":material/download:",
+                    data=genereret["docx_bytes"],
+                    file_name=f"{genereret['filnavn_base']}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    width="stretch",
+                )
+            if kol_d2 is not None:
+                with kol_d2:
+                    st.download_button(
+                        "Hent som PDF (.pdf)",
+                        icon=":material/download:",
+                        data=genereret["pdf_bytes"],
+                        file_name=f"{genereret['filnavn_base']}.pdf",
+                        mime="application/pdf",
+                        width="stretch",
+                    )
+        t4.opsummering = ""
 
 # ===========================================================================
 # Top-level layout — sidebar + routing
