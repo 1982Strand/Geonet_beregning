@@ -17,6 +17,7 @@
   --bg-green-700:#1B6B34;
   --bg-green-600:#2A7D3F;
   --bg-green-050:#EDF4EE;
+  --bg-green-lys:#F7FBF8;
   --bg-ink:#15211A;
   --bg-ink-70:#4A554E;
   --bg-ink-45:#7A857D;
@@ -94,18 +95,95 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   padding:1.1rem 0 .35rem;
 }
 
-/* ---- 3b. Lærred og kolonneflader ---------------------------------------
-   Resultatkolonnen står på et lærred, inputkolonnen på hvidt med en
-   skillelinje imellem, jf. designgennemgangens option 1d. */
+/* ---- 3b. Lærred og sidehoved --------------------------------------------
+   Trin-kortene og resultatblokken står på et lærred, jf. flow A. */
 .stMain{ background:var(--bg-canvas); }
 
-.stMainBlockContainer > [data-testid="stVerticalBlock"]
-  > [data-testid="stHorizontalBlock"] > [data-testid="column"]:first-child{
-  background:var(--bg-surface);
-  border-right:1px solid var(--bg-line);
-  padding:1.25rem 1.15rem 2rem;
-  margin-top:-.5rem;
+.bg-sidehoved h1{
+  font:600 19px/1.2 'IBM Plex Sans',sans-serif;
+  letter-spacing:-.015em; color:var(--bg-ink); margin:0;
 }
+.bg-sidehoved p{
+  font:400 12px/1.5 'IBM Plex Sans',sans-serif;
+  color:var(--bg-ink-45); margin:4px 0 0; max-width:78ch;
+}
+
+/* Nøgletalsboksen i trin 1's tredje kolonne. */
+.bg-noegletal{
+  background:var(--bg-canvas); border-radius:4px; padding:10px 11px;
+}
+.bg-noegletal-titel{
+  font:600 11.5px/1.3 'IBM Plex Sans',sans-serif;
+  color:var(--bg-ink); margin-bottom:5px;
+}
+.bg-noegletal-note{
+  font:400 10.5px/1.45 'IBM Plex Sans',sans-serif;
+  color:var(--bg-ink-45);
+  padding-top:5px; margin-top:4px;
+  border-top:1px solid var(--bg-line-soft);
+}
+
+/* ---- 3d. Flow A — nummererede trin og resultatblok ----------------------
+   Dimensioneringen føres igennem som tre trin på én side. Hvert trin står i
+   sit kort; resultatet samles i én blok med grøn ramme nedenunder. */
+[class*="st-key-bg_trin_"]{
+  border:1px solid var(--bg-line);
+  border-radius:5px;
+  background:var(--bg-surface);
+  overflow:hidden;
+  padding:0 20px 18px;
+  margin-bottom:1rem;
+}
+.bg-trin-hoved{
+  display:flex; align-items:center; gap:11px; flex-wrap:wrap;
+  padding:13px 20px;
+  margin:0 -20px 16px;
+  border-bottom:1px solid var(--bg-line-soft);
+  background:#FBFCFB;
+}
+.bg-trin-nr{
+  width:20px; height:20px; flex:none; border-radius:3px;
+  background:var(--bg-ink); color:#fff;
+  font:600 11px/20px 'IBM Plex Mono',monospace; text-align:center;
+}
+.bg-trin-titel{ font:600 13.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
+/* Opsummeringen skubbes helt til højre og viser trinnets valgte værdier. */
+.bg-trin-opsum{
+  margin-left:auto;
+  font:500 11.5px/1.4 'IBM Plex Mono',monospace; color:var(--bg-ink-70);
+}
+
+.st-key-bg_resultat{
+  border:1.5px solid var(--bg-green-700);
+  border-radius:5px;
+  background:var(--bg-surface);
+  overflow:hidden;
+  padding:0 20px 18px;
+  margin:.5rem 0 1rem;
+}
+.bg-resultat-hoved-a{
+  display:flex; align-items:center; gap:11px; flex-wrap:wrap;
+  padding:13px 20px;
+  margin:0 -20px 16px;
+  background:var(--bg-green-lys);
+  border-bottom:1px solid #DDE9DF;
+}
+.bg-resultat-titel{
+  font:600 13.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-green-900);
+}
+.bg-resultat-note{
+  margin-left:auto;
+  font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+}
+
+/* Underoverskrifter inde i resultatblokken (Opbygning, Designdiagram,
+   Produktvalg). */
+.bg-underhoved{
+  display:flex; align-items:baseline; justify-content:space-between;
+  gap:1rem; flex-wrap:wrap; margin:.5rem 0 .35rem;
+}
+.bg-underhoved .t{ font:600 12.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
+.bg-underhoved .n{ font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
 
 /* ---- 3c. Kort i resultatkolonnen ---------------------------------------- */
 [class*="st-key-bg_kort_"]{
@@ -297,36 +375,20 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   fill:rgba(255,255,255,.5);
 }
 
-/* ---- 16. To-kolonne-layout ----------------------------------------------
-   Flow B: input i venstre kolonne, resultatet i højre. Inputkolonnen bliver
-   stående, når der scrolles i resultatet, så en justering af Eu eller φ ikke
-   kræver en tur op og ned ad siden. */
-.stMainBlockContainer [data-testid="stHorizontalBlock"]
-  > [data-testid="column"]:first-child{
-  position:sticky; top:0; align-self:flex-start;
-  max-height:100vh; overflow-y:auto;
-  scrollbar-width:thin;
-  padding-right:.35rem;
+/* ---- 16. Trinnenes kolonner ---------------------------------------------
+   Trin 1 deler sit indhold i tre: underbundens styrke, grundlaget og
+   nøgletallene. Kolonnerne skilles af fine linjer som i designet. */
+[class*="st-key-bg_trin_"] [data-testid="stHorizontalBlock"]
+  > [data-testid="column"]:not(:last-child){
+  border-right:1px solid var(--bg-line-soft);
+  padding-right:1.15rem;
 }
-/* Topbjælken er selv en kolonneopdeling og må ikke klæbe. */
-.st-key-bg_topbar [data-testid="column"]:first-child{ position:static; }
-
-/* Sektionsetiketterne i inputkolonnen får luft over sig, så blokkene
-   adskilles uden vandrette streger. Sektionsafstanden er 28 px. */
-[data-testid="column"] .bg-eyebrow{ margin-top:1.75rem; }
-[data-testid="column"] > [data-testid="stVerticalBlock"]
-  > [data-testid="stElementContainer"]:first-child .bg-eyebrow{ margin-top:0; }
-
-/* Resultatafsnittets sidehoved: overskrift og forudsætninger på én linje. */
-.bg-resultat-hoved{
-  display:flex; align-items:baseline; gap:.85rem;
-  flex-wrap:wrap; margin:0 0 .9rem;
+[class*="st-key-bg_trin_"] [data-testid="stHorizontalBlock"]
+  > [data-testid="column"]:not(:first-child){
+  padding-left:.35rem;
 }
-.bg-resultat-hoved h2{
-  font-size:1.15rem; font-weight:600; margin:0;
-  padding:0; border:none; letter-spacing:-.015em;
-}
-.bg-resultat-hoved span{ font-size:11.5px; color:var(--bg-ink-45); }
+/* Den første sektionsetiket i en kolonne står op ad kolonnens overkant. */
+[class*="st-key-bg_trin_"] [data-testid="column"] .bg-eyebrow{ margin-top:0; }
 
 /* ---- 14. Flyttet fra app.py ---------------------------------------------
    Regler, som stylesheetets øvrige afsnit ikke dækker: den foldbare

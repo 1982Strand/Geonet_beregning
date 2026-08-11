@@ -212,6 +212,68 @@ def etiket(tekst: str) -> None:
     st.html(f'<div class="bg-eyebrow">{escape(tekst.upper())}</div>')
 
 
+class Trin:
+    """Håndtag til et trin-kort. Sæt .opsummering inde i blokken."""
+
+    def __init__(self) -> None:
+        self.opsummering = ""
+
+
+@contextmanager
+def trin_kort(nummer: int, titel: str):
+    """Nummereret trin-kort, jf. designgennemgangens flow A.
+
+    Dimensioneringen føres igennem som tre trin på én side. Hvert trin står
+    i sit kort med nummer og navn til venstre og en opsummering af det valgte
+    til højre, så en færdig indtastning kan aflæses uden at læse trinnet
+    igennem.
+
+    Opsummeringen kendes først, når trinnets felter er aflæst. Hovedet
+    reserveres derfor med en pladsholder og udfyldes, når blokken er kørt:
+
+        with ui.trin_kort(1, "Underbund") as trin:
+            eu = ...
+            trin.opsummering = f"Eu {eu} MPa"
+    """
+    with st.container(key=f"bg_trin_{nummer}"):
+        plads = st.empty()
+        trin = Trin()
+        try:
+            yield trin
+        finally:
+            plads.html(
+                f'<div class="bg-trin-hoved">'
+                f'<div class="bg-trin-nr">{nummer}</div>'
+                f'<div class="bg-trin-titel">{escape(titel)}</div>'
+                f'<div class="bg-trin-opsum">{trin.opsummering}</div></div>'
+            )
+
+
+@contextmanager
+def resultat_blok(note: str = ""):
+    """Resultatet som én afgrænset blok med grøn ramme, jf. flow A.
+
+    Blokken samler resultattallene, snittene, designdiagrammet og
+    produktvalget, så beregningens udfald står som en lukket enhed under
+    trinnene.
+    """
+    with st.container(key="bg_resultat"):
+        st.html(
+            f'<div class="bg-resultat-hoved-a">'
+            f'<div class="bg-resultat-titel">Resultat</div>'
+            f'<div class="bg-resultat-note">{note}</div></div>'
+        )
+        yield
+
+
+def underhoved(titel: str, note: str = "") -> None:
+    """Underoverskrift inde i resultatblokken — Opbygning, Produktvalg m.fl."""
+    st.html(
+        f'<div class="bg-underhoved"><div class="t">{escape(titel)}</div>'
+        f'<div class="n">{note}</div></div>'
+    )
+
+
 @contextmanager
 def kort(titel: str, note: str = ""):
     """Hvidt kort med sidehoved, jf. designgennemgangens option 1d.

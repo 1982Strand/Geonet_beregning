@@ -794,13 +794,17 @@ def _cv_eu_tabel_html(eu_opslag: float | None) -> str:
     )
 
 
-def input_underbund(key_prefix: str, kompakt: bool = False) -> float:
+def input_underbund(
+    key_prefix: str, kompakt: bool = False, uden_etiket: bool = False,
+) -> float:
     """Render Underbund (Eu eller Cv → Eu). Returnerer Eu i MPa.
 
     kompakt=True anvendes i inputkolonnen, hvor bredden ikke rummer
     opslagstabellen ved siden af slideren; tabellen lægges da i et popover.
     """
-    if kompakt:
+    if uden_etiket:
+        pass          # etiketten sættes af trin-kortets kolonne
+    elif kompakt:
         ui.etiket("Underbund")
     else:
         st.subheader("Underbund")
@@ -867,14 +871,16 @@ def _klasse_diagram_sti(valgt: int) -> str | None:
 
 
 def input_belastning(
-    key_prefix: str, kompakt: bool = False
+    key_prefix: str, kompakt: bool = False, uden_etiket: bool = False,
 ) -> tuple[int, dict, float]:
     """Render Belastningsklasse som en vælger med de seks klasser.
 
     Returnerer (klasse, info, eo). kompakt=True lægger designdiagrammet i et
     popover, idet inputkolonnen ikke er bred nok til at vise det ved siden af.
     """
-    if kompakt:
+    if uden_etiket:
+        pass          # etiketten sættes af trin-kortets kolonne
+    elif kompakt:
         ui.etiket("Belastningsklasse")
     else:
         st.subheader("Belastningsklasse")
@@ -993,7 +999,10 @@ def _vis_korrelationstabel(
     )
 
 
-def input_trafikklasse(key_prefix: str, eu: float, kompakt: bool = False) -> dict:
+def input_trafikklasse(
+    key_prefix: str, eu: float, kompakt: bool = False,
+    uden_etiket: bool = False,
+) -> dict:
     """Render Trafikklasse-vælger (T1–T6) + udledt ækvivalent Eo og zone.
 
     Bruger korrelationen KORRELATION_T_EO (dokumenteret bro fra VejDim til
@@ -1002,7 +1011,9 @@ def input_trafikklasse(key_prefix: str, eu: float, kompakt: bool = False) -> dic
     kompakt=True lægger korrelationstabellen i et popover, idet inputkolonnen
     ikke er bred nok til at vise den ved siden af vælgeren.
     """
-    if kompakt:
+    if uden_etiket:
+        pass          # etiketten sættes af trin-kortets kolonne
+    elif kompakt:
         ui.etiket("Trafikklasse")
     else:
         st.subheader("Trafikklasse (Vejdirektoratet)")
@@ -1136,7 +1147,10 @@ def input_trafikklasse(key_prefix: str, eu: float, kompakt: bool = False) -> dic
     }
 
 
-def input_grundlag(key_prefix: str, eu: float, kompakt: bool = False) -> dict:
+def input_grundlag(
+    key_prefix: str, eu: float, kompakt: bool = False,
+    uden_etiket: bool = False,
+) -> dict:
     """Render valg af dimensioneringsgrundlag (belastningsklasse vs. trafikklasse)
     og dispatch til den relevante inputwidget.
 
@@ -1151,7 +1165,7 @@ def input_grundlag(key_prefix: str, eu: float, kompakt: bool = False) -> dict:
           "info":         dict,
         }
     """
-    if kompakt:
+    if kompakt and not uden_etiket:
         ui.etiket("Dimensioneringsgrundlag")
 
     grundlag_valg = st.segmented_control(
@@ -1171,7 +1185,9 @@ def input_grundlag(key_prefix: str, eu: float, kompakt: bool = False) -> dict:
     ) or "Belastningsklasse"
 
     if grundlag_valg.startswith("Belastning"):
-        valgt_klasse, info, eo = input_belastning(key_prefix, kompakt=kompakt)
+        valgt_klasse, info, eo = input_belastning(
+            key_prefix, kompakt=kompakt, uden_etiket=uden_etiket,
+        )
         return {
             "type": "belastningsklasse",
             "eo": eo,
@@ -1182,7 +1198,7 @@ def input_grundlag(key_prefix: str, eu: float, kompakt: bool = False) -> dict:
             "info": info,
         }
 
-    return input_trafikklasse(key_prefix, eu, kompakt=kompakt)
+    return input_trafikklasse(key_prefix, eu, kompakt=kompakt, uden_etiket=uden_etiket)
 
 
 # ---------------------------------------------------------------------------
@@ -3346,14 +3362,14 @@ def _render_oversigt_expanders(
             note += f" · stiplet linje = indtastet {ui.mm(indtastet)}"
         else:
             note += " · uden materialelag vises kravet som ét ubundet lag"
-        with ui.kort("Opbygning", note):
-            _render_opbygningsvisualisering(
-                eu, ref_1, ref_2,
-                prod_1lag=prod_1lag, prod_2lag=prod_2lag,
-                materialer=materialer,
-                phi=phi,
-                tvunget_produkt=geonet_navn,
-            )
+        ui.underhoved("Opbygning", note)
+        _render_opbygningsvisualisering(
+            eu, ref_1, ref_2,
+            prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+            materialer=materialer,
+            phi=phi,
+            tvunget_produkt=geonet_navn,
+        )
 
     # --- Advarsler -------------------------------------------------------
     # Validator-kørslen bruger den valgte phi/geonet/materialer-kontekst.
@@ -4030,6 +4046,84 @@ def _faste_forudsaetninger() -> None:
     )
 
 
+def _input_trin1(key_prefix: str) -> tuple[float, dict]:
+    """Trin 1: underbundens styrke og dimensioneringsgrundlaget.
+
+    De to valg står side om side, og trinnets nøgletal i en tredje kolonne,
+    jf. designgennemgangens flow A. Returnerer (Eu, grundlag).
+    """
+    kol_eu, kol_grundlag, kol_tal = st.columns([1, 1, 1.1], gap="medium")
+
+    with kol_eu:
+        ui.etiket("Underbundens styrke")
+        eu = input_underbund(key_prefix=key_prefix, kompakt=True, uden_etiket=True)
+        st.caption(
+            "Angives direkte eller udledes af en korrelation med "
+            "vingestyrken Cv."
+        )
+
+    with kol_grundlag:
+        ui.etiket("Dimensioneringsgrundlag")
+        grundlag = input_grundlag(
+            key_prefix=key_prefix, eu=eu, kompakt=True, uden_etiket=True,
+        )
+
+    with kol_tal:
+        _trin1_noegletal(grundlag, eu)
+
+    return eu, grundlag
+
+
+def _trin1_noegletal(grundlag: dict, eu: float) -> None:
+    """Nøgletallene for det valgte grundlag, i trin 1's tredje kolonne."""
+    if grundlag["type"] == "trafikklasse":
+        t_klasse = grundlag["t_klasse"]
+        raekker = list(trafikklasse_noegletal(t_klasse))
+        if grundlag.get("eo_aekv") is not None:
+            raekker.append(
+                (f"Ækvivalent Eo-kurve ved Eu = {ui.mpa(eu)}",
+                 ui.mpa(grundlag["eo_aekv"]))
+            )
+        titel = format_trafikklasse(t_klasse)
+        note = (
+            "Værdierne er gengivet efter håndbogens Figur 4.1. Den typiske "
+            "anvendelse er vejledende og indgår ikke i håndbogen."
+        )
+    else:
+        info = grundlag["info"]
+        raekker = [
+            ("Belastning", str(info.get("belastning", "—"))),
+            ("Eo-kurve", ui.mpa(grundlag["eo"])),
+            ("Typisk anvendelse", str(info.get("anvendelse", "—"))),
+        ]
+        titel = f"Klasse {grundlag['valgt_klasse']}"
+        note = (
+            "Belastningsklasserne følger BG Byggros' designmanualer til "
+            "Tensar og GS-GRID."
+        )
+
+    st.markdown(
+        f'<div class="bg-noegletal">'
+        f'<div class="bg-noegletal-titel">{html.escape(titel)}</div>'
+        + _noegletal_tabel_html(raekker, dæmpet=True)
+        + f'<div class="bg-noegletal-note">{html.escape(note)}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _trin1_opsummering(eu: float, grundlag: dict) -> str:
+    """Trin 1's opsummering: de valgte forudsætninger på én linje."""
+    dele = [f"Eu {eu:.0f} MPa"]
+    if grundlag["type"] == "trafikklasse":
+        dele.append(str(grundlag["t_klasse"]))
+        if grundlag.get("eo_aekv") is not None:
+            dele.append(f"Eo,ækv {grundlag['eo_aekv']:.0f} MPa")
+    else:
+        dele.append(f"Klasse {grundlag['valgt_klasse']}")
+        dele.append(f"Eo {grundlag['eo']:.0f} MPa")
+    return " · ".join(dele)
+
+
 def _grundlag_tekst(grundlag: dict) -> str:
     """Grundlaget som en kort tekst til resultatafsnittets sidehoved."""
     if grundlag["type"] == "trafikklasse":
@@ -4037,15 +4131,11 @@ def _grundlag_tekst(grundlag: dict) -> str:
     return f"belastningsklasse {grundlag['valgt_klasse']}"
 
 
-def _resultat_overskrift(eu: float, grundlag: dict, phi: float) -> None:
-    """Overskriften over resultatkolonnen med beregningens forudsætninger."""
-    st.markdown(
-        f'<div class="bg-resultat-hoved">'
-        f'<h2>Resultat</h2>'
-        f'<span>Krav til bærelagstykkelse ved Eu = {ui.mpa(eu)}, '
-        f'{_grundlag_tekst(grundlag)}, φ = {ui.grader(phi)}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
+def _resultat_note(eu: float, grundlag: dict) -> str:
+    """Forudsætningerne bag resultatet, til resultatblokkens sidehoved."""
+    return (
+        f"Bærelagstykkelse over underbund med Eu = {ui.mpa(eu)}, "
+        f"{_grundlag_tekst(grundlag)}"
     )
 
 
@@ -4135,34 +4225,30 @@ def _vis_resultatkort(
     ui.resultatkort(kort, badge_tekst="TYNDEST" if standard else "ANBEFALET")
 
 
-def render_standard(input_kol, resultat_kol) -> None:
+def render_standard() -> None:
     """Standard-tilstand: produktoversigt for alle geonet på én gang.
 
-    Input står i venstre kolonne, resultatet i højre, jf. afsnit 5.
-    Beregningen ligger imellem de to, så resultatet altid dannes af de
-    værdier, inputkolonnen netop har afsat.
+    Flow A: dimensioneringen føres igennem som nummererede trin på én side,
+    og resultatet står som en samlet blok nedenunder. Standardtilstanden har
+    hverken materialelag eller produktvalg og bruger derfor ét trin.
     """
 
-    with input_kol:
-        ui.etiket("Forudsætninger")
-        _tilstand_vaelger()
+    with ui.trin_kort(1, "Underbund og dimensioneringsgrundlag") as trin1:
+        eu, grundlag = _input_trin1("std")
+        trin1.opsummering = _trin1_opsummering(eu, grundlag)
 
-        st.caption(
-            "Standardtilstanden viser kravet for samtlige geonet ved den valgte "
-            "underbund. Skal opbygningen sammensættes af flere materialelag med "
-            "hver sin friktionsvinkel, vælges Brugerdefineret."
-        )
-
-        eu = input_underbund(key_prefix="std", kompakt=True)
-        grundlag = input_grundlag(key_prefix="std", eu=eu, kompakt=True)
+    with ui.trin_kort(2, "Forudsætninger") as trin2:
         _faste_forudsaetninger()
+        trin2.opsummering = (
+            f"φ {ui.grader(PHI_BASIS)} · ingen φ-korrektion"
+        )
 
     eo = grundlag["eo"]
     valgt_klasse = grundlag["valgt_klasse"]
     eo_interpoleret = grundlag["type"] == "trafikklasse"
 
     # Trafikklasse uden for kernezonen: zone-beskeden er allerede vist i
-    # inputkolonnen — der er intet driftspunkt at dimensionere efter.
+    # trin 1 — der er intet driftspunkt at dimensionere efter.
     if grundlag["type"] == "trafikklasse" and grundlag["zone"] != "ok":
         return
 
@@ -4206,10 +4292,8 @@ def render_standard(input_kol, resultat_kol) -> None:
     )
 
     # --- Resultater -----------------------------------------------------
-    with resultat_kol:
-        _resultat_overskrift(eu, grundlag, PHI_BASIS)
-
-        vis_kobling = False
+    vis_kobling = False
+    with ui.resultat_blok(_resultat_note(eu, grundlag)):
         if haard_fejl:
             vis_fejl(haard_fejl)
         else:
@@ -4229,39 +4313,35 @@ def render_standard(input_kol, resultat_kol) -> None:
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
 
-            # Koblings-forklaringen renderes nederst i resultatsektionen, lige
-            # over Opbygning — se kaldet nedenfor.
             vis_kobling = eo_interpoleret
 
-            with ui.kort(
-                "Alle produkter", "Klik en række for krav til udførelse"
-            ):
-                _render_produkt_tabel(
-                    ref_1, ref_2, ref_fejl_1, ref_fejl_2,
-                    prod_1lag, prod_2lag, valgt_klasse, eu=eu,
-                    trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
-                    grupperet=True,
-                )
-                st.caption(
-                    "I resultatoversigten vises, hvilke belastningsklasser "
-                    "produkterne anbefales til. Der vises en advarsel, hvis et "
-                    "produkt ikke anbefales anvendt til den valgte klasse."
-                )
-
-        if vis_kobling:
-            _render_trafik_kobling_forklaring(
-                grundlag["t_klasse"], eu, grundlag["eo_aekv"], PHI_BASIS,
-                ref_1, ref_2, t_basis_table,
+            ui.underhoved("Alle produkter", "Klik en række for krav til udførelse")
+            _render_produkt_tabel(
+                ref_1, ref_2, ref_fejl_1, ref_fejl_2,
+                prod_1lag, prod_2lag, valgt_klasse, eu=eu,
+                trafik_eu=eu if grundlag["type"] == "trafikklasse" else None,
+                grupperet=True,
+            )
+            st.caption(
+                "I resultatoversigten vises, hvilke belastningsklasser "
+                "produkterne anbefales til. Der vises en advarsel, hvis et "
+                "produkt ikke anbefales anvendt til den valgte klasse."
             )
 
-        # --- Informations-expandere ------------------------------------
-        _render_oversigt_expanders(
-            eu, eo, valgt_klasse, bedste_1, bedste_2,
-            ref_1=ref_1, ref_2=ref_2,
-            prod_1lag=prod_1lag, prod_2lag=prod_2lag,
-            t_basis_table=t_basis_table,
-            eo_interpoleret=eo_interpoleret,
+    if vis_kobling:
+        _render_trafik_kobling_forklaring(
+            grundlag["t_klasse"], eu, grundlag["eo_aekv"], PHI_BASIS,
+            ref_1, ref_2, t_basis_table,
         )
+
+    # --- Informations-expandere ----------------------------------------
+    _render_oversigt_expanders(
+        eu, eo, valgt_klasse, bedste_1, bedste_2,
+        ref_1=ref_1, ref_2=ref_2,
+        prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+        t_basis_table=t_basis_table,
+        eo_interpoleret=eo_interpoleret,
+    )
 
 
 # ===========================================================================
@@ -4558,65 +4638,70 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
     return materialer, phi
 
 
-def render_brugerdefineret(input_kol, resultat_kol) -> None:
-    """Brugerdefineret-tilstand: input + resultater + expandere.
+def render_brugerdefineret() -> None:
+    """Brugerdefineret-tilstand: tre nummererede trin og resultatet som blok.
 
-    Input står i venstre kolonne, resultatet i højre, jf. afsnit 5. Sektion
-    Geonet lader brugeren vælge mellem 'Alle produkter' (oversigt med
-    brugerdefineret φ) og 'Vælg produkt' (detaljeret resultat for ét produkt).
-    Begge tilstande viser 1-lag og 2-lag side om side.
+    Flow A: underbund og grundlag (trin 1), opbygningens materialelag
+    (trin 2) og geonettet (trin 3) står hver i sit kort, og resultatet
+    samles nedenunder. Trin 3 lader brugeren vælge mellem 'Alle produkter'
+    (oversigt med brugerdefineret φ) og 'Specifikt produkt' (detaljeret
+    resultat for ét produkt). Begge viser 1-lag og 2-lag side om side.
     """
 
     t_basis_table = _aktiv_t_basis_table()
 
-    # --- Inputkolonnen: underbund, grundlag, opbygning, geonet ----------
-    with input_kol:
-        ui.etiket("Forudsætninger")
-        _tilstand_vaelger()
+    with ui.trin_kort(1, "Underbund og dimensioneringsgrundlag") as trin1:
+        eu, grundlag = _input_trin1("bd")
+        trin1.opsummering = _trin1_opsummering(eu, grundlag)
 
-        eu = input_underbund(key_prefix="bd", kompakt=True)
-        grundlag = input_grundlag(key_prefix="bd", eu=eu, kompakt=True)
-        zone_blokerer = (
-            grundlag["type"] == "trafikklasse" and grundlag["zone"] != "ok"
-        )
+    zone_blokerer = (
+        grundlag["type"] == "trafikklasse" and grundlag["zone"] != "ok"
+    )
 
-        materialer: list[dict] = []
-        phi = PHI_BASIS
-        geonet: dict | None = None
-        geonet_navn: str | None = None
-        specifikt_mode = False
+    materialer: list[dict] = []
+    phi = PHI_BASIS
+    geonet: dict | None = None
+    geonet_navn: str | None = None
+    specifikt_mode = False
 
-        # Blokerer zonen, er der intet driftspunkt at dimensionere efter, og
-        # opbygning og geonet ville alligevel ikke føre til et resultat.
-        if not zone_blokerer:
+    # Blokerer zonen, er der intet driftspunkt at dimensionere efter, og
+    # opbygning og geonet ville alligevel ikke føre til et resultat.
+    if not zone_blokerer:
+        with ui.trin_kort(2, "Opbygning") as trin2:
             materialer, phi = _input_materialelag(kompakt=True)
+            total = _indtastet_total(materialer)
+            trin2.opsummering = (
+                f"{len(materialer)} lag · {ui.mm(total)} · "
+                f"vægtet φ {ui.grader(phi)}"
+            )
 
-            ui.etiket("Geonet")
+        with ui.trin_kort(3, "Geonet") as trin3:
             visning = st.segmented_control(
                 "Visning",
-                ["Alle produkter", "Vælg produkt"],
+                ["Alle produkter", "Specifikt produkt"],
                 default="Alle produkter",
                 key="bd_visning",
                 label_visibility="collapsed",
-                width="stretch",
                 help=(
                     "**Alle produkter:** samme oversigt som Standard-beregningen, "
                     "men med den vægtede friktionsvinkel φ fra materialelagene.  \n"
-                    "**Vælg produkt:** detaljeret resultat for ét valgt "
+                    "**Specifikt produkt:** detaljeret resultat for ét valgt "
                     "produkt, herunder produktets specifikke udførelseskrav."
                 ),
             ) or "Alle produkter"
-            specifikt_mode = visning == "Vælg produkt"
+            specifikt_mode = visning == "Specifikt produkt"
 
             if specifikt_mode:
-                geonet_navn = st.selectbox(
-                    "Produkt",
-                    GEONET_NAVNE,
-                    index=GEONET_NAVNE.index("GS-GRID SX160"),
-                    key="bd_geonet",
-                    format_func=_produkt_label,
-                    label_visibility="collapsed",
-                )
+                vaelger_kol, _ = st.columns([1, 1.6])
+                with vaelger_kol:
+                    geonet_navn = st.selectbox(
+                        "Produkt",
+                        GEONET_NAVNE,
+                        index=GEONET_NAVNE.index("GS-GRID SX160"),
+                        key="bd_geonet",
+                        format_func=_produkt_label,
+                        label_visibility="collapsed",
+                    )
                 geonet = find_geonet(geonet_navn)
 
                 if geonet:
@@ -4648,6 +4733,13 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                             ),
                         )
                         geonet = {**geonet, "korrektion": kor_man}
+            else:
+                st.caption(
+                    "Designdiagrammerne bruger Tensar TriAx TX160, "
+                    "GS-GRID SX160 eller E'GRID T6 som referencenet. Ved "
+                    "andre produkter skaleres tykkelsen med op til 20 %."
+                )
+            trin3.opsummering = geonet_navn or "Alle produkter"
 
     if zone_blokerer:
         st.session_state.pop("sidste_dim", None)
@@ -4678,8 +4770,7 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
     prod_1lag = _berig_produkter_med_placering(prod_1lag, "1_lag", materialer)
     prod_2lag = _berig_produkter_med_placering(prod_2lag, "2_lag", materialer)
 
-    with resultat_kol:
-        _resultat_overskrift(eu, grundlag, phi)
+    with ui.resultat_blok(_resultat_note(eu, grundlag)):
 
         if not specifikt_mode:
             # OVERSIGT-MODE — som Standard, men med custom phi
@@ -4864,9 +4955,10 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                     [bedste_2["produkter"][0]]
                     if bedste_2 and bedste_2.get("produkter") else []
                 )
-                with ui.kort(
+                ui.underhoved(
                     "Produktvalg", f"Bærelagstykkelse ved Eu = {ui.mpa(eu)}"
-                ):
+                )
+                if True:
                     _render_produkt_tabel(
                         ref_1, ref_2, ref_fejl_1, ref_fejl_2,
                         prod_1, prod_2, valgt_klasse, phi=phi, eu=eu,
@@ -4891,7 +4983,8 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                         f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
                         f"φ = {ui.grader(phi)}"
                     )
-                    with ui.kort("Designdiagram", kort_note):
+                    ui.underhoved("Designdiagram", kort_note)
+                    if True:
                         vis_din_prik = st.checkbox(
                             "Vis indtastet opbygning",
                             value=True,
@@ -4910,21 +5003,21 @@ def render_brugerdefineret(input_kol, resultat_kol) -> None:
                             produkt_2 if vis_lag_prikker else None,
                         )
 
-        if kobling_args is not None:
-            _render_trafik_kobling_forklaring(*kobling_args)
+    if kobling_args is not None:
+        _render_trafik_kobling_forklaring(*kobling_args)
 
-        # --- Informations-expandere ------------------------------------------
-        _render_oversigt_expanders(
-            eu, eo, valgt_klasse, bedste_1, bedste_2,
-            ref_1=ref_1, ref_2=ref_2,
-            prod_1lag=prod_1lag, prod_2lag=prod_2lag,
-            phi=phi,
-            geonet=geonet,
-            geonet_navn=geonet_navn,
-            materialer=materialer,
-            t_basis_table=t_basis_table,
-            eo_interpoleret=eo_interpoleret,
-        )
+    # --- Informations-expandere --------------------------------------------
+    _render_oversigt_expanders(
+        eu, eo, valgt_klasse, bedste_1, bedste_2,
+        ref_1=ref_1, ref_2=ref_2,
+        prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+        phi=phi,
+        geonet=geonet,
+        geonet_navn=geonet_navn,
+        materialer=materialer,
+        t_basis_table=t_basis_table,
+        eo_interpoleret=eo_interpoleret,
+    )
 
 
 # ===========================================================================
@@ -6474,15 +6567,25 @@ if st.session_state.get("bg_nulstil"):
     st.rerun()
 
 if aktiv_side == "dimensionering":
-    # Flow B, jf. afsnit 5: input i venstre kolonne, resultatet fast i højre.
-    # Tilstandsvalget står øverst i inputkolonnen og aflæses her, fordi det
-    # afgør, hvilken af de to render-funktioner der tegner begge kolonner.
-    input_kol, resultat_kol = st.columns([328, 1000], gap="large")
+    # Flow A: dimensioneringen føres igennem som nummererede trin på én side,
+    # og resultatet står som en samlet blok nedenunder. Sidehovedet bærer
+    # sidens navn til venstre og tilstandsvalget til højre.
+    kol_titel, kol_tilstand = st.columns([3, 1], vertical_alignment="bottom")
+    with kol_titel:
+        st.markdown(
+            '<div class="bg-sidehoved"><h1>Dimensionering</h1>'
+            "<p>Bærelagstykkelse med og uden geonetarmering. Grundlaget er "
+            "BG Byggros' designmanualer til Tensar og GS-GRID samt interne "
+            "forsøgsdata.</p></div>",
+            unsafe_allow_html=True,
+        )
+    with kol_tilstand:
+        _tilstand_vaelger()
 
     if st.session_state.get("tilstand", "Standard") == "Standard":
-        render_standard(input_kol, resultat_kol)
+        render_standard()
     else:
-        render_brugerdefineret(input_kol, resultat_kol)
+        render_brugerdefineret()
 
 elif aktiv_side == "materialer":
     render_materialer()
