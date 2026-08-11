@@ -352,20 +352,26 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .stAppDeployButton{ display:none; }
 
 /* ---- 13. Tablet ---------------------------------------------------------
-   Appen bruges primært på desktop. Under 1180 px falder de to kolonner under
-   hinanden; inputkolonnen fylder da hele bredden og må ikke klæbe, da den
-   ville dække resultatet. */
+   Appen bruges primært på desktop. Under 1180 px falder trinnenes kolonner
+   under hinanden, og skillelinjerne mellem dem udgår. */
 @media (max-width:1180px){
   .stMainBlockContainer{ padding-left:1.25rem; padding-right:1.25rem; }
   [data-testid="stMetricValue"]{ font-size:1.9rem; }
   [data-testid="column"]{ min-width:100% !important; }
 
-  .stMainBlockContainer [data-testid="stHorizontalBlock"]
-    > [data-testid="column"]:first-child{
-    position:static; max-height:none; overflow-y:visible; padding-right:0;
+  [class*="st-key-bg_trin_"] [data-testid="stHorizontalBlock"]
+    > [data-testid="column"]:not(:last-child){
+    border-right:none; border-bottom:1px solid var(--bg-line-soft);
+    padding-right:0; padding-bottom:1rem; margin-bottom:1rem;
   }
+  [class*="st-key-bg_trin_"] [data-testid="stHorizontalBlock"]
+    > [data-testid="column"]:not(:first-child){ padding-left:0; }
 
-  /* Topbjælken beholder sine to felter side om side. */
+  /* Materialelagenes tabel har for smalle kolonner til at brydes op; den
+     beholder sin opdeling og rulles vandret med resten af trinnet. */
+  .bg-lagtabel-hoved, .bg-lagtabel-sum{ gap:.5rem; }
+
+  /* Topbjælken beholder sine felter side om side. */
   .st-key-bg_topbar [data-testid="column"]{ min-width:0 !important; }
   .st-key-bg_topbar{ margin-left:-1.25rem; margin-right:-1.25rem; }
 
