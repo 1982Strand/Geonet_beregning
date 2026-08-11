@@ -9,7 +9,7 @@ Offentlig API:
     SECTION_KEYS               - rækkefølge af redigerbare sektioner
     SECTION_TITLER             - dansk overskriftstekst pr. nøgle
     STANDARD_TEKSTER           - default-tekst pr. nøgle
-    render_opbygning_png(...)  - matplotlib-visualisering som PNG bytes
+    render_opbygning_png(...)  - opbygningssnittene som PNG bytes
     byg_rapport_docx(data)     - returnerer Word-dokument som bytes
     konverter_docx_til_pdf(...) - konverterer Word-bytes til PDF-bytes
     byg_rapport_pdf(data)      - bygger Word og konverterer til PDF-bytes
@@ -167,18 +167,14 @@ BYGGROS_FOOTER = (
 # ---------------------------------------------------------------------------
 # 2. Visualisering
 #
-# Designdiagrammet tegnes ét sted — core/diagram.py — og bruges af både skærm
-# og rapport: app.py viser figuren med st.plotly_chart, og
-# render_personligt_designdiagram_png() eksporterer den samme figur til PNG.
-# De to visninger kan derfor ikke divergere.
+# Både designdiagrammet og opbygningssnittene tegnes ét sted — core/diagram.py
+# — og bruges af skærm og rapport i samme figur: app.py viser den med
+# st.plotly_chart, og funktionerne herunder eksporterer den til PNG gennem
+# kaleido. De to visninger kan derfor ikke divergere.
 #
-# TODO — opbygningssnittene tegnes fortsat to steder:
-#
-#     render_opbygning_png()  (matplotlib, herunder)  →  ui.snit() (skærmen)
-#
-# Snit-dataklassen er fælles: app.py bygger snit_liste og oversætter den til
-# ui.snit()'s kolonner i _snit_til_kolonner(). Ændres udseende eller talformat
-# ét sted, skal det andet følge med, indtil snittene ligeledes er samlet.
+# Snit-dataklassen er beskrivelsen, begge sider bygger af; app.py samler
+# snit_liste, og diagram.snit_til_kolonner() oversætter den til tegningens
+# format.
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -236,366 +232,53 @@ MAT_LABEL_DY = 0.0
 
 
 def render_opbygning_png(
+    *,
     eu: float,
     snit_liste: list[Snit],
-    geonet_label: str,
-    *,
-    dpi: int = 300,
+    geonet_label: str | None = None,
+    materialer: list[dict] | None = None,
+    reference_mm: float | None = None,
+    dpi: int = 200,
+    figsize: tuple[float, float] = (10.0, 3.4),
 ) -> bytes:
-    """Render N opbygnings-tværsnit som en samlet PNG.
+    """Opbygningssnittene som PNG til rapporten.
 
-    Replikerer logikken i app._opbygnings_snit_svg, men i matplotlib —
-    så det kan embeddes direkte i både .docx og .pdf.
+    Figuren er den samme, som skærmen viser: snit_liste oversættes med
+    core.diagram.snit_til_kolonner() og tegnes af byg_snit(). Rapporten og
+    dimensioneringen kan derfor ikke vise forskellige snit.
+
+    reference_mm er den indtastede tykkelse, der tegnes som fælles stiplet
+    linje. Udelades den, aflæses den af snittenes t_indtastet_mm.
     """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.patches import Rectangle
-    import textwrap
+    from .diagram import byg_snit, snit_til_kolonner
 
-    if not snit_liste:
-        # Tom figur — bør ikke ske fra UI'en (mindst ét snit kræves), men
-        # vi returnerer noget gyldigt for robusthed.
-        fig, ax = plt.subplots(figsize=(1, 1), dpi=dpi)
-        ax.axis("off")
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", bbox_inches="tight")
-        plt.close(fig)
-        return buf.getvalue()
+    if reference_mm is None:
+        for s in snit_liste:
+            if s.t_indtastet_mm:
+                reference_mm = s.t_indtastet_mm
+                break
 
-    # Beregn fælles skala på tværs af alle snit — det største bærelag
-    # afgør hvor mange mm pr. tegne-enhed. Sammenligningslinjen (t_indtastet_mm)
-    # skal også passe ind i skalaen.
-    t_max = max(
-        (s.t_baerelag_mm for s in snit_liste if s.t_baerelag_mm is not None),
-        default=500.0,
+    kolonner = snit_til_kolonner(snit_liste, materialer, eu)
+    fig = byg_snit(
+        kolonner,
+        reference_mm=reference_mm,
+        geonet_navn=geonet_label,
+        hoejde_px=int(figsize[1] * 100),
     )
-    t_indtastet_max = max(
-        (s.t_indtastet_mm for s in snit_liste if s.t_indtastet_mm is not None),
-        default=0.0,
+    if fig is None:
+        return b""
+
+    fig.update_layout(
+        paper_bgcolor="white",
+        plot_bgcolor="white",
     )
-    t_max = max(t_max, t_indtastet_max, 300.0)
-
-    n = len(snit_liste)
-    fig_w = 4.2 * n   # lidt bredere så total-label kan stå udenfor boksen
-    fig_h = 5.6
-    fig, axes = plt.subplots(1, n, figsize=(fig_w, fig_h), dpi=dpi)
-    if n == 1:
-        axes = [axes]
-
-    # Højde-enheder i "data": baerelag rækker fra y=0 (bund af bærelag)
-    # op til t_max + lidt luft. Underbund tegnes som blok under y=0.
-    underbund_h = 140.0  # mm "højde" på underbundsblokken (kun visuelt)
-    top_y = t_max * 1.05
-    bund_y = -underbund_h
-
-    # Koordinater i akse-data (x går fra 0 til 1)
-    BOX_X1, BOX_X2 = 0.34, 0.66
-    LABEL_X = BOX_X2 + 0.04   # tykkelseslabel til højre for søjlen
-    GEONET_LBL_X = BOX_X2 + 0.04
-
-    def _wrap_material_label(navn: str, tykkelse_mm: float, label_h_mm: float) -> tuple[str, float]:
-        navn = str(navn or "Lag").strip()
-        navn = navn.replace("Bundsikringssand", "Bundsikrings-\nsand")
-        linjer: list[str] = []
-        for deltekst in navn.splitlines():
-            linjer.extend(textwrap.wrap(
-                deltekst,
-                width=13,
-                break_long_words=True,
-                break_on_hyphens=True,
-            ) or [deltekst])
-
-        max_name_lines = 3 if label_h_mm >= 130 else 2
-        linjer = linjer[:max_name_lines]
-        linjer.append(f"{tykkelse_mm:.0f} mm")
-
-        if label_h_mm < 55:
-            return f"{tykkelse_mm:.0f} mm", 7.0
-        if label_h_mm < 90:
-            return "\n".join(linjer[-2:]), 7.2
-        return "\n".join(linjer), 7.8
-
-    def _draw_underbund(ax):
-        ub = Rectangle(
-            (BOX_X1, bund_y), BOX_X2 - BOX_X1, underbund_h,
-            facecolor="#8B7355", edgecolor="#7A6449", linewidth=1,
-            hatch="///",
-        )
-        ax.add_patch(ub)
-        ax.text(
-            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.45, "Underbund",
-            ha="center", va="center", fontsize=10,
-            fontweight="bold", color="white",
-        )
-        ax.text(
-            (BOX_X1 + BOX_X2) / 2, bund_y + underbund_h * 0.18, f"{eu:.0f} MPa",
-            ha="center", va="center", fontsize=9, fontweight="bold", color="white",
-        )
-
-    for ax, s in zip(axes, snit_liste):
-        ax.set_xlim(0, 1)
-        ax.set_ylim(bund_y, top_y)
-        ax.set_aspect("auto")
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-
-        ax.set_title(s.titel, fontsize=11, fontweight="bold", pad=8)
-
-        if s.t_baerelag_mm is None:
-            # Stiplet placeholder
-            besked = s.ikke_defineret_tekst or "Ikke defineret"
-            rect = Rectangle(
-                (BOX_X1, 0), BOX_X2 - BOX_X1, t_max,
-                facecolor="#EDEFED", edgecolor="#C4CAC5",
-                linewidth=1, linestyle="--",
-            )
-            ax.add_patch(rect)
-            ax.text(
-                (BOX_X1 + BOX_X2) / 2, t_max / 2, besked,
-                ha="center", va="center",
-                fontsize=10, color="#888", style="italic",
-            )
-            _draw_underbund(ax)
-            continue
-
-        t = float(s.t_baerelag_mm)
-
-        # Krav-søjle (Koncept A): neutral grå blok mærket "φ-vægtet bærelag".
-        # Materialer fordeles IKKE — diagrammet kender ikke til lagopdeling.
-        if s.er_krav_soejle:
-            baerelag = Rectangle(
-                (BOX_X1, 0), BOX_X2 - BOX_X1, t,
-                facecolor="#D9DDD9", edgecolor="#B9C0BA", linewidth=1,
-                hatch=None,
-            )
-            ax.add_patch(baerelag)
-            # Interval-markering: stiplet linje ved best-case + "optimal"
-            # label lige under linjen. Selve zonen tegnes IKKE — bærelaget
-            # er ensartet grå hele vejen.
-            if s.best_case_mm is not None and 0 < s.best_case_mm < t:
-                # Stiplet linje ved best-case (= optimal grænse)
-                ax.hlines(
-                    s.best_case_mm, BOX_X1, BOX_X2,
-                    colors="#888", linestyles=(0, (3, 2)), linewidth=0.9,
-                )
-                # "optimal"-label lige under linjen (lille offset)
-                ax.text(
-                    (BOX_X1 + BOX_X2) / 2, s.best_case_mm - 0.025 * t,
-                    "optimal", ha="center", va="top",
-                    fontsize=6.5, color="#666", style="italic",
-                )
-            ax.text(
-                (BOX_X1 + BOX_X2) / 2, t * 0.5,
-                "φ-vægtet\nbærelag" if s.phi_vaegtet else "Bærelag",
-                ha="center", va="center",
-                fontsize=9, color="#444", linespacing=1.35,
-            )
-            # Geonet-linjer
-            placement = s.placement or {}
-            for frac in s.geonet_y_fracs:
-                y = t * (1.0 - frac)
-                ax.hlines(
-                    y, BOX_X1 - 0.015, BOX_X2 + 0.015,
-                    colors="#D32F2F", linestyles=(0, (4, 2)), linewidth=1.8,
-                )
-            # Total-label: konservativ stor + (optimal) parentes nedenunder
-            ax.annotate(
-                f"{t:.0f} mm",
-                xy=(LABEL_X, t / 2),
-                ha="left", va="center",
-                fontsize=9.5, fontweight="bold", color="#333",
-            )
-            if s.best_case_mm is not None and round(s.best_case_mm) < round(t):
-                ax.annotate(
-                    f"({s.best_case_mm:.0f} mm)",
-                    xy=(LABEL_X, t / 2),
-                    xytext=(0, -14), textcoords="offset points",
-                    ha="right", va="center",
-                    fontsize=8, color="#666",
-                    bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.85, "pad": 1.0},
-                )
-            # Status-tekst under søjlen (bund af underbund-blokken).
-            # Hvis teksten indeholder linjeskift, vises 1. linje fed/farvet
-            # og 2. linje mindre/gråtone (= parentes-stilen).
-            if s.status_tekst:
-                farve_map = {
-                    "danger": "#C62828",
-                    "warning": "#EF6C00",
-                    "success": "#2E7D32",
-                }
-                farve = farve_map.get(s.status_farve or "", "#444")
-                linjer = s.status_tekst.split("\n", 1)
-                ax.text(
-                    (BOX_X1 + BOX_X2) / 2, bund_y - underbund_h * 0.25,
-                    linjer[0],
-                    ha="center", va="top",
-                    fontsize=9, fontweight="bold", color=farve,
-                )
-                if len(linjer) > 1:
-                    ax.text(
-                        (BOX_X1 + BOX_X2) / 2,
-                        bund_y - underbund_h * 0.55,
-                        linjer[1],
-                        ha="center", va="top",
-                        fontsize=7.5, color="#666",
-                    )
-            _draw_underbund(ax)
-            continue
-
-        # Bærelagets ydre rektangel (ingen hatch — sub-lag tegnes ovenpå)
-        baerelag = Rectangle(
-            (BOX_X1, 0), BOX_X2 - BOX_X1, t,
-            facecolor="#D9DDD9", edgecolor="#B9C0BA", linewidth=1,
-        )
-        ax.add_patch(baerelag)
-
-        # Sub-lag: tegn separator-linjer og materialeetiketter inden i bærelaget
-        if s.sub_lag:
-            # Filtrér 0/None væk og normaliser
-            sl = [
-                {"navn": l.get("navn", "Lag"), "tykkelse_mm": float(l.get("tykkelse_mm") or 0)}
-                for l in s.sub_lag
-                if l.get("tykkelse_mm")
-            ]
-            sum_lag = sum(l["tykkelse_mm"] for l in sl)
-            if sum_lag > 0:
-                # Skift fyldfarve pr. lag for visuel adskillelse — ingen hatch,
-                # så materialeteksten forbliver læsbar.
-                lag_farver = ["#D9DDD9", "#EDEFED"]
-                y_top = t
-                for idx, lag in enumerate(sl):
-                    h = lag["tykkelse_mm"]
-                    y_bot = max(0.0, y_top - h)
-                    lag_rect = Rectangle(
-                        (BOX_X1, y_bot), BOX_X2 - BOX_X1, y_top - y_bot,
-                        facecolor=lag_farver[idx % len(lag_farver)],
-                        edgecolor="none",
-                    )
-                    ax.add_patch(lag_rect)
-                    # Separator-linje under (undtagen bunden af bærelaget)
-                    if idx < len(sl) - 1 and y_bot > 0.5:
-                        ax.hlines(y_bot, BOX_X1, BOX_X2,
-                                  colors="#555", linewidth=0.8)
-                    # Etiket centreret i lag — kun hvis der er plads
-                    label_h_mm = y_top - y_bot
-                    label_txt, label_fs = _wrap_material_label(
-                        lag["navn"], h, label_h_mm
-                    )
-                    ax.text(
-                        (BOX_X1 + BOX_X2) / 2 + MAT_LABEL_DX,
-                        (y_top + y_bot) / 2 + MAT_LABEL_DY,
-                        label_txt,
-                        ha="center", va="center",
-                        fontsize=label_fs * MAT_LABEL_FONTSCALE,
-                        fontweight=MAT_LABEL_WEIGHT,
-                        color="#222",
-                        linespacing=1.35,
-                    )
-                    y_top = y_bot
-        else:
-            # Fald-tilbage: "Bærelag" centreret hvis ingen sub-lag oplyst
-            if s.geonet_y_fracs:
-                tekst_y = t * (1.0 - min(s.geonet_y_fracs) / 2)
-            else:
-                tekst_y = t * 0.5
-            ax.text(
-                (BOX_X1 + BOX_X2) / 2, tekst_y, "Bærelag",
-                ha="center", va="center",
-                fontsize=10, fontweight="bold", color="#333",
-            )
-
-        # Geonet-linjer ovenpå sub-lag
-        placement = s.placement or {}
-        for frac in s.geonet_y_fracs:
-            y = t * (1.0 - frac)
-            ax.hlines(
-                y, BOX_X1 - 0.015, BOX_X2 + 0.015,
-                colors="#D32F2F", linestyles=(0, (4, 2)), linewidth=1.8,
-            )
-
-        # Total-tykkelse label UDENFOR boksen, til venstre
-        ax.annotate(
-            f"{t:.0f} mm",
-            xy=(LABEL_X, t / 2),
-            ha="left", va="center",
-            fontsize=9.5, fontweight="bold", color="#333",
-        )
-        # Interval-produkter (NX750/NX850): vis best-case under hovedtallet.
-        # Kun sat fra dim-preview — rapporten lader feltet være None.
-        if (s.best_case_mm is not None
-                and round(s.best_case_mm) < round(t)):
-            ax.annotate(
-                f"↓ {s.best_case_mm:.0f} mm",
-                xy=(LABEL_X, t / 2),
-                xytext=(0, -16), textcoords="offset points",
-                ha="right", va="center",
-                fontsize=8, color="#555",
-            )
-            ax.annotate(
-                "under optimale\nforhold",
-                xy=(LABEL_X, t / 2),
-                xytext=(0, -32), textcoords="offset points",
-                ha="right", va="center",
-                fontsize=7, color="#777", style="italic",
-            )
-
-        # Status-tekst under "Indtastet opbygning" (kun hvis sat)
-        if s.status_tekst and not s.er_krav_soejle:
-            farve_map = {
-                "danger": "#C62828",
-                "warning": "#EF6C00",
-                "success": "#2E7D32",
-            }
-            farve = farve_map.get(s.status_farve or "", "#444")
-            ax.text(
-                (BOX_X1 + BOX_X2) / 2, bund_y - underbund_h * 0.25,
-                s.status_tekst,
-                ha="center", va="top",
-                fontsize=9, fontweight="bold", color=farve,
-            )
-
-        _draw_underbund(ax)
-
-    # Sammenligningslinje: t_indtastet_mm trækkes som stiplet blå linje
-    # henover alle søjler (også 'Indtastet opbygning'-søjlen selv) som
-    # gennemgående reference. Det første søjle der har t_indtastet_mm sat
-    # definerer linjens niveau.
-    t_indtastet = next(
-        (s.t_indtastet_mm for s in snit_liste if s.t_indtastet_mm is not None),
-        None,
+    return fig.to_image(
+        format="png",
+        width=int(figsize[0] * 100),
+        height=int(figsize[1] * 100),
+        scale=dpi / 100,
     )
-    if t_indtastet is not None and t_indtastet > 0:
-        for ax in axes:
-            ax.hlines(
-                t_indtastet, 0.02, 0.98,
-                colors="#9AA39C", linestyles=(0, (5, 3)), linewidth=1.4,
-                zorder=10,
-            )
 
-    from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
-    legend_handles = [
-        Patch(facecolor="#D9DDD9", edgecolor="#B9C0BA", label="Bærelag"),
-        Patch(facecolor="#EDEFED", edgecolor="#C4CAC5", label="Bundsikring"),
-        Line2D([0], [0], color="#B42318", linewidth=1.5, label=geonet_label),
-    ]
-    if t_indtastet is not None and t_indtastet > 0:
-        legend_handles.append(
-            Line2D([0], [0], color="#9AA39C", linestyle=(0, (3, 2)),
-                   linewidth=1.2, label="Indtastet niveau")
-        )
-    fig.legend(
-        handles=legend_handles, loc="lower center", ncol=len(legend_handles),
-        frameon=False, fontsize=8, bbox_to_anchor=(0.5, -0.01),
-    )
-    fig.tight_layout(rect=(0, 0.06, 1, 1))
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", dpi=dpi)
-    plt.close(fig)
-    return buf.getvalue()
 
 
 def render_personligt_designdiagram_png(

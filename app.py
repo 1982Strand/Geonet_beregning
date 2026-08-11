@@ -69,7 +69,7 @@ from core.calculator import (
     _slaa_op_interp,
 )
 from core.validators import valider_input
-from core.diagram import byg_designdiagram
+from core.diagram import byg_designdiagram, snit_til_kolonner
 from core.placement import (
     check_geonet_placement,
     overlap_krav_mm,
@@ -3029,88 +3029,6 @@ def _tegn_designdiagram(
         st.markdown(INFO_DESIGNDIAGRAM_MD)
 
 
-def _kort_lagnavn(navn: str) -> str:
-    """Materialenavnet forkortet til søjlebredden i snittet.
-
-    Søjlerne er 104 px brede, og et fuldt navn som "Stabilgrus SGII 0-32"
-    ombrydes til flere linjer og skubber tykkelsen ud af laget. Betegnelsen
-    afkortes derfor til materialets hovedord; det fulde navn fremgår af
-    materialevalget i inputkolonnen.
-    """
-    ord = navn.split()
-    return ord[0] if ord else navn
-
-
-def _lagtype_for_navn(navn: str, materialer: list[dict] | None) -> str:
-    """Fladefarve for et lag: bærelag eller bundsikring.
-
-    Lagtypen slås op i de indtastede materialer. Findes navnet ikke — søjlen
-    kan være dannet af en skaleret fordeling — afgøres den ud fra navnet.
-    """
-    for m in materialer or []:
-        if m.get("navn") == navn:
-            return (
-                "bundsikring"
-                if str(m.get("lagtype", "")).lower().startswith("bunds")
-                else "baerelag"
-            )
-    return "bundsikring" if "bundsikring" in navn.lower() else "baerelag"
-
-
-def _snit_til_kolonner(
-    snit_liste: list, materialer: list[dict] | None, eu: float,
-) -> list[dict]:
-    """Oversætter snit-listen til ui.snit()'s kolonner.
-
-    Snit-objekterne er den fælles beskrivelse, som også rapportens
-    matplotlib-figur tegnes af. Her omsættes de til opmærkningens format:
-
-    - geonet_y_fracs er brøkdele målt fra bærelagets overkant; ui.snit()
-      forventer koter over underbunden, altså total × (1 − frac).
-    - En søjle uden materialefordeling tegnes som ét ubundet lag.
-    - Statusfarverne følger stylesheetets tre statusfarver.
-    """
-    farve = {"danger": "kritisk", "warning": "advarsel", "success": "gron"}
-    kolonner: list[dict] = []
-    for s in snit_liste:
-        total = s.t_baerelag_mm
-        if s.sub_lag:
-            lag = [
-                (
-                    _kort_lagnavn(l["navn"]),
-                    l["tykkelse_mm"],
-                    _lagtype_for_navn(l["navn"], materialer),
-                )
-                for l in s.sub_lag
-            ]
-        elif total:
-            lag = [("Ubunden opbygning", total, "baerelag")]
-        else:
-            lag = []
-
-        advarsler = list((s.placement or {}).get("placeringsadvarsler") or [])
-
-        kolonner.append({
-            "titel": s.titel,
-            "lag": lag,
-            "geonet_mm": [
-                total * (1 - frac) for frac in (s.geonet_y_fracs or []) if total
-            ],
-            "total_mm": total,
-            "tom_tekst": s.ikke_defineret_tekst or "Ikke defineret",
-            "best_case_mm": s.best_case_mm,
-            "advarsler": advarsler,
-            "status": (
-                s.status_tekst or "",
-                farve.get(s.status_farve or "", "neutral"),
-            ),
-        })
-
-    if kolonner:
-        kolonner[0]["underbund_tekst"] = f"UNDERBUND\n{eu:.0f} MPa"
-    return kolonner
-
-
 def _render_opbygningsvisualisering(
     eu: float,
     ref_1: dict | None,
@@ -3133,8 +3051,8 @@ def _render_opbygningsvisualisering(
     produkt fra resultatlisten. Hvis tvunget_produkt er sat (Brugerdefineret
     → 'Vælg specifikt produkt'), bruges det navn direkte uden dropdown.
 
-    Renderes via samme matplotlib-funktion (rapport.render_opbygning_png)
-    som bruges i rapportgenereringen — så preview i dim. og rapport er ens.
+    Tegnes af core.diagram.byg_snit(), som rapporten eksporterer til PNG af —
+    så snittene i dimensioneringen og i rapporten er den samme figur.
     """
     from core import rapport as rapport_mod
     # ── Find uarmeret-tykkelse (uafhængig af produktvalg) ──────────────
@@ -3346,7 +3264,7 @@ def _render_opbygningsvisualisering(
 
     # Forudsætningerne står i kortets sidehoved, jf. ui.kort().
     ui.snit(
-        _snit_til_kolonner(snit_liste, materialer, eu),
+        snit_til_kolonner(snit_liste, materialer, eu),
         reference_mm=t_indtastet_for_linje,
         geonet_navn=geonet_label,
     )
@@ -6662,14 +6580,17 @@ def render_rapport() -> None:
             visu_png: bytes | None = None
         else:
             visu_png = rapport_mod.render_opbygning_png(
-                eu=sd["eu"], snit_liste=snit_liste, geonet_label=geonet_label,
+                eu=sd["eu"], snit_liste=snit_liste,
+                geonet_label=geonet_label,
+                materialer=materialer_dim,
+                reference_mm=t_indtastet_for_snit,
             )
             with ui.kort(
                 "Opbygning",
                 "Snit i samme lodrette skala · forhåndsvisning fra dimensioneringen",
             ):
                 ui.snit(
-                    _snit_til_kolonner(snit_liste, materialer_dim, sd["eu"]),
+                    snit_til_kolonner(snit_liste, materialer_dim, sd["eu"]),
                     reference_mm=t_indtastet_for_snit,
                     geonet_navn=geonet_label,
                 )
