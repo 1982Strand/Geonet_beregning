@@ -2290,6 +2290,32 @@ def _effektindeks(navn: str, is_ref: bool = False) -> str:
     return str(g.get("effektindeks") or "—")
 
 
+def _rt_kor_celler(p: dict | None, phi: float) -> str:
+    """De tre korrektionsled som selvstændige kolonner, jf. afsnit 6b.
+
+    Basisreduktionen er forskellen mellem den ustabiliserede og den armerede
+    basistykkelse; net- og φ-korrektionen er de to led, der anvendes på
+    basistykkelsen. Summen er rækkens samlede reduktion.
+    """
+    if not _rt_gyldig(p):
+        return '<span class="num rt-tom">—</span>' * 3
+
+    t_uarm = p.get("t_uarmeret_mm")
+    t_basis = p.get("t_basis_arm_mm")
+    if t_uarm is None or t_basis is None:
+        return '<span class="num rt-tom">—</span>' * 3
+
+    basis = -round(t_uarm - t_basis)
+    net = round(t_basis * (p.get("korrektion") or 0.0))
+    phi_led = round(t_basis * K_PHI * (phi - PHI_BASIS))
+
+    def celle(v: int) -> str:
+        css = "rt-spar" if v <= 0 else "rt-pen"
+        return f'<span class="num {css}">{_delta_mm(v)}</span>'
+
+    return celle(basis) + celle(net) + celle(phi_led)
+
+
 def _rt_raekke_html(
     navn: str,
     p1: dict | None,
@@ -2333,13 +2359,20 @@ def _rt_raekke_html(
     red1_cls = "num" if v1 else "num rt-tom"
     red2_cls = "num" if v2 else "num rt-tom"
 
+    # Reduktionens opdeling er en mellemregning og står som egne kolonner,
+    # når kontakten er slået til, jf. afsnit 6b.
+    vis_kor = ui.mellemregninger()
+
     raekke_css = "rt-raekke rt-ref" if is_ref else "rt-raekke"
     if vis_indeks:
         raekke_css += " rt-med-indeks"
+    if vis_kor:
+        raekke_css += " rt-med-kor"
     indeks_html = (
         f'<span class="num rt-indeks">{_effektindeks(navn, is_ref)}</span>'
         if vis_indeks else ""
     )
+    kor_html = _rt_kor_celler(p1 if v1 else p2, phi) if vis_kor else ""
 
     return (
         f'<details class="{raekke_css}" name="rt-produkt">'
@@ -2347,6 +2380,7 @@ def _rt_raekke_html(
         f'<span class="rt-navn"><span class="rt-chev">▸</span> {navn}</span>'
         f'{indeks_html}'
         f'<span><span class="rt-badge {badge_css}">{badge_pre}{kl_txt}</span></span>'
+        f'{kor_html}'
         f'{_rt_tk_celle(p1, v1, t1, t1_cls, phi)}'
         f'<span class="{red1_cls}">{red1_txt}</span>'
         f'{_rt_tk_celle(p2, v2, t2, t2_cls, phi)}'
@@ -2420,12 +2454,27 @@ def _render_produkt_tabel(
         'style="cursor:help">Indeks</span>'
         if grupperet else ""
     )
+    # Reduktionens tre led vises som egne kolonner, når mellemregningerne er
+    # slået til, jf. afsnit 6b.
+    vis_kor = ui.mellemregninger()
+    kor_kol = (
+        '<span class="num">Basisreduktion</span>'
+        '<span class="num">Net-korr.</span>'
+        '<span class="num">φ-korr.</span>'
+        if vis_kor else ""
+    )
+    hoved_css = "rt-head"
+    if grupperet:
+        hoved_css += " rt-head-indeks"
+    if vis_kor:
+        hoved_css += " rt-med-kor"
     dele = ['<div class="rt-tabel">']
     dele.append(
-        f'<div class="rt-head{" rt-head-indeks" if grupperet else ""}">'
+        f'<div class="{hoved_css}">'
         '<span>Produkt</span>'
         f'{indeks_kol}'
         f'{kl_kol}'
+        f'{kor_kol}'
         '<span class="num">Bærelagstykkelse, 1 lag geonet</span>'
         '<span class="num">Reduktion i alt, 1 lag</span>'
         '<span class="num">Bærelagstykkelse, 2 lag geonet</span>'
@@ -3569,7 +3618,10 @@ def _render_oversigt_expanders(
         f"Advarsler og anbefalinger ({antal})"
         if antal else "Advarsler og anbefalinger"
     )
-    with st.expander(titel_adv, expanded=bool(advarsler_unik or anbefalinger)):
+    # Advarsler og udførelseskrav er konklusioner, ikke mellemregninger, og
+    # bliver liggende sammenfoldede uanset kontakten, jf. afsnit 6c. Antallet
+    # står i overskriften, så det fremgår, at der er noget at læse.
+    with st.expander(titel_adv):
         if antal == 0:
             st.caption(
                 "Ingen generelle advarsler for den valgte Eu og belastning."
@@ -4131,6 +4183,13 @@ def _grundlag_tekst(grundlag: dict) -> str:
     return f"belastningsklasse {grundlag['valgt_klasse']}"
 
 
+def _produkttabel_note(eu: float) -> str:
+    """Produkttabellens undertekst. Skifter med kontakten, jf. afsnit 6b."""
+    if ui.mellemregninger():
+        return "Klik en række for reduktionsopdeling og udførelseskrav"
+    return f"Bærelagstykkelse ved Eu = {ui.mpa(eu)}"
+
+
 def _resultat_note(eu: float, grundlag: dict) -> str:
     """Forudsætningerne bag resultatet, til resultatblokkens sidehoved."""
     return (
@@ -4315,7 +4374,7 @@ def render_standard() -> None:
 
             vis_kobling = eo_interpoleret
 
-            ui.underhoved("Alle produkter", "Klik en række for krav til udførelse")
+            ui.underhoved("Alle produkter", _produkttabel_note(eu))
             _render_produkt_tabel(
                 ref_1, ref_2, ref_fejl_1, ref_fejl_2,
                 prod_1lag, prod_2lag, valgt_klasse, eu=eu,
@@ -4356,13 +4415,23 @@ def _dk_num(v: float, fmt: str) -> str:
     return s
 
 
-def _pct_fortegn(v: float) -> str:
+def _pct_fortegn(v: float, decimaler: int = 0) -> str:
     """Korrektionsfaktor som procent med fortegn: 0,10 → '+10 %', −0,10 → '−10 %'.
 
     ui.procent() angiver ingen fortegn og anvendes til rene procentangivelser;
     net-korrektionen aflæses derimod som en signeret størrelse.
+
+    φ-korrektionen er lille og angives med én decimal, så en ændring af
+    friktionsvinklen kan aflæses i tallet.
     """
-    return f"{v * 100:+.0f} %".replace("-", "−")
+    return (
+        f"{v * 100:+.{decimaler}f} %".replace("-", "−").replace(".", ",")
+    )
+
+
+def _tusind(v: float) -> str:
+    """Heltal med tusindtalspunktum: 26800 → '26.800'."""
+    return f"{v:,.0f}".replace(",", ".")
 
 
 def _delta_mm(v: float) -> str:
@@ -4524,11 +4593,16 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
         st.session_state.setdefault(f"bd_mat_{_idx}", _navn)
         st.session_state.setdefault(f"bd_t_{_idx}", _t)
 
-    BREDDER = [0.35, 3.2, 1.5, 0.9]
+    # Bidraget t x phi er selve mellemregningen bag den vaegtede phi og vises
+    # alene, naar kontakten er slaaet til, jf. afsnit 6a.
+    vis_bidrag = ui.mellemregninger()
+    BREDDER = [0.35, 3.2, 1.5, 0.9] + ([1.0] if vis_bidrag else [])
     st.html(
-        '<div class="bg-lagtabel-hoved">'
+        '<div class="bg-lagtabel-hoved' + (' med-bidrag' if vis_bidrag else '') + '">'
         '<span>#</span><span>Materiale</span>'
-        '<span class="num">Tykkelse</span><span class="num">&#966;</span></div>'
+        '<span class="num">Tykkelse</span><span class="num">&#966;</span>'
+        + ('<span class="num">t&#215;&#966;</span>' if vis_bidrag else '')
+        + '</div>'
     )
 
     materialer: list[dict] = []
@@ -4547,9 +4621,9 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
             slettet_materiale = st.session_state[mat_key]
             st.session_state[mat_key] = "Manuel indtastning"
 
-        kol_nr, kol_mat, kol_t, kol_phi = st.columns(
-            BREDDER, vertical_alignment="center",
-        )
+        kolonner = st.columns(BREDDER, vertical_alignment="center")
+        kol_nr, kol_mat, kol_t, kol_phi = kolonner[:4]
+        kol_bidrag = kolonner[4] if vis_bidrag else None
         with kol_nr:
             st.html(f'<div class="bg-lagtabel-nr">{i + 1}</div>')
         with kol_mat:
@@ -4631,6 +4705,13 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
                 "Laget behandles som manuel indtastning."
             )
 
+        if kol_bidrag is not None:
+            with kol_bidrag:
+                st.html(
+                    f'<div class="bg-lagtabel-bidrag">'
+                    f'{_tusind(float(t_i) * phi_i)}</div>'
+                )
+
         materialer.append({
             "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
             "lagtype": ltype_i, "tykkelse_mm": float(t_i),
@@ -4641,10 +4722,14 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
     phi_weighted = _phi_tabel_data(materialer)["phi_weighted"]
     total_t = sum(m["tykkelse_mm"] for m in materialer)
 
+    bidrag_sum = sum(m["tykkelse_mm"] * m["phi"] for m in materialer)
     st.html(
-        f'<div class="bg-lagtabel-sum"><span></span><span>Samlet</span>'
+        f'<div class="bg-lagtabel-sum{" med-bidrag" if vis_bidrag else ""}">'
+        f'<span></span><span>Samlet</span>'
         f'<span class="num">{ui.mm(total_t)}</span>'
-        f'<span class="num">{ui.grader(phi_weighted)}</span></div>'
+        f'<span class="num">{ui.grader(phi_weighted)}</span>'
+        + (f'<span class="num">{_tusind(bidrag_sum)}</span>' if vis_bidrag else "")
+        + '</div>'
     )
     st.caption(
         f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm. "
@@ -4704,9 +4789,13 @@ def render_brugerdefineret() -> None:
         with ui.trin_kort(2, "Opbygning") as trin2:
             materialer, phi = _input_materialelag(kompakt=True)
             total = _indtastet_total(materialer)
+            # Er mellemregningerne slået til, benævnes φ "vægtet", fordi
+            # udregningen af den vægtede værdi står i trinnet, jf. afsnit 6a.
+            phi_ord = "vægtet φ" if ui.mellemregninger() else "φ"
             trin2.opsummering = (
                 f"{len(materialer)} lag · {ui.mm(total)} · "
-                f"vægtet φ {ui.grader(phi)}"
+                f"{phi_ord} {ui.grader(phi)} · "
+                f"k_φ {_pct_fortegn(K_PHI * (phi - PHI_BASIS), 1)}"
             )
 
         with ui.trin_kort(3, "Geonet") as trin3:
@@ -4990,7 +5079,7 @@ def render_brugerdefineret() -> None:
                     if bedste_2 and bedste_2.get("produkter") else []
                 )
                 ui.underhoved(
-                    "Produktvalg", f"Bærelagstykkelse ved Eu = {ui.mpa(eu)}"
+                    "Produktvalg", _produkttabel_note(eu)
                 )
                 if True:
                     _render_produkt_tabel(

@@ -117,6 +117,14 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   gap:1rem; align-items:baseline;
   padding:.3rem .25rem;
 }
+/* Med mellemregningerne slået til kommer bidraget t×φ til som femte kolonne. */
+.bg-lagtabel-hoved.med-bidrag, .bg-lagtabel-sum.med-bidrag{
+  grid-template-columns:.35fr 3.2fr 1.5fr .9fr 1fr;
+}
+.bg-lagtabel-bidrag{
+  font:400 12px/1 'IBM Plex Mono',monospace;
+  color:var(--bg-ink-45); text-align:right;
+}
 .bg-lagtabel-hoved{
   font:600 9.5px/1 'IBM Plex Mono',monospace;
   letter-spacing:.08em; text-transform:uppercase;
@@ -452,6 +460,26 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .rt-head-indeks, .rt-med-indeks > .rt-sum, .rt-med-indeks > .rt-detalje{
   grid-template-columns:1.5fr .5fr .8fr 1.1fr 1.2fr 1.1fr 1.2fr;
 }
+
+/* Med mellemregningerne slået til indskydes reduktionens tre led efter
+   klassekolonnen, jf. afsnit 6b. */
+.rt-head.rt-med-kor, .rt-med-kor > .rt-sum{
+  grid-template-columns:1.5fr .8fr .85fr .8fr .8fr 1.1fr 1.2fr 1.1fr 1.2fr;
+}
+.rt-head.rt-head-indeks.rt-med-kor,
+.rt-med-indeks.rt-med-kor > .rt-sum{
+  grid-template-columns:1.5fr .5fr .8fr .85fr .8fr .8fr 1.1fr 1.2fr 1.1fr 1.2fr;
+}
+/* Fold-ud-indholdet følger ikke summary-rækkens kolonner, når de tre led er
+   indskudt; det stilles i stedet frit i tre lige brede felter. */
+.rt-med-kor > .rt-detalje{
+  grid-template-columns:1.4fr 1fr 1fr;
+}
+.rt-med-kor > .rt-detalje > .rt-d-krav{ grid-column:1 / 2; }
+.rt-med-kor > .rt-detalje > .rt-d-bt1{ grid-column:2 / 3; }
+.rt-med-kor > .rt-detalje > .rt-d-bd1{ grid-column:3 / 4; }
+.rt-med-kor > .rt-detalje > .rt-d-bt2{ grid-column:2 / 3; }
+.rt-med-kor > .rt-detalje > .rt-d-bd2{ grid-column:3 / 4; }
 .rt-indeks{ font-family:'IBM Plex Mono',monospace; color:var(--bg-ink-70); }
 .rt-med-indeks > .rt-detalje > .rt-d-krav{ grid-column:1 / 4; }
 .rt-med-indeks > .rt-detalje > .rt-d-bt1{ grid-column:4 / 5; }
