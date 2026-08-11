@@ -332,10 +332,14 @@ def render_personligt_designdiagram_png(
             f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:.0f}"
         )
     phi_str = f"{phi:.1f}".replace(".", ",")
+    # Geonettets navn står i figurteksten frem for i signaturen, hvor det
+    # ellers ville gentages ved hver af de fire armerede kurver.
+    net_navn = (geonet or {}).get("navn") or "referencenet"
     fig.update_layout(
         title=dict(
             text=(
-                f"Eo = {eo:.0f} MN/m² · {klasse_str} · φ = {phi_str}°"
+                f"Eo = {eo:.0f} MN/m² · {klasse_str} · φ = {phi_str}° · "
+                f"{net_navn}"
             ),
             x=0, xanchor="left", y=0.98, yanchor="top",
             font=dict(size=13),

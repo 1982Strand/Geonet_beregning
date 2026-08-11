@@ -107,8 +107,10 @@ def byg_designdiagram(
             hovertemplate=HOVER,
         ))
 
-    _armeret("1_lag", FARVE_1LAG, f"1 lag · {geonet_navn}")
-    _armeret("2_lag", FARVE_2LAG, f"2 lag · {geonet_navn}")
+    # Geonettets navn staar i kortets sidehoved; signaturen benævner alene
+    # kurverne, saa navnet ikke gentages fire gange lige efter hinanden.
+    _armeret("1_lag", FARVE_1LAG, "1 lag geonet")
+    _armeret("2_lag", FARVE_2LAG, "2 lag geonet")
 
     for t_mm, farve, navn in (
         (t_1_lag_mm, FARVE_1LAG, "1 lag geonet"),
@@ -166,15 +168,18 @@ def byg_designdiagram(
     )
     fig.update_layout(
         height=380,
-        margin=dict(l=60, r=220, t=10, b=60),
+        margin=dict(l=60, r=20, t=10, b=60),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family=SKRIFT, size=11,
                   color=FARVE_INK),
         hovermode="closest",
-        legend=dict(orientation="v", yanchor="top", y=1.0,
-                    xanchor="left", x=1.02, font=dict(size=10),
-                    bgcolor="rgba(0,0,0,0)"),
+        legend=dict(
+            orientation="v", yanchor="top", y=0.98,
+            xanchor="right", x=0.99, font=dict(size=10),
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor=FARVE_LINJE, borderwidth=1,
+        ),
         xaxis=dict(title="Bærelagstykkelse [cm]", range=[0, max(x_maks, 80)], **akse),
         yaxis=dict(
             title="Bundmodul Eu [MN/m²]",

@@ -4369,7 +4369,8 @@ def render_standard() -> None:
                 )
                 ui.underhoved(
                     "Designdiagram",
-                    f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)}",
+                    f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
+                    f"{REFERENCE_NAVN if er_reference else valgt_net}",
                     skillelinje=True,
                 )
                 _tegn_designdiagram(
@@ -5201,7 +5202,7 @@ def render_brugerdefineret() -> None:
                     ui.underhoved(
                         "Designdiagram",
                         f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
-                        f"φ = {ui.grader(phi)}",
+                        f"φ = {ui.grader(phi)} · {geonet_navn}",
                         skillelinje=True,
                     )
                     vis_din_prik = st.checkbox(
@@ -6543,6 +6544,7 @@ def render_rapport() -> None:
                 titel="1 lag geonet", t_baerelag_mm=t_1,
                 geonet_y_fracs=fracs_1,
                 sub_lag=sub_red_1 if brug_sub_1 else None,
+                best_case_mm=sd.get("t_1_lag_best_mm"),
                 placement=placement_1,
                 er_krav_soejle=not brug_sub_1,
                 t_indtastet_mm=t_indtastet_for_snit,
@@ -6564,6 +6566,7 @@ def render_rapport() -> None:
                 titel="2 lag geonet", t_baerelag_mm=t_2,
                 geonet_y_fracs=fracs_2,
                 sub_lag=sub_red_2 if brug_sub_2 else None,
+                best_case_mm=sd.get("t_2_lag_best_mm"),
                 placement=placement_2,
                 er_krav_soejle=not brug_sub_2,
                 t_indtastet_mm=t_indtastet_for_snit,
@@ -6634,7 +6637,8 @@ def render_rapport() -> None:
                 with ui.kort(
                     "Designdiagram",
                     f"Eo = {ui.mpa(sd['eo'])} · {grundlag_txt} · "
-                    f"φ = {ui.grader(sd.get('phi', PHI_BASIS))}",
+                    f"φ = {ui.grader(sd.get('phi', PHI_BASIS))} · "
+                    f"{sd.get('geonet_navn') or 'referencenet'}",
                 ):
                     _tegn_designdiagram(
                         float(sd["eu"]),
