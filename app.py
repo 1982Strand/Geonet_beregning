@@ -1049,57 +1049,10 @@ def input_trafikklasse(
                 _aktiv_korrelation(), valgt_t=valgt_t, eu=eu, key_prefix=key_prefix
             )
 
-    # Nøgletal efter håndbogens Figur 4.1, jf. data.trafikklasse_noegletal.
-    st.markdown(
-        f'<div style="margin:0.2rem 0 0.6rem">'
-        f'<div style="font-weight:700;margin-bottom:2px">'
-        f'{format_trafikklasse(valgt_t)}</div>'
-        + _noegletal_tabel_html(
-            trafikklasse_noegletal(valgt_t), dæmpet=True
-        )
-        + '<div style="font-size:0.76rem;color:#777;margin-top:4px">'
-        'Værdierne er gengivet efter håndbogens Figur 4.1. Den typiske '
-        'anvendelse er vejledende og indgår ikke i håndbogen.</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    if zone == "ok":
-        tal = _trafik_kobling_tal(eu, eo_aekv, _aktiv_t_basis_table())
-        # Nabokurverne, Eo_ækv er interpoleret imellem. Falder Eo_ækv
-        # præcis på en kolonne, er de to ens, og der vises kun den ene.
-        if tal["kl_lav"] != tal["kl_hoej"]:
-            klasse_txt = (
-                f"{tal['kl_lav']} (Eo = {tal['eo_lav']} MPa) og "
-                f"{tal['kl_hoej']} (Eo = {tal['eo_hoej']} MPa)"
-            )
-        else:
-            klasse_txt = f"{tal['kl_lav']} (Eo = {tal['eo_lav']} MPa)"
-        # Ligger Eu mellem to kørte VejDim-punkter, er tykkelseskravet —
-        # og dermed Eo_ækv — interpoleret i log(Eu). Det markeres, så
-        # tallet ikke forveksles med en aflæst kørsel. Markeringen er en
-        # mellemregning og vises alene, når kontakten er slået til.
-        trin = _eo_aekv_trin_tal(valgt_t, eu, _aktiv_t_basis_table())
-        interp_txt = (
-            f' <span style="font-weight:400;color:{ui.FARVE["ink_45"]}">'
-            f'(interpoleret)</span>'
-            if ui.mellemregninger() and trin and not trin["trin1"]["direkte"]
-            else ""
-        )
-        raekker = [
-            ("Tykkelseskrav til ubundet opbygning fra VejDim",
-             f"{ui.mm(tal['t_krav_mm'])}{interp_txt}"
-             if tal["t_krav_mm"] is not None else "—"),
-            ("Nærmeste belastningsklasser", klasse_txt),
-            ("Ækvivalent Eo-kurve", f"{ui.mpa(eo_aekv)}{interp_txt}"),
-        ]
-        ui.besked(
-            f"<b>{valgt_t} ved Eu = {ui.mpa(eu)}:</b>"
-            f'<hr style="margin:5px 0 4px;border:none;'
-            f'border-top:1px solid {ui.FARVE["linje"]}">'
-            + _noegletal_tabel_html(raekker),
-            "info",
-        )
-    elif zone == "under":
+    # Nøgletallene står i trin 1's tredje kolonne og gentages ikke her.
+    # Falder driftspunktet uden for kernezonen, oplyses det derimod, da
+    # der da ikke er noget grundlag at dimensionere efter.
+    if zone == "under":
         ui.besked(
             f"<b>{valgt_t} · Eu = {ui.mpa(eu)} er uden for kernezonen "
             f"(under).</b> VejDim kræver en tyndere ubunden opbygning end "
@@ -1115,7 +1068,7 @@ def input_trafikklasse(
             f"tykkelsesområde. En konkret VejDim-beregning er nødvendig.",
             "advarsel",
         )
-    else:  # udenfor
+    elif zone != "ok":  # udenfor de kørte punkter
         interval = trafik_eu_interval(valgt_t, _aktiv_koersler())
         interval_txt = (
             f"{interval[0]}–{interval[1]} MPa" if interval
@@ -1133,8 +1086,7 @@ def input_trafikklasse(
             _aktiv_korrelation(), valgt_t=valgt_t, eu=eu, key_prefix=key_prefix
         )
 
-    with st.expander("Om trafikklasse-grundlaget"):
-        st.markdown(_TRAFIK_GRUNDLAG_MD)
+    # Grundlaget for koblingen er beskrevet under "Sådan beregnes det".
 
     return {
         "type": "trafikklasse",
@@ -3709,6 +3661,11 @@ def _render_oversigt_expanders(
                 "tykkelsen lander på, jf. **'Kobling imellem trafikklasse og "
                 "designdiagram'** ovenfor. Trin 5–6 (φ- og net-korrektion) gælder uændret."
             )
+            # Grundlaget for koblingen stod tidligere i en egen ekspander under
+            # trafikklassevælgeren; det hører til beregningens forudsætninger.
+            st.markdown("#### Grundlaget for koblingen")
+            st.markdown(_TRAFIK_GRUNDLAG_MD)
+            st.markdown("#### Trinvis beregning")
         st.markdown("""
 Trinvis beregning, baseret på designmanualer og intern forsøgsdata fra Byggros:
 
@@ -4127,38 +4084,49 @@ def _input_trin1(key_prefix: str) -> tuple[float, dict]:
 
 
 def _trin1_noegletal(grundlag: dict, eu: float) -> None:
-    """Nøgletallene for det valgte grundlag, i trin 1's tredje kolonne."""
+    """Nøgletallene for det valgte grundlag, i trin 1's tredje kolonne.
+
+    Betegnelserne er afkortet til kolonnens bredde, og den typiske anvendelse
+    står i boksens hoved frem for som egen række, jf. designgennemgangen.
+    Nøgletallene vises alene her; de gentages ikke under vælgeren.
+    """
     if grundlag["type"] == "trafikklasse":
         t_klasse = grundlag["t_klasse"]
-        raekker = list(trafikklasse_noegletal(t_klasse))
+        tal = dict(trafikklasse_noegletal(t_klasse))
+        raekker = [
+            ("Tunge køretøjer pr. døgn, begge retninger",
+             tal.get("Tunge køretøjer pr. døgn, begge retninger", "—")
+             .replace(" til ", "–")),
+            ("Dimensionerende trafikbelastning",
+             tal.get("Dimensionsgivende trafikbelastning", "—")
+             .replace(" pr. år pr. vognbane", "/år")),
+            ("Svarende til 20 år", tal.get("Svarende til 20 år", "—")),
+        ]
         if grundlag.get("eo_aekv") is not None:
             raekker.append(
                 (f"Ækvivalent Eo-kurve ved Eu = {ui.mpa(eu)}",
                  ui.mpa(grundlag["eo_aekv"]))
             )
         titel = format_trafikklasse(t_klasse)
-        note = (
-            "Værdierne er gengivet efter håndbogens Figur 4.1. Den typiske "
-            "anvendelse er vejledende og indgår ikke i håndbogen."
-        )
+        # Den typiske anvendelse er vejledende og indgår ikke i håndbogen;
+        # den står derfor dæmpet i hovedet frem for blandt nøgletallene.
+        hoved_note = tal.get("Typisk anvendelse", "")
     else:
         info = grundlag["info"]
         raekker = [
             ("Belastning", str(info.get("belastning", "—"))),
             ("Eo-kurve", ui.mpa(grundlag["eo"])),
-            ("Typisk anvendelse", str(info.get("anvendelse", "—"))),
         ]
         titel = f"Klasse {grundlag['valgt_klasse']}"
-        note = (
-            "Belastningsklasserne følger BG Byggros' designmanualer til "
-            "Tensar og GS-GRID."
-        )
+        hoved_note = str(info.get("anvendelse", ""))
 
     st.markdown(
         f'<div class="bg-noegletal">'
-        f'<div class="bg-noegletal-titel">{html.escape(titel)}</div>'
+        f'<div class="bg-noegletal-hoved">'
+        f'<span class="t">{html.escape(titel)}</span>'
+        f'<span class="n">{html.escape(hoved_note)}</span></div>'
         + _noegletal_tabel_html(raekker, dæmpet=True)
-        + f'<div class="bg-noegletal-note">{html.escape(note)}</div></div>',
+        + '</div>',
         unsafe_allow_html=True,
     )
 
