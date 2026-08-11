@@ -829,7 +829,7 @@ def input_underbund(
             value=10, step=1, key=f"{key_prefix}_eu_slider",
             help="Angiv E-modul for underbunden. Oftest målt ved belastningsforsøg i marken, eller skønnet.",
         ))
-        st.caption(f"Valgt **Eu = {ui.mpa(eu)}**")
+        # Værdien aflæses på skyderen og gentages ikke nedenunder.
         return eu
 
     cv = st.slider(
@@ -4066,10 +4066,6 @@ def _input_trin1(key_prefix: str) -> tuple[float, dict]:
     with kol_eu:
         ui.etiket("Underbundens styrke")
         eu = input_underbund(key_prefix=key_prefix, kompakt=True, uden_etiket=True)
-        st.caption(
-            "Angives direkte eller udledes af en korrelation med "
-            "vingestyrken Cv."
-        )
 
     with kol_grundlag:
         ui.etiket("Dimensioneringsgrundlag")
