@@ -4495,31 +4495,23 @@ def _lag_label(idx: int, antal_lag: int) -> str:
 
 
 def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
-    """
-    Materialelag — render input-sektionen og returnér
-    (materialer-liste, beregnet/overskrevet φ).
+    """Materialelagene som tabel, jf. designgennemgangens trin 2.
 
-    kompakt=True stiller lagene under hinanden i inputkolonnens fulde bredde
-    i stedet for i en halv kolonne.
-    """
-    if kompakt:
-        ui.etiket("Opbygning")
-    else:
-        st.subheader("Materialelag")
+    Lagene opstilles med nummer, materiale, tykkelse og friktionsvinkel i
+    kolonner, afsluttet af en samlet-række. Returnerer (materialer-liste,
+    beregnet eller overskrevet φ).
 
-    if kompakt:
+    kompakt bevares i signaturen af hensyn til kaldere uden for flow A.
+    """
+    etiket_kol, antal_kol = st.columns([3, 1], vertical_alignment="bottom")
+    with etiket_kol:
+        ui.etiket("Materialelag")
+    with antal_kol:
         antal_lag = st.number_input(
             "Antal lag", min_value=1, max_value=3, value=2, step=1,
-            key="bd_antal_lag",
+            key="bd_antal_lag", label_visibility="collapsed",
+            help="Antal materialelag i opbygningen.",
         )
-    else:
-        antal_lag_kol, _ = st.columns([1, 7])
-        with antal_lag_kol:
-            antal_lag = st.number_input(
-                "Antal lag", min_value=1, max_value=3, value=2, step=1,
-                key="bd_antal_lag",
-            )
-    st.caption(f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm.")
 
     # Default-opbygning ved første besøg på siden: Stabilgrus SGII 0-32
     # (øverst, 300 mm) + Bundsikringssand (nederst, 400 mm). Sat via
@@ -4532,103 +4524,145 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
         st.session_state.setdefault(f"bd_mat_{_idx}", _navn)
         st.session_state.setdefault(f"bd_t_{_idx}", _t)
 
+    BREDDER = [0.35, 3.2, 1.5, 0.9]
+    st.html(
+        '<div class="bg-lagtabel-hoved">'
+        '<span>#</span><span>Materiale</span>'
+        '<span class="num">Tykkelse</span><span class="num">&#966;</span></div>'
+    )
+
     materialer: list[dict] = []
+    dynamiske_navne = [
+        m["navn"] for m in st.session_state.get("materialer", [])
+    ]
+    materiale_options = dynamiske_navne + ["Manuel indtastning"]
 
     for i in range(int(antal_lag)):
-        # I inputkolonnen fylder laget hele bredden; ellers halvdelen, så
-        # felterne ikke trækkes ud over en læsbar linjelængde.
-        lag_ramme = (
-            contextlib.nullcontext() if kompakt else st.columns([1, 1])[0]
-        )
-        with lag_ramme, st.expander(_lag_label(i, int(antal_lag)), expanded=True):
-            dynamiske_navne = [
-                m["navn"] for m in st.session_state.get("materialer", [])
-            ]
-            materiale_options = dynamiske_navne + ["Manuel indtastning"]
-            mat_key = f"bd_mat_{i}"
-            slettet_materiale = None
-            if (
-                mat_key in st.session_state
-                and st.session_state[mat_key] not in materiale_options
-            ):
-                slettet_materiale = st.session_state[mat_key]
-                st.session_state[mat_key] = "Manuel indtastning"
+        mat_key = f"bd_mat_{i}"
+        slettet_materiale = None
+        if (
+            mat_key in st.session_state
+            and st.session_state[mat_key] not in materiale_options
+        ):
+            slettet_materiale = st.session_state[mat_key]
+            st.session_state[mat_key] = "Manuel indtastning"
 
+        kol_nr, kol_mat, kol_t, kol_phi = st.columns(
+            BREDDER, vertical_alignment="center",
+        )
+        with kol_nr:
+            st.html(f'<div class="bg-lagtabel-nr">{i + 1}</div>')
+        with kol_mat:
             mat_navn = st.selectbox(
                 "Materiale", materiale_options, key=mat_key,
+                label_visibility="collapsed",
             )
 
-            md = (
-                None
-                if mat_navn == "Manuel indtastning"
-                else _find_materiale_session(mat_navn)
-            )
-            if slettet_materiale is not None:
-                st.warning(
-                    f"Materialet '{slettet_materiale}' findes ikke længere i databasen. "
-                    "Laget er skiftet til manuel indtastning."
-                )
-            elif mat_navn != "Manuel indtastning" and md is None:
-                st.warning(
-                    f"Materialet '{mat_navn}' findes ikke længere i databasen. "
-                    "Laget behandles som manuel indtastning."
-                )
+        md = (
+            None
+            if mat_navn == "Manuel indtastning"
+            else _find_materiale_session(mat_navn)
+        )
 
-            lag_navn = mat_navn if md is not None else "Manuel indtastning"
-
-            if md is None:
-                phi_i = st.number_input(
-                    "φ (°)", 20.0, 60.0, PHI_BASIS, 0.5, key=f"bd_phi_m_{i}"
-                )
-                korn_i = st.number_input(
-                    "Max kornstørrelse (mm)", 0, 500, 32, key=f"bd_korn_m_{i}"
-                )
-                ltype_i = st.selectbox(
-                    "Lagtype", ["Bærelag", "Bundsikring"], key=f"bd_lt_m_{i}"
-                )
-                krav_maske_i = None
-            else:
-                phi_i = float(md["phi"])
-                korn_i = md["max_korn"]
-                ltype_i = md["lagtype"]
-                krav_maske_i = md.get("krav_maskestoerrelse_mm")
-                krav_txt = (
-                    f" · krav til geonet maskestørrelse = {krav_maske_i} mm"
-                    if krav_maske_i is not None
-                    else ""
-                )
-                st.caption(
-                    f"φ = {phi_i}° · max korn = {korn_i} mm · {ltype_i}{krav_txt}"
-                )
-
-            t_key = f"bd_t_{i}"
-            if (
-                t_key in st.session_state
-                and st.session_state[t_key] < MIN_LAGTYKKELSE_MM
-            ):
-                st.session_state[t_key] = MIN_LAGTYKKELSE_MM
+        t_key = f"bd_t_{i}"
+        if (
+            t_key in st.session_state
+            and st.session_state[t_key] < MIN_LAGTYKKELSE_MM
+        ):
+            st.session_state[t_key] = MIN_LAGTYKKELSE_MM
+        with kol_t:
             t_i = st.number_input(
                 "Tykkelse (mm)",
                 min_value=MIN_LAGTYKKELSE_MM,
                 max_value=2000,
                 step=50,
                 key=t_key,
+                label_visibility="collapsed",
             )
-            materialer.append({
-                "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
-                "lagtype": ltype_i, "tykkelse_mm": float(t_i),
-                "pct": None,
-                "krav_maskestoerrelse_mm": krav_maske_i,
-            })
 
-    total_t = sum(m["tykkelse_mm"] for m in materialer)
-    st.markdown(f"**Samlet tykkelse af opbygning:** {ui.mm(total_t)}")
+        if md is None:
+            # Manuel indtastning: φ, kornstørrelse og lagtype angives selv og
+            # får en egen linje, da de ikke er plads til i tabellens kolonner.
+            with kol_phi:
+                phi_i = st.number_input(
+                    "φ (°)", 20.0, 60.0, PHI_BASIS, 0.5, key=f"bd_phi_m_{i}",
+                    label_visibility="collapsed",
+                )
+            _, kol_korn, kol_type = st.columns(
+                [0.35, 3.2, 2.4], vertical_alignment="center",
+            )
+            with kol_korn:
+                korn_i = st.number_input(
+                    "Max kornstørrelse (mm)", 0, 500, 32, key=f"bd_korn_m_{i}",
+                )
+            with kol_type:
+                ltype_i = st.selectbox(
+                    "Lagtype", ["Bærelag", "Bundsikring"], key=f"bd_lt_m_{i}",
+                )
+            krav_maske_i = None
+            lag_navn = "Manuel indtastning"
+        else:
+            phi_i = float(md["phi"])
+            korn_i = md["max_korn"]
+            ltype_i = md["lagtype"]
+            krav_maske_i = md.get("krav_maskestoerrelse_mm")
+            lag_navn = mat_navn
+            with kol_phi:
+                st.html(
+                    f'<div class="bg-lagtabel-phi">{ui.grader(phi_i)}</div>'
+                )
+            krav_txt = (
+                f" · krav til geonet maskestørrelse {krav_maske_i} mm"
+                if krav_maske_i is not None else ""
+            )
+            st.html(
+                f'<div class="bg-lagtabel-note">{ltype_i} · maks. korn '
+                f'{korn_i} mm{krav_txt}</div>'
+            )
+
+        if slettet_materiale is not None:
+            st.warning(
+                f"Materialet '{slettet_materiale}' findes ikke længere i "
+                "databasen. Laget er skiftet til manuel indtastning."
+            )
+        elif mat_navn != "Manuel indtastning" and md is None:
+            st.warning(
+                f"Materialet '{mat_navn}' findes ikke længere i databasen. "
+                "Laget behandles som manuel indtastning."
+            )
+
+        materialer.append({
+            "navn": lag_navn, "phi": phi_i, "max_korn": korn_i,
+            "lagtype": ltype_i, "tykkelse_mm": float(t_i),
+            "pct": None,
+            "krav_maskestoerrelse_mm": krav_maske_i,
+        })
 
     phi_weighted = _phi_tabel_data(materialer)["phi_weighted"]
+    total_t = sum(m["tykkelse_mm"] for m in materialer)
+
+    st.html(
+        f'<div class="bg-lagtabel-sum"><span></span><span>Samlet</span>'
+        f'<span class="num">{ui.mm(total_t)}</span>'
+        f'<span class="num">{ui.grader(phi_weighted)}</span></div>'
+    )
+    st.caption(
+        f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm. "
+        f"Der gøres opmærksom på, at φ er vægtet efter lagtykkelse."
+    )
 
     if st.checkbox("Overskriv φ manuelt", key="bd_phi_override"):
-        phi = st.number_input(
-            "φ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5, key="bd_phi_man",
+        overskriv_kol, _ = st.columns([1, 2.4])
+        with overskriv_kol:
+            phi = st.number_input(
+                "φ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5,
+                key="bd_phi_man",
+            )
+        ui.besked(
+            "Den manuelt indtastede værdi anvendes i stedet for den vægtede. "
+            "Opmærksomheden henledes på, at værdien ikke længere følger "
+            "ændringer i materialelagene.",
+            "advarsel",
         )
     else:
         phi = phi_weighted

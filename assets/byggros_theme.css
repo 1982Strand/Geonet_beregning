@@ -108,6 +108,42 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   color:var(--bg-ink-45); margin:4px 0 0; max-width:78ch;
 }
 
+/* ---- 3e. Materialelagenes tabel (trin 2) --------------------------------
+   Lagene opstilles som en tabel med redigerbare felter. Kolonnebredderne
+   følger st.columns i _input_materialelag(). */
+.bg-lagtabel-hoved, .bg-lagtabel-sum{
+  display:grid;
+  grid-template-columns:.35fr 3.2fr 1.5fr .9fr;
+  gap:1rem; align-items:baseline;
+  padding:.3rem .25rem;
+}
+.bg-lagtabel-hoved{
+  font:600 9.5px/1 'IBM Plex Mono',monospace;
+  letter-spacing:.08em; text-transform:uppercase;
+  color:var(--bg-ink-45);
+  border-bottom:1px solid var(--bg-line-soft);
+  margin-bottom:.35rem;
+}
+.bg-lagtabel-hoved .num, .bg-lagtabel-sum .num{ text-align:right; }
+.bg-lagtabel-sum{
+  border-top:1px solid var(--bg-line);
+  margin-top:.35rem; padding-top:.6rem;
+  font:600 12.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink);
+}
+.bg-lagtabel-sum .num{ font-family:'IBM Plex Mono',monospace; }
+.bg-lagtabel-nr{
+  font:500 12px/1 'IBM Plex Mono',monospace; color:var(--bg-ink-25);
+}
+.bg-lagtabel-phi{
+  font:500 12.5px/1 'IBM Plex Mono',monospace;
+  color:var(--bg-ink); text-align:right;
+}
+.bg-lagtabel-note{
+  font:400 10.5px/1.4 'IBM Plex Sans',sans-serif;
+  color:var(--bg-ink-45);
+  margin:-.35rem 0 .5rem 2.1rem;
+}
+
 /* Nøgletalsboksen i trin 1's tredje kolonne. */
 .bg-noegletal{
   background:var(--bg-canvas); border-radius:4px; padding:10px 11px;
