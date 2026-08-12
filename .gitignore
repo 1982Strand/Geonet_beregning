@@ -9,3 +9,15 @@ materialer_brugerdefineret.json
 designdiagrammer_brugerdefineret.json
 trafikklasse_korrelation_brugerdefineret.json
 rapport_metadata_brugerdefineret.json
+
+# Words låsefiler — dannes automatisk, mens et dokument er åbent
+~$*
+
+# Arbejdsmateriale fra designarbejdet. Appens eget logo ligger i
+# assets/byggros_logo.jpeg og static/byggros_logo.png; filerne herunder er
+# løse kopier og indgår ikke i appen.
+/BG byggros logo.jpg
+/BG byggros logo.png
+/Screenshots/
+/Streamlit app design review.zip
+/handover/nyt design/
