@@ -69,7 +69,7 @@ from core.calculator import (
     _slaa_op_interp,
 )
 from core.validators import valider_input
-from core.diagram import byg_designdiagram, snit_til_kolonner
+from core.diagram import byg_designdiagram, byg_raadiagram, snit_til_kolonner
 from core.placement import (
     check_geonet_placement,
     overlap_krav_mm,
@@ -5591,99 +5591,254 @@ def render_geonet_database() -> None:
     ))
 
 
-def render_designdiagrammer() -> None:
-    st.title("Designdiagrammer")
-    st.caption(
-        "Designdiagrammer fra designmanualerne, samt redigerbare diagramdata. "
-        "Beregningerne bruger tabellerne direkte som opslag, da der er lavet forudgående interpolation imellem værdier fra de originale designdiagrammer."
-    )
-    if st.button("Nulstil diagramdata til standard", type="secondary"):
-        slet_designdiagrammer_json_og_nulstil()
-        st.session_state["designdiagrammer"] = _standard_designdiagrammer()
-        _opdater_aktiv_t_basis_table()
-        st.rerun()
+def _diagram_daekning(diagram: dict) -> str:
+    """Kurvernes gyldighedsområde i det enkelte diagram, som fodnotetekst.
 
-    st.divider()
+    Diagrammerne er ikke optegnet for hele Eu-området: den ustabiliserede
+    opbygning er ikke dimensioneret ved de laveste bundmoduler, og de
+    armerede kurver ophører ved hver sin øvre grænse. Fodnoten angiver de
+    faktiske grænser, så en tom celle kan skelnes fra en manglende aflæsning.
+    """
+    dele: list[str] = []
+    for felt, navn in (
+        ("t_uarmeret_cm", "Ustabiliseret"),
+        ("t_1_lag_cm", "1 lag armering"),
+        ("t_2_lag_cm", "2 lag armering"),
+    ):
+        eu_vals = [
+            r["eu"] for r in diagram["rows"] if r.get(felt) is not None
+        ]
+        if eu_vals:
+            dele.append(
+                f"{navn} Eu = {min(eu_vals):.0f}–{max(eu_vals):.0f} MN/m²"
+            )
+        else:
+            dele.append(f"{navn} forekommer ikke")
+    return " · ".join(dele)
+
+
+def _diagram_tabel_html(diagram: dict) -> str:
+    """De aflæste diagramdata som fast tabel.
+
+    Tabellen er skrivebeskyttet i visningstilstanden; redigering foregår i
+    st.data_editor, jf. Redigér-knappen. Manglende aflæsninger angives med
+    tankestreg, jf. _diagram_daekning().
+    """
+    def _tal(v: float | None) -> str:
+        return "—" if v is None else f"{v:.1f}".replace(".", ",")
+
+    hoved = (
+        '<div class="dd-tabel-hoved">'
+        '<div>E<sub>u</sub> MPA</div>'
+        '<div>USTABILISERET</div><div>1 LAG</div><div>2 LAG</div></div>'
+    )
+    raekker = "".join(
+        '<div class="dd-tabel-raekke">'
+        f'<div class="dd-tabel-eu">{r["eu"]:.0f}</div>'
+        f'<div>{_tal(r.get("t_uarmeret_cm"))}</div>'
+        f'<div>{_tal(r.get("t_1_lag_cm"))}</div>'
+        f'<div>{_tal(r.get("t_2_lag_cm"))}</div></div>'
+        for r in diagram["rows"]
+    )
+    return f'{hoved}<div class="dd-tabel-krop">{raekker}</div>'
+
+
+def _render_diagram_vaelger(diagrammer: list[dict], valgt_nr: int) -> None:
+    """Diagrammerne som kort, der vælges ét ad gangen.
+
+    Hvert kort angiver diagrammets nummer, dets overflademodul og den
+    belastningsklasse, det dækker. Kortet er selv knappen; den ligger som en
+    gennemsigtig flade oven på indholdet, jf. st-key-dd_kort_ i stylesheetet.
+    """
+    for kol, d in zip(st.columns(len(diagrammer), gap="small"), diagrammer):
+        nr = d["diagram_nr"]
+        valgt = " dd-kort-valgt" if nr == valgt_nr else ""
+        with kol:
+            with st.container(key=f"dd_kort_{nr}"):
+                # Knappen står først og fylder kortets plads; kortets indhold
+                # trækkes op oven på den med negativ margin og lader klik gå
+                # igennem, jf. st-key-dd_kort_ i stylesheetet. Rækkefølgen er
+                # væsentlig — indholdet skal tegnes efter knappen.
+                if st.button(
+                    f"Vælg diagram {nr}",
+                    key=f"dd_vaelg_{nr}",
+                    width="stretch",
+                ):
+                    st.session_state["dd_valgt_nr"] = nr
+                    st.rerun()
+                st.html(
+                    f'<div class="dd-kort{valgt}">'
+                    f'<div class="dd-kort-nr">DIAGRAM {nr}</div>'
+                    f'<div class="dd-kort-eo">{d["eo"]:.0f}'
+                    f'<span> MN/m²</span></div>'
+                    f'<div class="dd-kort-klasse">Belastningsklasse '
+                    f'{d["klasse"]}</div></div>'
+                )
+
+
+def render_designdiagrammer() -> None:
+    ui.sidehoved(
+        "Designdiagrammer",
+        "Diagrammer fra designmanualerne med tilhørende aflæste data. "
+        "Beregningerne slår op direkte i tabellerne, da interpolationen "
+        "mellem diagrammernes værdier er foretaget på forhånd.",
+    )
 
     import pandas as pd
 
-    def _raw_dataframe(diagram: dict) -> pd.DataFrame:
-        return pd.DataFrame([
-            {
-                "Eu (MPa)": row["eu"],
-                "Ustabiliseret tykkelse (cm)": row["t_uarmeret_cm"],
-                "1 lag tykkelse (cm)": row["t_1_lag_cm"],
-                "2 lag tykkelse (cm)": row["t_2_lag_cm"],
-            }
-            for row in diagram["rows"]
-        ])
+    diagrammer = st.session_state["designdiagrammer"]
+    eo_vals = [d["eo"] for d in diagrammer]
 
-    diagram_table_height = 490
-    redigerede_diagrammer: list[dict] = []
+    # ── 1 Vælg diagram ────────────────────────────────────────────────────
+    valgt_nr = st.session_state.get("dd_valgt_nr", diagrammer[0]["diagram_nr"])
+    if valgt_nr not in {d["diagram_nr"] for d in diagrammer}:
+        valgt_nr = diagrammer[0]["diagram_nr"]
 
-    for diagram in st.session_state["designdiagrammer"]:
-        kol_diagram, kol_tabel = st.columns([1.1, 1], gap="large")
-        with kol_diagram:
-            image_path = os.path.join(
-                os.path.dirname(__file__),
-                "diagrambilleder",
-                diagram["image_name"],
-            )
-            st.image(image_path, width="stretch")
-        with kol_tabel:
-            st.markdown("**Aflæste diagramdata**")
-            redigeret = st.data_editor(
-                _raw_dataframe(diagram),
-                width="stretch",
-                height=diagram_table_height,
-                hide_index=True,
-                num_rows="dynamic",
-                column_config={
-                    "Eu (MPa)": st.column_config.NumberColumn(
-                        "Eu (MPa)",
-                        min_value=0.0,
-                        step=1.0,
-                        format="%.0f",
-                    ),
-                    "Ustabiliseret tykkelse (cm)": st.column_config.NumberColumn(
-                        "Ustabiliseret tykkelse (cm)",
-                        min_value=0.0,
-                        step=0.1,
-                        format="%.1f",
-                    ),
-                    "1 lag tykkelse (cm)": st.column_config.NumberColumn(
-                        "1 lag tykkelse (cm)",
-                        min_value=0.0,
-                        step=0.1,
-                        format="%.1f",
-                    ),
-                    "2 lag tykkelse (cm)": st.column_config.NumberColumn(
-                        "2 lag tykkelse (cm)",
-                        min_value=0.0,
-                        step=0.1,
-                        format="%.1f",
-                    ),
-                },
-                key=f"diagram_editor_{diagram['diagram_nr']}",
-            )
-            redigerede_diagrammer.append({
-                **diagram,
-                "rows": redigeret.to_dict("records"),
-            })
-        st.markdown('<div class="diagram-række-afstand"></div>', unsafe_allow_html=True)
-
-    normaliserede_diagrammer, diagram_fejl = _normaliser_designdiagrammer(
-        redigerede_diagrammer
-    )
-    if diagram_fejl:
-        st.error(
-            "Diagramdata er ikke gemt, fordi der er fejl: "
-            + " ".join(diagram_fejl)
+    with ui.trin_kort(1, "Vælg diagram") as trin:
+        trin.opsummering = (
+            f"{len(diagrammer)} diagrammer · Eo {min(eo_vals):.0f}–"
+            f"{max(eo_vals):.0f} MN/m²"
         )
-    elif normaliserede_diagrammer != st.session_state["designdiagrammer"]:
-        st.session_state["designdiagrammer"] = normaliserede_diagrammer
-        gem_designdiagrammer(normaliserede_diagrammer)
+        _render_diagram_vaelger(diagrammer, valgt_nr)
+
+    diagram = next(d for d in diagrammer if d["diagram_nr"] == valgt_nr)
+
+    # ── 2 Det valgte diagram ──────────────────────────────────────────────
+    titel = (
+        f"Diagram {valgt_nr} — Eo = {diagram['eo']:.0f} MN/m², "
+        f"belastningsklasse {diagram['klasse']}"
+    )
+    redigerer = st.session_state.get("dd_redigerer") == valgt_nr
+
+    with ui.trin_kort(2, titel):
+        kol_diagram, kol_tabel = st.columns([1.1, 1], gap="large")
+
+        with kol_diagram:
+            # Optegningen gengiver tabellen; scanningen er manualens egen
+            # figur. De to visninger skiftes der imellem, så den aflæste
+            # kurve kan holdes op mod kilden.
+            visning = st.segmented_control(
+                "Visning",
+                ["Original scan", "Optegnet"],
+                default="Optegnet",
+                key=f"dd_visning_{valgt_nr}",
+                label_visibility="collapsed",
+            ) or "Optegnet"
+            if visning == "Original scan":
+                st.image(
+                    os.path.join(
+                        os.path.dirname(__file__),
+                        "diagrambilleder",
+                        diagram["image_name"],
+                    ),
+                    width="stretch",
+                )
+                st.caption("Scanning fra designmanualen")
+            else:
+                fig = byg_raadiagram(diagram)
+                if fig is None:
+                    ui.besked(
+                        "Diagrammet kan ikke optegnes, da tabellen ikke "
+                        "indeholder aflæste værdier.",
+                        "advarsel",
+                    )
+                else:
+                    st.plotly_chart(
+                        fig, width="stretch",
+                        config={"displayModeBar": False},
+                        key=f"dd_fig_{valgt_nr}",
+                    )
+                    st.caption(
+                        "Optegnet af tabellens værdier · skift til den "
+                        "originale scanning i vælgeren ovenfor"
+                    )
+
+        with kol_tabel:
+            kol_titel, kol_knap = st.columns([1, 0.32], gap="small")
+            with kol_titel:
+                st.html(
+                    '<div class="dd-tabel-titel">Aflæste diagramdata · '
+                    'bærelagstykkelse i cm</div>'
+                )
+            with kol_knap:
+                if redigerer:
+                    if st.button("Færdig", key=f"dd_luk_{valgt_nr}",
+                                 width="stretch", type="primary"):
+                        st.session_state.pop("dd_redigerer", None)
+                        st.rerun()
+                elif st.button("Redigér", key=f"dd_rediger_{valgt_nr}",
+                               width="stretch"):
+                    st.session_state["dd_redigerer"] = valgt_nr
+                    st.rerun()
+
+            if redigerer:
+                _rediger_diagramdata(diagram, pd)
+            else:
+                st.html(_diagram_tabel_html(diagram))
+
+            st.html(
+                '<div class="dd-tabel-fod">— Uden for diagrammets område. '
+                f'{html.escape(_diagram_daekning(diagram))}.</div>'
+            )
+
+    # Nulstillingen gælder samtlige diagrammer og står derfor for sig, uden
+    # for det enkelte diagrams kort.
+    if st.button("Nulstil alle diagramdata til standard", type="secondary"):
+        slet_designdiagrammer_json_og_nulstil()
+        st.session_state["designdiagrammer"] = _standard_designdiagrammer()
+        st.session_state.pop("dd_redigerer", None)
         _opdater_aktiv_t_basis_table()
+        st.rerun()
+    st.caption(
+        "Nulstillingen kasserer redigeringer i alle seks diagrammer og "
+        "genindlæser designmanualernes aflæste værdier."
+    )
+
+
+def _rediger_diagramdata(diagram: dict, pd) -> None:
+    """Diagramdataen som redigerbar tabel.
+
+    Ændringer træder i kraft, efterhånden som de indtastes, og gemmes til
+    designdiagrammer_brugerdefineret.json. Beregningernes opslagstabel
+    dannes på ny ved hver ændring, jf. _opdater_aktiv_t_basis_table().
+    """
+    kolonner = {
+        "Eu (MPa)": ("eu", 1.0, "%.0f"),
+        "Ustabiliseret tykkelse (cm)": ("t_uarmeret_cm", 0.1, "%.1f"),
+        "1 lag tykkelse (cm)": ("t_1_lag_cm", 0.1, "%.1f"),
+        "2 lag tykkelse (cm)": ("t_2_lag_cm", 0.1, "%.1f"),
+    }
+    redigeret = st.data_editor(
+        pd.DataFrame([
+            {label: row[felt] for label, (felt, _, _) in kolonner.items()}
+            for row in diagram["rows"]
+        ]),
+        width="stretch",
+        height=520,
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            label: st.column_config.NumberColumn(
+                label, min_value=0.0, step=trin, format=fmt,
+            )
+            for label, (_, trin, fmt) in kolonner.items()
+        },
+        key=f"diagram_editor_{diagram['diagram_nr']}",
+    )
+
+    opdaterede = [
+        {**d, "rows": redigeret.to_dict("records")}
+        if d["diagram_nr"] == diagram["diagram_nr"] else d
+        for d in st.session_state["designdiagrammer"]
+    ]
+    normaliserede, fejl = _normaliser_designdiagrammer(opdaterede)
+    if fejl:
+        st.error("Diagramdata er ikke gemt, fordi der er fejl: " + " ".join(fejl))
+    elif normaliserede != st.session_state["designdiagrammer"]:
+        st.session_state["designdiagrammer"] = normaliserede
+        gem_designdiagrammer(normaliserede)
+        _opdater_aktiv_t_basis_table()
+        st.rerun()
 
 
 def _korrelation_pivot_rows(korr: dict) -> list[dict]:

@@ -191,6 +191,91 @@ def byg_designdiagram(
 
 
 # ---------------------------------------------------------------------------
+# Designmanualernes diagrammer optegnet af de aflæste værdier
+# ---------------------------------------------------------------------------
+
+# Kurvernes benævnelse og farve, i den rækkefølge de optegnes. Nøglerne er
+# felterne i diagramdataens rækker.
+_RAA_KURVER = (
+    ("t_uarmeret_cm", "Ustabiliseret", FARVE_UARM),
+    ("t_1_lag_cm", "1 lag armering", FARVE_1LAG),
+    ("t_2_lag_cm", "2 lag armering", FARVE_2LAG),
+)
+
+
+def byg_raadiagram(diagram: dict, hoejde_px: int = 400):
+    """Designmanualens diagram optegnet af de aflæste værdier.
+
+    Diagrammet gengiver den tabel, beregningerne slår op i, med bundmodulet
+    Eu på den lodrette akse og bærelagstykkelsen på den vandrette — samme
+    orientering som designmanualernes egne diagrammer. Kurverne dannes af
+    tabellens rækker og optegnes alene, hvor der er aflæste værdier; en
+    kurve uden værdier udelades.
+
+    Optegningen er en gengivelse af tabellen og ikke en selvstændig kilde;
+    den originale scanning af manualens diagram vises ved siden af.
+
+    Returnerer None, når ingen af kurverne har værdier.
+    """
+    import plotly.graph_objects as go
+
+    raekker = sorted(diagram.get("rows") or [], key=lambda r: r["eu"])
+    if not raekker:
+        return None
+
+    fig = go.Figure()
+    x_maks = 0.0
+    for felt, navn, farve in _RAA_KURVER:
+        punkter = [
+            (r[felt], r["eu"]) for r in raekker if r.get(felt) is not None
+        ]
+        if not punkter:
+            continue
+        xs = [p[0] for p in punkter]
+        x_maks = max(x_maks, max(xs))
+        fig.add_trace(go.Scatter(
+            x=xs, y=[p[1] for p in punkter],
+            mode="lines+markers", name=navn,
+            line=dict(color=farve, width=2),
+            marker=dict(color=farve, size=3.5),
+            hovertemplate=(
+                "%{x:.1f} cm · Eu %{y:.0f} MN/m²<extra>%{fullData.name}</extra>"
+            ),
+        ))
+    if not fig.data:
+        return None
+
+    eu_vals = [r["eu"] for r in raekker]
+    akse = dict(
+        gridcolor="#EDEFED", zeroline=False,
+        linecolor=FARVE_LINJE, ticks="outside",
+        tickcolor=FARVE_LINJE, tickfont=dict(size=10),
+    )
+    fig.update_layout(
+        height=hoejde_px,
+        margin=dict(l=60, r=20, t=10, b=55),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family=SKRIFT, size=11, color=FARVE_INK),
+        hovermode="closest",
+        legend=dict(
+            orientation="v", yanchor="top", y=0.98,
+            xanchor="right", x=0.99, font=dict(size=10),
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor=FARVE_LINJE, borderwidth=1,
+        ),
+        xaxis=dict(
+            title="Bærelagstykkelse [cm]", range=[0, x_maks * 1.08], **akse,
+        ),
+        yaxis=dict(
+            title="Bundmodul Eu [MN/m²]",
+            range=[0, max(eu_vals) * 1.05], **akse,
+        ),
+    )
+    return fig
+
+
+# ---------------------------------------------------------------------------
 # Opbygningssnit — én tegning til både skærm og rapport
 # ---------------------------------------------------------------------------
 

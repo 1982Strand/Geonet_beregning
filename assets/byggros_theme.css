@@ -718,7 +718,88 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
 /* --- 14.3 Placering af diagrammer ---------------------------------------
    margin-top = højde (+ ned / − op), margin-left = side (+ højre / − venstre). */
 .st-key-kl_diagram_wrap{ margin-top:-4rem; margin-left:10rem; }
-.diagram-række-afstand{ height:1.8rem; }
+
+/* --- 14.3b Designdiagram-siden ------------------------------------------
+   Diagrammerne vælges ét ad gangen på kort, og det valgte vises med sin
+   tabel ved siden af.
+
+   Kortet er selv knappen: st.button står først i containeren og fylder
+   kortets plads usynligt, hvorefter kortets indhold trækkes op oven på den
+   med negativ margin og lader klik gå igennem. Konstruktionen hviler alene
+   på højden — ikke på hvilket element der er positioneret — så den er
+   uafhængig af Streamlits egne wrappers. Højden skal derfor være den samme
+   tre steder: knappen, den negative margin og kortet. */
+/* Mellemrummet mellem knappen og kortet skal væk, for at den negative
+   margin rammer præcist; Streamlits egen gap sættes derfor til nul. */
+[class*="st-key-dd_kort_"]{ gap:0 !important; }
+/* Kortets indhold ligger oven på knappen og skal lade klik gå igennem.
+   Det gælder hele kæden af Streamlit-wrappers, ikke blot .dd-kort — derfor
+   slukkes klik på samtlige børn, og tændes igen alene for knappen. */
+[class*="st-key-dd_kort_"] > *{ pointer-events:none; }
+[class*="st-key-dd_kort_"] .stButton{ pointer-events:auto; }
+[class*="st-key-dd_kort_"] .stButton button{
+  width:100%; height:92px; padding:0; cursor:pointer;
+  background:transparent; border-color:transparent; color:transparent;
+  box-shadow:none;
+}
+[class*="st-key-dd_kort_"] .stButton button:hover{
+  background:transparent; border-color:transparent; color:transparent;
+}
+.dd-kort{
+  margin-top:-92px; height:92px; box-sizing:border-box;
+  border:1px solid var(--bg-line); border-radius:5px;
+  background:var(--bg-surface); padding:11px 13px 12px;
+  transition:border-color .12s ease, background .12s ease;
+}
+[class*="st-key-dd_kort_"]:hover .dd-kort{ border-color:var(--bg-ink-45); }
+.dd-kort-valgt{
+  border:1.5px solid var(--bg-green-700); background:var(--bg-green-lys);
+}
+.dd-kort-nr{
+  font:600 9.5px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
+  color:var(--bg-ink-45); margin-bottom:.5rem;
+}
+.dd-kort-valgt .dd-kort-nr{ color:var(--bg-green-700); }
+.dd-kort-eo{
+  font:600 17px/1 'IBM Plex Mono',monospace; color:var(--bg-ink);
+  font-variant-numeric:tabular-nums;
+}
+.dd-kort-eo span{ font-size:10.5px; font-weight:500; color:var(--bg-ink-45); }
+.dd-kort-valgt .dd-kort-eo{ color:var(--bg-green-900); }
+.dd-kort-klasse{
+  margin-top:.4rem;
+  font:400 11px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+}
+
+/* Tabellen med de aflæste værdier. Tallene er tabulære, så søjlerne kan
+   sammenlignes lodret; kroppen ruller, da diagrammerne har op til 45
+   rækker. */
+.dd-tabel-titel{
+  font:600 9.5px/1.6 'IBM Plex Mono',monospace; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--bg-ink-45); padding-top:.35rem;
+}
+.dd-tabel-hoved, .dd-tabel-raekke{
+  display:grid; grid-template-columns:.8fr 1fr 1fr 1fr; gap:.5rem;
+  align-items:baseline;
+}
+.dd-tabel-hoved{
+  padding:.5rem .25rem; border-bottom:1px solid var(--bg-line);
+  font:600 9.5px/1.2 'IBM Plex Mono',monospace; letter-spacing:.06em;
+  color:var(--bg-ink-45); text-align:right;
+}
+.dd-tabel-hoved div:first-child{ text-align:right; }
+.dd-tabel-krop{ max-height:520px; overflow-y:auto; }
+.dd-tabel-raekke{
+  padding:.34rem .25rem; border-bottom:1px solid #F4F6F4;
+  font:400 12px/1.3 'IBM Plex Mono',monospace; color:var(--bg-ink-70);
+  font-variant-numeric:tabular-nums; text-align:right;
+}
+.dd-tabel-raekke:hover{ background:var(--bg-canvas); }
+.dd-tabel-eu{ font-weight:600; color:var(--bg-ink); }
+.dd-tabel-fod{
+  margin-top:.6rem; font:400 10.5px/1.5 'IBM Plex Sans',sans-serif;
+  color:var(--bg-ink-45);
+}
 
 /* --- 14.4 Beskedbokse ----------------------------------------------------
    Samme udtryk som ui.besked(). Anvendes af vis_fejl / vis_advarsel /
