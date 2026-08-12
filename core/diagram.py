@@ -208,6 +208,19 @@ FARVE_ADVARSEL = "#A8600B"
 # Jordbåndets højde angives i samme enhed som søjlerne, så det skalerer med.
 _JORD_ANDEL = 0.11
 
+# Signaturen lægges under tegningen. Højden lægges til den ønskede tegnehøjde,
+# så søjlerne bevarer deres plads, uanset hvilken højde kalderen angiver.
+_SIGNATUR_PX = 46
+
+# Figurens margener. Overkanten rummer søjletitlerne, bunden statusteksten og
+# signaturen. Værdierne indgår i beregningen af, hvor mange tekstlinjer der er
+# plads til i det enkelte materialelag.
+_MARGIN_TOP = 34
+_MARGIN_BUND = 96
+
+# Linjehøjde for materialeteksten inde i lagene, ved skriftstørrelse 10.
+_LINJE_PX = 13.5
+
 
 def byg_snit(
     kolonner: list[dict],
@@ -245,6 +258,12 @@ def byg_snit(
         return None
     maks = max(hoejder)
     jord = maks * _JORD_ANDEL
+
+    # Lagteksten sættes efter, hvor mange linjer der er plads til i laget.
+    # Omregningen fra mm til billedpunkter følger y-området og plotfladens
+    # højde, jf. update_yaxes og update_layout nedenfor.
+    plot_px = max(hoejde_px + _SIGNATUR_PX - _MARGIN_TOP - _MARGIN_BUND, 60)
+    px_pr_mm = plot_px / (maks * 1.08 + jord * 1.15)
 
     antal = len(kolonner)
     fig = make_subplots(
@@ -307,10 +326,7 @@ def byg_snit(
                             ),
                         ),
                         width=0.62,
-                        text=(
-                            f"{navn}<br>{tykkelse:.0f}"
-                            if tykkelse / maks > 0.13 else ""
-                        ),
+                        text=_lagtekst(navn, tykkelse, px_pr_mm),
                         textposition="inside", insidetextanchor="middle",
                         textfont=dict(size=10, color=FARVE_INK),
                         hovertemplate=f"{navn} · %{{y:.0f}} mm<extra></extra>",
@@ -343,6 +359,24 @@ def byg_snit(
                     x0=-0.33, x1=0.33, y0=best, y1=best,
                     line=dict(color=FARVE_GRON, width=1, dash="dot"),
                 )
+                # Mellemregningen bag den optimale tykkelse aflæses ved at
+                # hvile på linjen. Formen selv bærer ingen hover, og der
+                # lægges derfor en gennemsigtig markørrække oven på den.
+                note = k.get("best_case_note") or (
+                    f"Optimal korrektion · {best:,.0f} mm".replace(",", ".")
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=[-0.24, 0.0, 0.24], y=[best] * 3,
+                        mode="markers",
+                        marker=dict(size=18, color="rgba(0,0,0,0)"),
+                        hovertemplate=(
+                            note.replace("\n", "<br>") + "<extra></extra>"
+                        ),
+                        showlegend=False,
+                    ),
+                    row=1, col=i,
+                )
 
         if reference_mm:
             fig.add_shape(
@@ -368,6 +402,11 @@ def byg_snit(
                 font=dict(size=10.5, color=farve), align="center",
             )
 
+    # Signaturen tegnes som en del af figuren, så den følger med til rapportens
+    # PNG. Posterne føjes som tomme kurver alene for signaturens skyld; deres
+    # udseende er det samme, som fladerne og linjerne har i tegningen.
+    _tilfoej_signatur(fig, go, kolonner, geonet_navn, reference_mm)
+
     fig.update_yaxes(
         range=[-jord * 1.15, maks * 1.08],
         showgrid=False, zeroline=False, showticklabels=False,
@@ -378,30 +417,129 @@ def byg_snit(
         showgrid=False, zeroline=False, showticklabels=False, showline=False,
         range=[-0.62, 0.92],
     )
-    for ann in fig.layout.annotations[:antal]:
+    # Søjletitlerne sættes af make_subplots midt over subplot-fladen. Fladen
+    # rækker ud til højre for at give plads til målsætningen, og titlen ville
+    # derfor stå forskudt i forhold til opbygningen. Den bindes i stedet til
+    # søjlens egen akse, så den står centreret over opbygningen.
+    for i, ann in enumerate(fig.layout.annotations[:antal], start=1):
         ann.font = dict(size=11.5, color=FARVE_INK, family=SKRIFT)
+        ann.xref = f"x{i}" if i > 1 else "x"
+        ann.x = 0
+        ann.xanchor = "center"
 
     fig.update_layout(
-        height=hoejde_px,
+        height=hoejde_px + _SIGNATUR_PX,
         barmode="overlay", bargap=0,
-        margin=dict(l=10, r=10, t=34, b=52),
+        # Bundmarginen rummer statusteksten under søjlerne og signaturen
+        # nederst; overkanten rummer søjletitlerne.
+        margin=dict(l=10, r=10, t=_MARGIN_TOP, b=_MARGIN_BUND),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font=dict(family=SKRIFT, size=11, color=FARVE_INK),
-        showlegend=False, hovermode="closest",
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            x=0, xanchor="left", y=-0.19, yanchor="top",
+            font=dict(size=10.5, color=FARVE_INK_45, family=SKRIFT),
+            bgcolor="rgba(0,0,0,0)", borderwidth=0,
+            itemclick=False, itemdoubleclick=False,
+            tracegroupgap=0,
+        ),
+        hovermode="closest",
     )
     return fig
 
 
-def kort_lagnavn(navn: str) -> str:
-    """Materialenavnet forkortet til søjlebredden i snittet.
+def _tilfoej_signatur(fig, go, kolonner, geonet_navn, reference_mm) -> None:
+    """Signaturen for opbygningssnittene.
 
-    Søjlerne er 104 px brede, og et fuldt navn som "Stabilgrus SGII 0-32"
-    ombrydes til flere linjer og skubber tykkelsen ud af laget. Betegnelsen
-    afkortes derfor til materialets hovedord; det fulde navn fremgår af
-    materialevalget i inputkolonnen.
+    Posterne dannes af figurens indhold: lagfladerne angives altid, mens
+    geonettet, den optimale korrektion og det indtastede niveau alene angives,
+    når de forekommer i tegningen. Symbolerne gengives, som de fremtræder i
+    figuren, så de kan skelnes fra hinanden.
+    """
+    poster: list[tuple[str, str, str, str]] = [
+        (FARVE_BAERELAG, FARVE_BAERELAG_KANT, "Bærelag", "flade"),
+        (FARVE_BUNDSIKRING, FARVE_BUNDSIKRING_KANT, "Bundsikring", "flade"),
+    ]
+    if any(k.get("geonet_mm") for k in kolonner):
+        poster.append(
+            (FARVE_KRITISK, FARVE_KRITISK, geonet_navn or "Geonet", "linje")
+        )
+    if any(
+        k.get("best_case_mm") and k.get("total_mm")
+        and k["best_case_mm"] < k["total_mm"]
+        for k in kolonner
+    ):
+        poster.append((FARVE_GRON, FARVE_GRON, "Optimal korrektion", "prikket"))
+    if reference_mm:
+        poster.append(
+            (FARVE_INK_25, FARVE_INK_25, "Indtastet niveau", "stiplet")
+        )
+
+    for flade, kant, tekst, slags in poster:
+        if slags == "flade":
+            spor = go.Bar(
+                x=[None], y=[None], name=tekst,
+                marker=dict(color=flade, line=dict(color=kant, width=1)),
+                showlegend=True, hoverinfo="skip",
+            )
+        else:
+            spor = go.Scatter(
+                x=[None], y=[None], mode="lines", name=tekst,
+                line=dict(
+                    color=flade, width=2,
+                    dash={"linje": "solid", "prikket": "dot"}.get(
+                        slags, "dash"
+                    ),
+                ),
+                showlegend=True, hoverinfo="skip",
+            )
+        fig.add_trace(spor, row=1, col=1)
+
+
+def kort_lagnavn(navn: str) -> str:
+    """Materialenavnet afkortet til materialets hovedord.
+
+    Anvendes alene, hvor laget er for tyndt til, at det fulde navn kan stå,
+    jf. _lagtekst().
     """
     ord = navn.split()
     return ord[0] if ord else navn
+
+
+def ombryd_lagnavn(navn: str, maks_tegn: int = 13) -> str:
+    """Materialenavnet ombrudt til søjlebredden.
+
+    Søjlerne er smallere end det længste materialenavn, og navnet brydes
+    derfor ved mellemrum i linjer af højst maks_tegn. Et enkelt ord brydes
+    ikke; "Bundsikringssand" står på én linje, mens "Stabilgrus SGII 0-32"
+    sættes over to.
+    """
+    linjer: list[str] = []
+    for ord in navn.split():
+        if linjer and len(linjer[-1]) + 1 + len(ord) <= maks_tegn:
+            linjer[-1] = f"{linjer[-1]} {ord}"
+        else:
+            linjer.append(ord)
+    return "<br>".join(linjer) if linjer else navn
+
+
+def _lagtekst(navn: str, tykkelse: float, px_pr_mm: float) -> str:
+    """Materialebetegnelse og tykkelse, som de kan stå i laget.
+
+    Teksten sættes efter lagets højde: er der plads til det fulde navn,
+    anvendes dette; ellers materialets hovedord; er laget for tyndt til
+    andet, angives tykkelsen alene. Rummer laget ikke en enkelt linje,
+    udelades teksten, og lagets tykkelse aflæses af målsætningen.
+    """
+    lag_px = tykkelse * px_pr_mm
+    for betegnelse in (ombryd_lagnavn(navn), kort_lagnavn(navn), ""):
+        if not betegnelse:
+            break
+        linjer = betegnelse.count("<br>") + 2  # betegnelse + tykkelse
+        if lag_px >= linjer * _LINJE_PX + 4:
+            return f"{betegnelse}<br>{tykkelse:.0f}"
+    return f"{tykkelse:.0f}" if lag_px >= _LINJE_PX + 4 else ""
 
 
 def lagtype_for_navn(navn: str, materialer: list[dict] | None) -> str:
@@ -438,9 +576,11 @@ def snit_til_kolonner(
     for s in snit_liste:
         total = s.t_baerelag_mm
         if s.sub_lag:
+            # Det fulde materialenavn føres videre; tegningen afgør, hvor
+            # meget af det der er plads til i laget, jf. _lagtekst().
             lag = [
                 (
-                    kort_lagnavn(l["navn"]),
+                    l["navn"],
                     l["tykkelse_mm"],
                     lagtype_for_navn(l["navn"], materialer),
                 )
@@ -462,6 +602,7 @@ def snit_til_kolonner(
             "total_mm": total,
             "tom_tekst": s.ikke_defineret_tekst or "Ikke defineret",
             "best_case_mm": s.best_case_mm,
+            "best_case_note": s.best_case_note,
             "advarsler": advarsler,
             "status": (
                 s.status_tekst or "",

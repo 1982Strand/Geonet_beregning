@@ -496,6 +496,24 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   font:500 11px/1.3 'IBM Plex Mono',monospace; text-align:right;
 }
 .rt-detaljer-tom{ color:var(--bg-ink-45); font-size:11.5px; padding:.4rem 0; }
+/* Rækker med en mellemregning bag sig — markøren angiver, at forklaringen
+   fremkommer ved at hvile på rækken. */
+.rt-detaljer-hjaelp{ cursor:help; }
+.rt-detaljer-hjaelp:hover{ background:var(--bg-canvas); }
+/* Den optimale ende af et korrektionsinterval (Tensar InterAx NX750/NX850). */
+.rt-detaljer-optimal{
+  display:flex; align-items:baseline; justify-content:space-between; gap:1rem;
+  margin-top:.55rem; padding-top:.5rem;
+  border-top:1px dashed var(--bg-green-700);
+  color:var(--bg-green-700); font-size:11.5px; cursor:help;
+}
+.rt-detaljer-optimal-tal{
+  font:600 13px/1 'IBM Plex Mono',monospace; white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+.rt-detaljer-optimal-note{
+  margin-top:.25rem; color:var(--bg-ink-45); font-size:10.5px; line-height:1.45;
+}
 
 .rt-alle-tabel{ border-top:1px solid var(--bg-line); }
 .rt-alle-hoved, .rt-alle-raekke{

@@ -2531,6 +2531,119 @@ def _render_produkt_tabel(
     st.markdown("".join(dele), unsafe_allow_html=True)
 
 
+def _indeks_ender(navn: str) -> tuple[str, str] | None:
+    """Effektindeksets to ender for produkter med korrektionsinterval.
+
+    Indekset er tabuleret som et spænd, eksempelvis "115–130", hvor den nedre
+    ende svarer til den konservative korrektion og den øvre til den optimale.
+    Returnerer (konservativ, optimal); None for produkter med ét indeks.
+    """
+    raa = str((find_geonet(navn) or {}).get("effektindeks") or "")
+    dele = [d.strip() for d in re.split(r"[–—-]", raa) if d.strip()]
+    return (dele[0], dele[1]) if len(dele) == 2 else None
+
+
+def _optimal_beregning(
+    produkt: dict | None,
+    *,
+    net_navn: str,
+    phi: float,
+    er_reference: bool = False,
+) -> dict | None:
+    """Mellemregningen bag den optimale bærelagstykkelse.
+
+    Produkterne Tensar InterAx NX750 og NX850 er tabuleret med et effektindeks
+    i to ender. Beregningerne tager udgangspunkt i den nedre, konservative
+    ende; her opgøres samme regnestykke ved den øvre ende:
+
+    ```
+    T_optimal = T_basis × (1 + k_net,optimal + k_φ)
+    ```
+
+    hvor:
+
+    - **k_net,optimal** = net-korrektionen ved effektindeksets øvre ende.
+    - **k_φ** = korrektion for friktionsvinklen, jf. afsnittet "Sådan dannes
+      diagrammet". Den er uafhængig af nettet og indgår med samme værdi i
+      begge ender.
+
+    Returnerer None for produkter uden korrektionsinterval og for beregninger
+    uden gyldigt resultat. Ellers en opslagstabel med ``linjer`` (regnestykket
+    som (tegn, titel, mm)), ``t_mm`` (den optimale tykkelse), ``indeks``
+    (effektindeksets øvre ende) og ``kor`` (net-korrektionen samme sted).
+    """
+    if er_reference or not _rt_gyldig(produkt):
+        return None
+    t_best = produkt.get("t_armeret_mm_min")
+    kor_best = produkt.get("korrektion_min")
+    t_uarm = produkt.get("t_uarmeret_mm")
+    t_basis = produkt.get("t_basis_arm_mm")
+    if t_best is None or kor_best is None or t_basis is None:
+        return None
+
+    ender = _indeks_ender(net_navn)
+    indeks = ender[1] if ender else _effektindeks(net_navn)
+    phi_kor = K_PHI * (phi - PHI_BASIS)
+    basis_mm = (
+        round(t_uarm - t_basis) if t_uarm is not None and t_basis is not None
+        else None
+    )
+    net_mm = round(t_basis * kor_best)
+    phi_mm = round(t_basis * phi_kor)
+
+    linjer: list[tuple[str, str, float | None]] = [
+        ("", "Ustabiliseret bærelagstykkelse", t_uarm),
+        ("−", "Basisreduktion, referencenet", abs(basis_mm or 0)),
+        (
+            "−" if net_mm < 0 else "+",
+            f"Net-korrektion, indeks {indeks}",
+            abs(net_mm),
+        ),
+    ]
+    if abs(phi_kor) > 0.0005:
+        linjer.append((
+            "−" if phi_mm < 0 else "+",
+            f"φ-korrektion, {_pct_fortegn(phi_kor, 1)}",
+            abs(phi_mm),
+        ))
+    return {
+        "linjer": linjer,
+        "t_mm": t_best,
+        "indeks": indeks,
+        "kor": kor_best,
+    }
+
+
+def _optimal_tooltip(beregning: dict) -> str:
+    """Regnestykket bag den optimale tykkelse som tekst til title-attributten."""
+    linjer = [
+        f"{tegn} {titel}: {ui.mm(mm)}".strip()
+        for tegn, titel, mm in beregning["linjer"]
+    ]
+    linjer.append(
+        f"= Stabiliseret bærelagstykkelse: {ui.mm(beregning['t_mm'])}"
+    )
+    linjer.insert(
+        0,
+        f"Optimal korrektion · effektindeks {beregning['indeks']} · "
+        f"net-korrektion {_pct_fortegn(beregning['kor'])}",
+    )
+    return "\n".join(linjer)
+
+
+def _optimal_note(
+    produkt: dict | None, *, net_navn: str | None, phi: float,
+) -> str | None:
+    """Mellemregningen bag den optimale tykkelse som hover-tekst i snittet.
+
+    Returnerer None, når produktet ikke har et korrektionsinterval.
+    """
+    if not net_navn:
+        return None
+    beregning = _optimal_beregning(produkt, net_navn=net_navn, phi=phi)
+    return _optimal_tooltip(beregning) if beregning else None
+
+
 def _render_valgt_net_detaljer(
     produkt_1: dict | None,
     produkt_2: dict | None,
@@ -2553,16 +2666,28 @@ def _render_valgt_net_detaljer(
         t_arm = produkt.get("t_armeret_mm")
         net_kor = 0.0 if er_reference else float(produkt.get("korrektion") or 0.0)
         phi_kor = K_PHI * (phi - PHI_BASIS)
-        index = _effektindeks(net_navn, is_ref=er_reference)
+        # Produkter med korrektionsinterval er tabuleret med et effektindeks i
+        # to ender. Tabellen er regnet af den nedre, konservative ende, og
+        # rækken angiver derfor denne ende alene; det fulde spænd og den
+        # optimale ende fremgår af blokken nederst.
+        ender = None if er_reference else _indeks_ender(net_navn)
+        index = ender[0] if ender else _effektindeks(net_navn, is_ref=er_reference)
         basis_mm = -round(t_uarm - t_basis) if t_uarm is not None and t_basis is not None else None
         net_mm = round(t_basis * net_kor) if t_basis is not None else None
         phi_mm = round(t_basis * phi_kor) if t_basis is not None else None
         reduktion_mm = round(t_uarm - t_arm) if t_uarm is not None else None
         reduktion_pct = reduktion_mm / t_uarm if t_uarm else None
 
-        def _raekke(tegn: str, titel: str, vaerdi: str, klasse: str = "") -> str:
+        def _raekke(
+            tegn: str, titel: str, vaerdi: str, klasse: str = "",
+            forklaring: str | None = None,
+        ) -> str:
+            attr = f' title="{html.escape(forklaring, quote=True)}"' if forklaring else ""
+            klasser = f"rt-detaljer-raekke {klasse}".strip()
+            if forklaring:
+                klasser += " rt-detaljer-hjaelp"
             return (
-                f'<div class="rt-detaljer-raekke {klasse}">'
+                f'<div class="{klasser}"{attr}>'
                 f'<span class="rt-detaljer-tegn">{html.escape(tegn)}</span>'
                 f'<span>{html.escape(titel)}</span>'
                 f'<span class="rt-detaljer-vaerdi">{html.escape(vaerdi)}</span>'
@@ -2570,6 +2695,11 @@ def _render_valgt_net_detaljer(
             )
 
         phi_tekst = _pct_fortegn(phi_kor, 1)
+        net_forklaring = (
+            f"Effektindeks {_effektindeks(net_navn)}. Beregningen tager "
+            f"udgangspunkt i den nedre, konservative ende, indeks {index}, "
+            f"svarende til net-korrektionen {_pct_fortegn(net_kor)}."
+        ) if ender else None
         rows = [
             _raekke("", "Ustabiliseret bærelagstykkelse", ui.mm(t_uarm)),
             _raekke("−", "Basisreduktion, referencenet", ui.mm(abs(basis_mm or 0))),
@@ -2577,6 +2707,7 @@ def _render_valgt_net_detaljer(
                 "−" if (net_mm or 0) < 0 else "+",
                 f"Net-korrektion, indeks {index}",
                 ui.mm(abs(net_mm or 0)),
+                forklaring=net_forklaring,
             ),
         ]
         if abs(phi_kor) > 0.0005:
@@ -2586,6 +2717,31 @@ def _render_valgt_net_detaljer(
                     f"φ-korrektion, {phi_tekst}",
                     ui.mm(abs(phi_mm or 0)),
                 )
+            )
+
+        # Den optimale ende af korrektionsintervallet opgøres for sig, så det
+        # fremgår, hvilken tykkelse der er tale om, og hvordan den er dannet.
+        optimal = _optimal_beregning(
+            produkt, net_navn=net_navn, phi=phi, er_reference=er_reference,
+        )
+        optimal_html = ""
+        if optimal is not None:
+            # Linjeskift i en title-attribut angives som tegnreference, så
+            # markdown-behandlingen ikke bryder blokken op.
+            tip = html.escape(_optimal_tooltip(optimal), quote=True).replace(
+                "\n", "&#10;"
+            )
+            optimal_html = (
+                f'<div class="rt-detaljer-optimal" title="{tip}">'
+                '<span>Optimal korrektion, indeks '
+                f'{html.escape(str(optimal["indeks"]))}</span>'
+                '<span class="rt-detaljer-optimal-tal">'
+                f'{html.escape(ui.mm(optimal["t_mm"]))}</span>'
+                '</div>'
+                '<div class="rt-detaljer-optimal-note">'
+                'Der gøres opmærksom på, at regnestykket ovenfor er opgjort ved '
+                f'indeks {html.escape(str(index))}. Mellemregningen bag den '
+                'optimale værdi vises ved markøren.</div>'
             )
 
         return (
@@ -2599,6 +2755,7 @@ def _render_valgt_net_detaljer(
             '<div class="rt-detaljer-samlet">Reduktion i alt '
             f'{html.escape(_delta_mm(-(reduktion_mm or 0)))} · '
             f'{html.escape(ui.procent((reduktion_pct or 0) * 100))}</div>'
+            f'{optimal_html}'
             '</section>'
         )
 
@@ -2784,11 +2941,14 @@ def _produkt_t(produkter: list[dict] | None, navn: str) -> float | None:
 
 def _produkt_t_best(produkter: list[dict] | None, navn: str) -> float | None:
     """Best-case-tykkelse for interval-produkter (None hvis ikke interval)."""
-    if not produkter:
-        return None
-    for p in produkter:
+    return (_produkt_opslag(produkter, navn) or {}).get("t_armeret_mm_min")
+
+
+def _produkt_opslag(produkter: list[dict] | None, navn: str) -> dict | None:
+    """Produkt-dict'en for et navn i en liste fra beregn_alle_produkter."""
+    for p in produkter or []:
         if p["navn"] == navn and p.get("fejl") is None:
-            return p.get("t_armeret_mm_min")
+            return p
     return None
 
 
@@ -2975,7 +3135,7 @@ def _status_for_krav(
     if diff_kons >= 0:
         if diff_best is not None and diff_best > diff_kons:
             return (
-                f"{ui.mm(diff_kons)} i overskud\n({ui.mm(diff_best)})",
+                f"{ui.mm(diff_kons)} i overskud\n({ui.mm(diff_best)} optimalt)",
                 "success",
             )
         return f"{ui.mm(diff_kons)} i overskud", "success"
@@ -2990,7 +3150,7 @@ def _status_for_krav(
     # Begge mangler → rød. Konservativ stor (størst mangler), optimal i parentes.
     if diff_best is not None:
         return (
-            f"{ui.mm(-diff_kons)} for lidt\n({ui.mm(-diff_best)})",
+            f"{ui.mm(-diff_kons)} for lidt\n({ui.mm(-diff_best)} optimalt)",
             "danger",
         )
     return f"{ui.mm(-diff_kons)} for lidt", "danger"
@@ -3119,6 +3279,8 @@ def _render_opbygningsvisualisering(
         t_2 = ref_2["t_armeret_mm"] if ref_2 is not None else None
         t_1_best = None
         t_2_best = None
+        note_1_best = None
+        note_2_best = None
         valgt_geonet = None
         geonet_label = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6"
     else:
@@ -3126,6 +3288,12 @@ def _render_opbygningsvisualisering(
         t_2 = _produkt_t(prod_2lag, valg)
         t_1_best = _produkt_t_best(prod_1lag, valg)
         t_2_best = _produkt_t_best(prod_2lag, valg)
+        note_1_best = _optimal_note(
+            _produkt_opslag(prod_1lag, valg), net_navn=valg, phi=phi,
+        )
+        note_2_best = _optimal_note(
+            _produkt_opslag(prod_2lag, valg), net_navn=valg, phi=phi,
+        )
         valgt_geonet = find_geonet(valg)
         geonet_label = valg
 
@@ -3229,6 +3397,7 @@ def _render_opbygningsvisualisering(
             None if t_1 is not None else "Ikke gyldigt for denne kombination"
         ),
         best_case_mm=t_1_best,
+        best_case_note=note_1_best,
         placement=placement_1,
         er_krav_soejle=not brug_sub_1,
         t_indtastet_mm=t_indtastet_for_linje,
@@ -3254,6 +3423,7 @@ def _render_opbygningsvisualisering(
             None if t_2 is not None else "Ikke gyldigt for denne kombination"
         ),
         best_case_mm=t_2_best,
+        best_case_note=note_2_best,
         placement=placement_2,
         er_krav_soejle=not brug_sub_2,
         t_indtastet_mm=t_indtastet_for_linje,
@@ -6498,6 +6668,25 @@ def render_rapport() -> None:
             indtastet_total_rap if vis_indtastet_aktiv else None
         )
 
+        # Mellemregningen bag den optimale tykkelse. Dimensioneringens
+        # beregningsresultat bærer ikke intervallets nedre korrektion; den
+        # aflæses af geonettet og føjes til, så noten kan dannes samme sted
+        # som på dimensioneringssiden.
+        _interval_rap = (sd.get("geonet") or {}).get("korrektion_interval")
+
+        def _optimal_note_rap(res: dict, t_best: float | None) -> str | None:
+            if not _interval_rap or t_best is None:
+                return None
+            return _optimal_note(
+                {
+                    **res,
+                    "t_armeret_mm_min": t_best,
+                    "korrektion_min": _interval_rap[0],
+                },
+                net_navn=sd.get("geonet_navn"),
+                phi=phi_dim,
+            )
+
         snit_liste: list[rapport_mod.Snit] = []
 
         # Søjle 1: Indtastet opbygning (styres af checkbox)
@@ -6538,13 +6727,16 @@ def render_rapport() -> None:
                 sub_lag=sub_red_1 if brug_sub_1 else None,
             )
             status_tekst_1, status_farve_1 = _status_for_krav(
-                status_indtastet_ref, t_1, None,
+                status_indtastet_ref, t_1, sd.get("t_1_lag_best_mm"),
             )
             snit_liste.append(rapport_mod.Snit(
                 titel="1 lag geonet", t_baerelag_mm=t_1,
                 geonet_y_fracs=fracs_1,
                 sub_lag=sub_red_1 if brug_sub_1 else None,
                 best_case_mm=sd.get("t_1_lag_best_mm"),
+                best_case_note=_optimal_note_rap(
+                    res_1, sd.get("t_1_lag_best_mm")
+                ),
                 placement=placement_1,
                 er_krav_soejle=not brug_sub_1,
                 t_indtastet_mm=t_indtastet_for_snit,
@@ -6560,13 +6752,16 @@ def render_rapport() -> None:
                 sub_lag=sub_red_2 if brug_sub_2 else None,
             )
             status_tekst_2, status_farve_2 = _status_for_krav(
-                status_indtastet_ref, t_2, None,
+                status_indtastet_ref, t_2, sd.get("t_2_lag_best_mm"),
             )
             snit_liste.append(rapport_mod.Snit(
                 titel="2 lag geonet", t_baerelag_mm=t_2,
                 geonet_y_fracs=fracs_2,
                 sub_lag=sub_red_2 if brug_sub_2 else None,
                 best_case_mm=sd.get("t_2_lag_best_mm"),
+                best_case_note=_optimal_note_rap(
+                    res_2, sd.get("t_2_lag_best_mm")
+                ),
                 placement=placement_2,
                 er_krav_soejle=not brug_sub_2,
                 t_indtastet_mm=t_indtastet_for_snit,

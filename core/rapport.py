@@ -185,6 +185,7 @@ class Snit:
     sub_lag: list[dict] | None = None  # liste af {"navn": str, "tykkelse_mm": float}
     ikke_defineret_tekst: str | None = None
     best_case_mm: float | None = None  # NX750/NX850-interval; kun vist i dim-preview
+    best_case_note: str | None = None  # mellemregningen bag best_case_mm (hover)
     placement: dict | None = None
     # Koncept A: krav-søjle felter — når er_krav_soejle=True tegnes søjlen som
     # neutral grå blok ("φ-vægtet bærelag") uden materialefordeling, og
@@ -272,10 +273,14 @@ def render_opbygning_png(
         paper_bgcolor="white",
         plot_bgcolor="white",
     )
+    # Figuren lægger selv plads til signaturen under tegningen, jf.
+    # diagram._SIGNATUR_PX. Eksporthøjden aflæses derfor af figuren, så
+    # signaturen ikke beskæres.
+    hoejde = int(fig.layout.height or figsize[1] * 100)
     return fig.to_image(
         format="png",
         width=int(figsize[0] * 100),
-        height=int(figsize[1] * 100),
+        height=hoejde,
         scale=dpi / 100,
     )
 
