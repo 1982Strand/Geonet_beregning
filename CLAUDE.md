@@ -14,7 +14,9 @@ eksisterende tekst.
 - Konstaterende fremstilling.
 - Formler i kodeblok, efterfulgt af en `hvor:`-liste der forklarer hvert symbol.
 - Figurtekst under hver tabel: `*Figur N Beskrivelse.*`
-- Nummererede afsnit: `#### 1 Ubunden lagtykkelse`.
+- Nummererede afsnit: `#### 1 Ubunden lagtykkelse`. I hjælpekapitlerne skrives
+  de dog `## 1 Ubunden lagtykkelse` — overskriftsniveauet sættes af
+  rendereren, jf. afsnittet om hjælpeteksten nedenfor.
 - Faste vendinger: "Der gøres opmærksom på, at …", "Opmærksomheden henledes på,
   at …", "jf. afsnit X". "bør" frem for "skal" ved anbefalinger.
 - Symbolnavne som i håndbogen: `t_SG`, `t_BL`, `f`, `k_φ`, `Eo_ækv`.
@@ -25,8 +27,35 @@ eksisterende tekst.
   at overse".
 - Billedsprog: "adressen i diagrammet", "bor på kurven", "diagrammet baglæns".
 
-Referencemønster: `_KORR_METODE_MD` i `app.py` — sektionen "Metode og
-fremgangsmåde" under Trafikklasse-korrelation.
+Referencemønster: `Dokumenter og data/hjaelp/01-beregningsmetoden.md` —
+kapitlet bag Hjælp og dokumentation.
+
+## Hvor hjælpeteksten ligger
+
+Metoden, datagrundlaget og forbeholdene vedligeholdes som markdown-filer i
+`Dokumenter og data/hjaelp/`, én fil pr. kapitel, og indlæses ved visning af
+`core/hjaelp.py`. Ny eller rettet dokumentation skrives derfor i disse filer
+og ikke som strengkonstanter i `app.py`.
+
+Filformatet er beskrevet i modulets docstring. To blokke har særlig betydning:
+
+```
+:::formel
+T = T_basis × (1 + k_φ + k_net)
+--
+k_φ   er korrektionen for friktionsvinklen
+:::
+
+:::figur Figurtekst under tabellen.
+| Kolonne | Værdi |
+| --- | --- |
+| Række | 1 |
+:::
+```
+
+Formlen sættes i egen ramme med `hvor:`-listen under; figuren trækkes ud i
+sidekolonnen ud for sit afsnit. Afsnit skrives som `## N Overskrift` og danner
+kapitlets indholdsfortegnelse.
 
 ---
 

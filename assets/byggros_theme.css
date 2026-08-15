@@ -193,6 +193,19 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   font:600 11px/20px 'IBM Plex Mono',monospace; text-align:center;
 }
 .bg-trin-titel{ font:600 13.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
+/* Det fremhævede trin — sidens egentlige indhold, jf. ui.trin_kort(
+   fremhaevet=True). Rammen sættes på containeren, hovedet på selve blokken. */
+[class*="st-key-bg_trin_"]:has(.bg-trin-groen){
+  border:1.5px solid var(--bg-green-700);
+}
+.bg-trin-groen{ background:var(--bg-green-lys); border-bottom-color:#DDE9DF; }
+.bg-trin-groen .bg-trin-nr{ background:var(--bg-green-700); }
+.bg-trin-groen .bg-trin-titel{ color:var(--bg-green-900); }
+/* Trin med bred brødtekst, jf. ui.trin_kort(bred_brodtekst=True). Rummer
+   kortet en bred tabel, ville linjelængden på 78 tegn efterlade teksten som
+   en smal spalte over tabellen; grænsen ophæves derfor inde i kortet. */
+[class*="st-key-bg_trin_"]:has(.bg-trin-bred) .stMarkdown p,
+[class*="st-key-bg_trin_"]:has(.bg-trin-bred) .stMarkdown li{ max-width:none; }
 /* Opsummeringen skubbes helt til højre og viser trinnets valgte værdier. */
 .bg-trin-opsum{
   margin-left:auto;
@@ -229,7 +242,16 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   gap:1rem; flex-wrap:wrap; margin:.5rem 0 .35rem;
 }
 .bg-underhoved .t{ font:600 12.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
-.bg-underhoved .n{ font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
+.bg-underhoved .n{
+  font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+  text-align:right;
+}
+/* Forbehold under noten — vises alene ved dimensionering efter trafikklasse,
+   jf. _vaelg_geonet_note(). Sættes på egen linje i advarselsfarven. */
+.bg-underhoved-forbehold{
+  display:block; margin-top:3px;
+  font:400 11px/1.45 'IBM Plex Sans',sans-serif; color:var(--bg-warn);
+}
 .bg-underhoved-skillelinje{
   border-top:1px solid var(--bg-line-soft);
   padding-top:1rem;
@@ -800,6 +822,214 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
   margin-top:.6rem; font:400 10.5px/1.5 'IBM Plex Sans',sans-serif;
   color:var(--bg-ink-45);
 }
+
+/* --- 14.3bb Trafikklasse-korrelationen -----------------------------------
+   Zoneforklaringen står på én linje under Eo-matricen, metoden som fire
+   nummererede led, og forudsætningerne som navn-værdi-par. */
+.korr-zoneforklaring{
+  padding-top:.6rem;
+  font:400 10.5px/1.6 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+}
+.korr-zoneforklaring b{ font-weight:600; color:var(--bg-ink-70); }
+
+.korr-trinliste{ margin:.2rem 0 .8rem; }
+.korr-trin{
+  display:grid; grid-template-columns:22px 1fr; gap:12px;
+  padding:.65rem 0; border-bottom:1px solid #F0F2F0;
+}
+.korr-trin:last-child{ border-bottom:none; }
+.korr-trin > span{
+  font:600 11.5px/1.4 'IBM Plex Mono',monospace; color:var(--bg-ink-25);
+}
+.korr-trin-titel{
+  font:600 12.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink);
+  margin-bottom:3px;
+}
+.korr-trin-tekst{
+  font:400 11.5px/1.55 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+}
+
+/* Regneeksemplet ved siden af Eo-matricen. Tallene sættes tabulært, så de
+   tre trin kan følges lodret. */
+.korr-eksempel{
+  border:1px solid var(--bg-line-soft); border-radius:4px;
+  background:var(--bg-canvas); padding:13px 15px 14px;
+}
+.korr-eksempel-hoved{
+  font:600 9.5px/1 'IBM Plex Mono',monospace; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--bg-ink-45); margin-bottom:.7rem;
+}
+.korr-eksempel-trin{
+  display:grid; grid-template-columns:18px 1fr; gap:10px;
+  padding:.5rem 0; border-bottom:1px solid var(--bg-line-soft);
+}
+.korr-eksempel-trin > span{
+  font:600 11px/1.5 'IBM Plex Mono',monospace; color:var(--bg-ink-25);
+}
+.korr-eksempel-tekst{
+  font:400 10.5px/1.45 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+  margin-bottom:3px;
+}
+.korr-eksempel-tal{
+  font:500 11.5px/1.7 'IBM Plex Mono',monospace; color:var(--bg-ink);
+  font-variant-numeric:tabular-nums;
+}
+.korr-eksempel-pil{ color:var(--bg-ink-25); padding:0 7px; }
+.korr-eksempel-svar{
+  display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;
+  margin-top:.6rem; padding-top:.6rem;
+  border-top:1px solid var(--bg-green-700);
+  font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+}
+.korr-eksempel-svar b{
+  font:600 17px/1 'IBM Plex Mono',monospace; color:var(--bg-green-900);
+}
+.korr-eksempel-svar span{
+  margin-left:auto;
+  font:400 10.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+}
+
+.korr-dataliste{ margin:.1rem 0 .5rem; }
+.korr-data-post{
+  display:flex; justify-content:space-between; align-items:baseline; gap:16px;
+  padding:.42rem 0; border-bottom:1px solid #F0F2F0;
+}
+.korr-data-post span:first-child{
+  font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+}
+.korr-data-post span:last-child{
+  font:500 11.5px/1.4 'IBM Plex Mono',monospace; color:var(--bg-ink);
+  text-align:right;
+}
+
+/* --- 14.3bc Database-noter ----------------------------------------------
+   Noterne på geonet-databasen står som kort med samme typografi som
+   kapitlerne på Hjælp-siden. Noterne er korte og vises derfor åbne. */
+[class*="st-key-bg_note_"]{
+  border:1px solid var(--bg-line); border-radius:5px;
+  background:var(--bg-surface); overflow:hidden;
+  padding:0 20px 10px; margin-bottom:.7rem;
+}
+.bg-note-hoved{
+  display:grid; grid-template-columns:auto 1fr; gap:4px 12px;
+  align-items:baseline;
+  padding:13px 20px 11px; margin:0 -20px 10px;
+  border-bottom:1px solid var(--bg-line-soft); background:#FBFCFB;
+}
+.bg-note-nr{
+  font:600 9.5px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--bg-ink-45);
+}
+.bg-note-titel{
+  font:600 13.5px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink);
+}
+
+/* --- 14.3c Hjælp og dokumentation ---------------------------------------
+   Kapitlerne står som foldbare kort. Resuméet bliver stående, også når
+   kapitlet er lukket, så det rette kapitel kan findes uden at åbne dem alle;
+   det åbne kapitel markeres med grøn ramme. */
+[class*="st-key-hj_kap_"]{
+  border:1px solid var(--bg-line); border-radius:5px;
+  background:var(--bg-surface); overflow:hidden;
+  padding:0 20px 4px; margin-bottom:.7rem;
+}
+[class*="st-key-hj_kap_"]:has(.hj-kap-aaben){
+  border:1.5px solid var(--bg-green-700); padding-bottom:20px;
+}
+.hj-kap-hoved{
+  display:grid; grid-template-columns:auto 1fr auto; gap:4px 12px;
+  align-items:baseline; padding:14px 0 12px;
+}
+.hj-kap-nr{
+  font:600 9.5px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--bg-ink-45);
+}
+.hj-kap-aaben .hj-kap-nr{ color:var(--bg-green-700); }
+.hj-kap-titel{ font:600 13.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
+.hj-kap-aaben .hj-kap-titel{ color:var(--bg-green-900); }
+.hj-kap-antal{ font:400 11px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
+.hj-kap-resume{
+  grid-column:2 / -1;
+  font:400 11.5px/1.6 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+  max-width:92ch;
+}
+/* Det åbne kapitel adskilles fra hovedet med samme linje som kortene. */
+[class*="st-key-hj_kap_"]:has(.hj-kap-aaben) .hj-kap-hoved{
+  border-bottom:1px solid var(--bg-line-soft); margin:0 -20px 6px;
+  padding-left:20px; padding-right:20px; background:var(--bg-green-lys);
+}
+
+.hj-afsnit-titel{
+  display:flex; align-items:baseline; gap:10px; margin:.9rem 0 .1rem;
+  font:600 13px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink);
+}
+.hj-afsnit-titel span{
+  font:600 11.5px/1.3 'IBM Plex Mono',monospace; color:var(--bg-ink-25);
+}
+
+/* Formlen sættes i egen ramme med en »hvor:«-liste under. */
+.hj-formel{
+  border:1px solid var(--bg-line-soft); border-radius:4px;
+  background:var(--bg-canvas); padding:14px 16px; margin:.5rem 0 .2rem;
+}
+.hj-udtryk{
+  font:500 13px/2 'IBM Plex Mono',monospace; color:var(--bg-ink);
+  overflow-x:auto;
+}
+.hj-udtryk sub{ font-size:9.5px; }
+.hj-hvor{
+  margin-top:.6rem; padding-top:.6rem; border-top:1px solid var(--bg-line);
+  font:400 11px/1.8 'IBM Plex Mono',monospace; color:var(--bg-ink-45);
+}
+.hj-hvor sub{ font-size:8.5px; }
+
+/* Figurerne står i sidekolonnen ud for deres afsnit. */
+.hj-figur-nr{
+  margin-top:1.2rem;
+  font:600 9px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--bg-ink-25);
+}
+.hj-figur-tekst{
+  margin-top:-.4rem;
+  font:400 10.5px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+}
+.hj-indhold{
+  margin-top:1.4rem; padding-top:.7rem;
+  border-top:1px solid var(--bg-line-soft);
+}
+.hj-indhold-hoved{
+  font:600 9px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--bg-ink-25); margin-bottom:.5rem;
+}
+.hj-indhold div{
+  display:flex; gap:9px; padding:.2rem 0;
+  font:400 11px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+}
+.hj-indhold div span{
+  font:500 11px/1.5 'IBM Plex Mono',monospace; color:var(--bg-ink-25);
+}
+
+/* Introkortets fire trin og ordforklaringen. */
+.hj-trinblok{
+  background:var(--bg-canvas); border-radius:4px; padding:13px 15px;
+}
+.hj-trinblok-hoved, .hj-fagudtryk-hoved{
+  font:600 9.5px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--bg-ink-45); margin-bottom:.6rem;
+}
+.hj-trin{
+  display:grid; grid-template-columns:20px 1fr; gap:11px;
+  padding:.45rem 0; border-bottom:1px solid var(--bg-line-soft);
+  font:400 11.5px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+}
+.hj-trin span{ font:600 11px/1.5 'IBM Plex Mono',monospace; color:var(--bg-ink-25); }
+.hj-fagudtryk-hoved{ margin-top:.9rem; }
+.hj-fagudtryk{ display:flex; flex-wrap:wrap; gap:6px; }
+.hj-udtryk-post{
+  border-bottom:1px dotted var(--bg-ink-45); cursor:help;
+  font:500 11px/1.7 'IBM Plex Mono',monospace; color:var(--bg-ink-70);
+}
+.hj-udtryk-post sub{ font-size:8.5px; }
 
 /* --- 14.4 Beskedbokse ----------------------------------------------------
    Samme udtryk som ui.besked(). Anvendes af vis_fejl / vis_advarsel /

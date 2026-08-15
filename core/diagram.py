@@ -306,6 +306,12 @@ _MARGIN_BUND = 96
 # Linjehøjde for materialeteksten inde i lagene, ved skriftstørrelse 10.
 _LINJE_PX = 13.5
 
+# Forklaringen i en søjle uden opbygning. Annotationens bredde er fast, og
+# tekstlinjer, der er bredere, klippes; teksten ombrydes derfor til
+# _TOM_TEKST_TEGN pr. linje, jf. ombryd_tekst().
+_TOM_TEKST_PX = 110
+_TOM_TEKST_TEGN = 18
+
 
 def byg_snit(
     kolonner: list[dict],
@@ -388,11 +394,13 @@ def byg_snit(
         total = k.get("total_mm")
         if not total:
             fig.add_annotation(
-                text=k.get("tom_tekst", "Ikke defineret"),
+                text=ombryd_tekst(
+                    k.get("tom_tekst", "Ikke defineret"), _TOM_TEKST_TEGN,
+                ),
                 xref=f"x{i}" if i > 1 else "x", yref="y",
                 x=0, y=maks / 2, showarrow=False,
                 font=dict(size=10, color=FARVE_INK_45),
-                align="center", width=110,
+                align="center", width=_TOM_TEKST_PX,
             )
         else:
             # Lagene stables nedefra, så rækkefølgen i "lag" læses oppefra.
@@ -592,6 +600,21 @@ def kort_lagnavn(navn: str) -> str:
     return ord[0] if ord else navn
 
 
+def ombryd_tekst(tekst: str, maks_tegn: int) -> str:
+    """Teksten ombrudt ved mellemrum i linjer af højst maks_tegn.
+
+    Et enkelt ord brydes ikke; er ordet længere end maks_tegn, står det
+    alene på sin linje.
+    """
+    linjer: list[str] = []
+    for ord in tekst.split():
+        if linjer and len(linjer[-1]) + 1 + len(ord) <= maks_tegn:
+            linjer[-1] = f"{linjer[-1]} {ord}"
+        else:
+            linjer.append(ord)
+    return "<br>".join(linjer) if linjer else tekst
+
+
 def ombryd_lagnavn(navn: str, maks_tegn: int = 13) -> str:
     """Materialenavnet ombrudt til søjlebredden.
 
@@ -600,13 +623,7 @@ def ombryd_lagnavn(navn: str, maks_tegn: int = 13) -> str:
     ikke; "Bundsikringssand" står på én linje, mens "Stabilgrus SGII 0-32"
     sættes over to.
     """
-    linjer: list[str] = []
-    for ord in navn.split():
-        if linjer and len(linjer[-1]) + 1 + len(ord) <= maks_tegn:
-            linjer[-1] = f"{linjer[-1]} {ord}"
-        else:
-            linjer.append(ord)
-    return "<br>".join(linjer) if linjer else navn
+    return ombryd_tekst(navn, maks_tegn)
 
 
 def _lagtekst(navn: str, tykkelse: float, px_pr_mm: float) -> str:

@@ -70,6 +70,7 @@ from core.calculator import (
 )
 from core.validators import valider_input
 from core.diagram import byg_designdiagram, byg_raadiagram, snit_til_kolonner
+from core import hjaelp as hjaelp_mod
 from core.placement import (
     check_geonet_placement,
     overlap_krav_mm,
@@ -96,119 +97,6 @@ RAPPORT_METADATA_JSON = os.path.join(
     "rapport_metadata_brugerdefineret.json",
 )
 MIN_LAGTYKKELSE_MM = 200
-
-INFO_VISUALISERING_MD = """**Sådan læses søjlerne**
-
-**Indtastet opbygning** viser de indtastede lagtykkelser.
-
-**Ustabiliseret basistykkelse (φ-korrigeret)** er den ustabiliserede
-lagtykkelse fra designdiagrammet, bestemt ud fra Eu og Eo og korrigeret for
-den vægtede friktionsvinkel:
-
-```
-T_krav = T_basis × (1 + k_φ)
-```
-
-Materialeforholdet fra den indtastede opbygning bevares, og lagtykkelsen
-fordeles proportionalt på lagene. Værdierne kan derfor overstige de
-indtastede. Differencen er angivet som "X mm for lidt" under søjlen.
-
-**1 lag / 2 lag geonet** viser den stabiliserede lagtykkelse med samme
-proportionale lagfordeling. Ved 2 lag placeres det øverste geonet ved den
-reducerede materialegrænse.
-"""
-
-
-INFO_DESIGNDIAGRAM_MD = """**Sådan dannes diagrammet**
-
-Kurverne er dannet på grundlag af designdiagram-tabellen ved det viste **Eo**.
-Tabellen angiver basis-lagtykkelsen (cm) for hver Eu-række og for hver
-opbygning (ustabiliseret, 1 lag og 2 lag geonet). Rammer Eo ikke en af
-tabellens søjler (30, 45, 60, 80, 120 og 150 MPa), bestemmes værdien ved
-lineær interpolation mellem de to nærmeste søjler. Dette er altid tilfældet
-ved dimensionering efter trafikklasse, hvor Eo er den tilbageberegnede
-**ækvivalente Eo**.
-
-Basis-lagtykkelsen korrigeres med en samlet faktor:
-
-```
-T   = T_basis × (1 + k_φ + k_net)
-k_φ = −0,02 × (φ − 37°)
-```
-
-hvor:
-
-- **k_φ** = korrektion for friktionsvinklen i de valgte materialelag.
-  Anvendes på samtlige tre kurver.
-- **k_net** = korrektion for det valgte geonet. Værdien er 0 for
-  referencenettet og negativ for net med højere effektivitet. Anvendes alene
-  på de armerede kurver, idet den ustabiliserede opbygning ikke indeholder
-  geonet.
-
-For produkter med et korrektionsinterval, eksempelvis NX750 og NX850, tegnes
-både den konservative og den optimale kurve med et tonet bånd imellem.
-
-**Punkter i diagrammet:**
-
-- Det røde punkt "Indtastet opbygning" angiver den indtastede bærelagstykkelse
-  ved den valgte E-værdi.
-- Punkterne for 1 og 2 lag geonet angiver den krævede lagtykkelse ved samme
-  E-værdi for det valgte geonet. Udfyldt markering angiver den konservative
-  værdi, åben markering den optimale. Åben markering forekommer alene for
-  produkter med korrektionsinterval.
-"""
-
-
-def _vis_billede_med_info(
-    png: bytes,
-    info_md: str,
-    *,
-    caption: str | None = None,
-    use_container_width: bool = False,
-) -> None:
-    """Vis PNG med Streamlits grå ⍰-hjælpeikon ved siden af.
-
-    Ikonet er st.markdown(help=...) — samme udseende og opførsel som
-    hjælpeikonet på widgets. Falder tilbage til et popover, hvis
-    den installerede Streamlit ikke understøtter help på st.markdown.
-    """
-    col_img, col_info = st.columns([0.95, 0.05])
-    with col_img:
-        kwargs = {"width": "stretch" if use_container_width else "content"}
-        if caption:
-            st.image(png, caption=caption, **kwargs)
-        else:
-            st.image(png, **kwargs)
-    with col_info:
-        try:
-            st.markdown("", help=info_md)
-        except TypeError:
-            popover = getattr(st, "popover", None)
-            if callable(popover):
-                with popover("Forklaring", width="stretch"):
-                    st.markdown(info_md)
-            else:
-                with st.expander("Forklaring", expanded=False):
-                    st.markdown(info_md)
-
-
-def _vis_opbygning_med_info(png: bytes, *, caption: str | None = None) -> None:
-    """Vis opbygnings-PNG med hjælpeikon (INFO_VISUALISERING_MD)."""
-    _vis_billede_med_info(png, INFO_VISUALISERING_MD, caption=caption)
-
-
-def _vis_designdiagram_med_info(
-    png: bytes,
-    *,
-    caption: str | None = None,
-    use_container_width: bool = False,
-) -> None:
-    """Vis designdiagram-PNG med hjælpeikon (INFO_DESIGNDIAGRAM_MD)."""
-    _vis_billede_med_info(
-        png, INFO_DESIGNDIAGRAM_MD,
-        caption=caption, use_container_width=use_container_width,
-    )
-
 
 def _standard_materialer() -> list[dict]:
     """Returner standardmaterialer i samme format som editoren gemmer."""
@@ -713,6 +601,12 @@ SERIE_ORDER = {"Reference": 0, "Tensar": 1, "GS-GRID": 2, "E'GRID": 3, "Manuel":
 REFERENCE_NAVN = "Referencenet (SX160 / T6 / TX160)"
 REFERENCE_KLASSER = [3, 4, 5, 6]
 
+# De tre net, designdiagrammerne er opstillet for. Alle har netkorrektion 0
+# og effektindeks 100, og de indgår derfor i geonet-vælgeren som produkter
+# mærket som referencenet, jf. _produkt_label(). TX160 er standardvalget.
+STANDARD_GEONET = "Tensar TriAx TX160"
+REFERENCENET = (STANDARD_GEONET, "GS-GRID SX160", "E'GRID T6")
+
 # ---------------------------------------------------------------------------
 # CSS
 #
@@ -986,41 +880,23 @@ def input_belastning(
     return valgt, info, eo
 
 
-_TRAFIK_GRUNDLAG_MD = """
-Grundlaget bygger på to uafhængige, empiriske datasæt:
-
-1. **VejDim-kørslerne** fastlægger den ubundne lagtykkelse (stabilgrus og
-   bundsikring), en given trafikklasse kræver ved en given underbund.
-2. **Designdiagrammerne** (feltforsøg fra GS-GRID og Tensar) fastlægger den
-   reduktion af lagtykkelsen, et geonet medfører.
-
-Datasættene sammenkædes ved tilbageberegning: der bestemmes den diagramkurve,
-hvis ustabiliserede lagtykkelse ved samme underbunds-E-værdi svarer til den
-lagtykkelse, VejDim fastlægger. Kurven benævnes den **ækvivalente Eo**.
-Værdien er en indeksværdi, der angiver opslagspunktet i diagrammet, og
-udtrykker ikke et krav til overflademodulet. Reduktionen aflæses i punktet og
-er dermed designdiagrammets egen, feltbestemte værdi. Der foretages ingen
-omregning mellem de to metoders dimensioneringskriterier.
-
-Grundlaget er rent bæreevnemæssigt og tager ikke højde for underbundes frostfarlighed.
-Kravene til frostsikring og koblingshøjde bør kontrolleres særskilt, jf.
-Vejdirektoratets dimensioneringshåndbog afsnit 5.1 og 5.3. Metode, datagrundlag og forbehold er beskrevet
-under **Trafikklasse-korrelation** i menuen.
-"""
-
-
 def _vis_korrelationstabel(
     korr: dict,
     *,
     valgt_t: str | None = None,
     eu: float | None = None,
     key_prefix: str = "",
+    med_forklaring: bool = True,
 ) -> None:
     """Vis Eo_ækv-tabellen (T × Eu) med den aktuelle celle markeret.
 
     Bruges både i dimensioneringen (så man kan se hele korrelationen mens man
     vælger trafikklasse) og i Trafikklasse-sektionen. valgt_t/eu markerer den række og
     celle, dimensioneringen aktuelt slår op i.
+
+    med_forklaring=False udelader overskrift og zoneforklaring. Anvendes på
+    korrelationssiden, hvor trinnets hoved bærer overskriften, og hvor zonerne
+    forklares samlet under tabellen.
     """
     import pandas as pd
 
@@ -1043,8 +919,11 @@ def _vis_korrelationstabel(
                 )
         return stil
 
-    st.markdown("**Ækvivalent Eo (MPa) — hele korrelationstabellen**")
+    if med_forklaring:
+        st.markdown("**Ækvivalent Eo (MPa) — hele korrelationstabellen**")
     st.dataframe(df.style.apply(_markering, axis=None), width="content")
+    if not med_forklaring:
+        return
     if eu_kol is None and eu is not None:
         note = (
             f"Eu = {ui.mpa(eu)} ligger mellem tabellens punkter — Eo_ækv "
@@ -1146,7 +1025,7 @@ def input_trafikklasse(
             _aktiv_korrelation(), valgt_t=valgt_t, eu=eu, key_prefix=key_prefix
         )
 
-    # Grundlaget for koblingen er beskrevet under "Sådan beregnes det".
+    # Grundlaget for koblingen er beskrevet i Hjælp, kapitel 1 og 2.
 
     return {
         "type": "trafikklasse",
@@ -1848,6 +1727,11 @@ def _produkt_label(navn: str) -> str:
     """Dropdown-label: produktnavn + anbefalede klasser + netkorrektion, fx
     'GS-GRID SX170 (Klasse 4-6 · Net-korrektion: -10 %)'.
 
+    Referencenettene mærkes efter navnet, jf. REFERENCENET. Tilføjelsen
+    '(ref.)' udgår af korrektionen i vælgeren; den angiver alene, at
+    korrektionen er 0, og flere net uden for REFERENCENET har samme værdi.
+    Hvilke net der er referencenet, fremgår af mærkatet.
+
     Bemærk: Streamlit-dropdownen kan ikke farve en del af teksten, så
     klasse-/korrektions-delen vises i samme farve som navnet (kun captionen
     nedenunder kan vises nedtonet).
@@ -1855,14 +1739,15 @@ def _produkt_label(navn: str) -> str:
     g = find_geonet(navn)
     if not g:
         return navn
+    titel = f"{navn} · Referencenet" if navn in REFERENCENET else navn
     dele: list[str] = []
     kl = g.get("klasser")
     if kl:
         dele.append(f"Klasse {_format_klasse_liste(kl)}")
     kor_txt = _korrektion_label(g)
     if kor_txt:
-        dele.append(f"Net-korrektion: {kor_txt}")
-    return f"{navn} ({' · '.join(dele)})" if dele else navn
+        dele.append(f"Net-korrektion: {kor_txt.replace(' (ref.)', '')}")
+    return f"{titel} ({' · '.join(dele)})" if dele else titel
 
 
 def _resultat_til_gruppe(
@@ -2929,6 +2814,36 @@ def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str, str]:
 _REF_VALG = "Referencenet (TX160 / SX160 / T6)"
 
 
+def _naturlig_noegle(navn: str) -> tuple:
+    """Sorteringsnøgle, hvor tal i produktnavnet ordnes efter værdi.
+
+    Navnet opdeles i skiftevis tekst og tal, så TX150 står før TX160 og
+    TX190L, og B30/30 før B40/40. En ren tegnsortering ville stille
+    TX1500 mellem TX150 og TX160.
+    """
+    dele = re.split(r"(\d+)", navn.lower())
+    return tuple(int(d) if d.isdigit() else d for d in dele)
+
+
+def _geonet_valgliste(gyldige: list[str]) -> tuple[list[str], int]:
+    """Geonet-vælgerens produkter og standardvalgets plads i listen.
+
+    Produkterne ordnes efter serie, jf. SERIE_ORDER, så Tensar-, GS-GRID-
+    og E'GRID-nettene står samlet. Inden for serien ordnes de efter navn
+    med tallene efter værdi, jf. _naturlig_noegle(), så produktfamilierne
+    følges ad. Standardvalget er TX160. Er nettet ikke gyldigt for den
+    valgte belastningsklasse, står valget på det første produkt i listen.
+
+    Navne, der forekommer i både 1-lags- og 2-lags-listen, optages én gang.
+    """
+    def _noegle(navn: str) -> tuple:
+        serie = (find_geonet(navn) or {}).get("serie", "")
+        return (SERIE_ORDER.get(serie, len(SERIE_ORDER)), _naturlig_noegle(navn))
+
+    valg = sorted(set(gyldige), key=_noegle)
+    return valg, valg.index(STANDARD_GEONET) if STANDARD_GEONET in valg else 0
+
+
 def _produkt_t(produkter: list[dict] | None, navn: str) -> float | None:
     """Slå t_armeret_mm op for et produkt i en liste fra beregn_alle_produkter."""
     if not produkter:
@@ -3166,7 +3081,12 @@ def _tegn_designdiagram(
     produkt_1: dict | None,
     produkt_2: dict | None,
 ) -> None:
-    """Tegner designdiagrammet og forklaringen bag det."""
+    """Tegner designdiagrammet.
+
+    Figuren bærer selv sin signatur, og fremgangsmåden bag kurverne —
+    interpolation og korrektion — står i Hjælp, kapitel 1 og 3. Der er derfor
+    ingen forklaring under figuren.
+    """
     try:
         fig = byg_designdiagram(
             eu=float(eu),
@@ -3185,8 +3105,6 @@ def _tegn_designdiagram(
         return
 
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    with st.expander("Sådan dannes diagrammet"):
-        st.markdown(INFO_DESIGNDIAGRAM_MD)
 
 
 def _render_opbygningsvisualisering(
@@ -3482,7 +3400,6 @@ def _render_opbygning_afsnit(
 def _render_oversigt_expanders(
     eu: float,
     eo: float,
-    valgt_klasse: int,
     bedste_1: dict | None,
     bedste_2: dict | None,
     *,
@@ -3498,7 +3415,10 @@ def _render_oversigt_expanders(
     eo_interpoleret: bool = False,
     vis_opbygning: bool = True,
 ) -> None:
-    """De 3 informations-expandere under resultaterne.
+    """Opbygningsafsnittet og informations-expanderne under resultaterne.
+
+    Beregningsmetoden og datagrundlaget står i Hjælp og gentages ikke her;
+    expanderne rummer alene advarsler og udførelseskrav for det valgte net.
 
     Bruges af både Standard (phi=37, geonet=None, materialer=None)
     og Brugerdefineret (egne phi/geonet/materialer-værdier).
@@ -3794,67 +3714,6 @@ def _render_oversigt_expanders(
                     "kornstørrelse — se datablad eller skift til "
                     "'Vælg specifikt produkt' for individuelle værdier."
                 )
-
-    # --- Sådan beregnes det -----------------------------------------------
-    with st.expander("Sådan beregnes det", expanded=True):
-        if eo_interpoleret:
-            st.info(
-                "**Trafikklasse-tilstand:** trin 2 nedenfor (kravet til Eo) "
-                "bestemmes ikke ud fra en belastningsklasse, men via "
-                "trafikklasse-koblingen — VejDim fastlægger den krævede ubundne "
-                "tykkelse, og den ækvivalente Eo (Eo_ækv) er blot den diagramkurve, "
-                "tykkelsen lander på, jf. **'Kobling imellem trafikklasse og "
-                "designdiagram'** ovenfor. Trin 5–6 (φ- og net-korrektion) gælder uændret."
-            )
-            # Grundlaget for koblingen stod tidligere i en egen ekspander under
-            # trafikklassevælgeren; det hører til beregningens forudsætninger.
-            st.markdown("#### Grundlaget for koblingen")
-            st.markdown(_TRAFIK_GRUNDLAG_MD)
-            st.markdown("#### Trinvis beregning")
-        st.markdown("""
-Trinvis beregning, baseret på designmanualer og intern forsøgsdata fra Byggros:
-
-Der beregnes en bærelagstykkelse ud fra 1 eller 2 lag armering med udgangspunkt i et referencenet (Tensar TriAx TX160, GS-GRID SX160 eller E'GRID T6).
-Den beregnede bærelagstykkelse korrigeres for friktionsvinkler forskellig fra φ = 37° samt effektindeks af forskellige geonet.
-
-1. **Bundmodulet Eu** vælges eller beregnes via sammenhæng med Cv
-2. **Krav til overflademodulet Eo** vælges alt efter belastningsklasse
-3. **Opslag i designdiagrammerne** foretages på baggrund af valg af bund- og overflademodul, hvor bærelagstykkelsen bestemmes - ustabiliseret og stabiliseret med 1–2 lag geonet.
-   Der er lavet forudgående interpolation imellem designdiagrammerns tabelværdier, for at danne en komplet tabel for hvert designdiagram. 
-4. **På baggrund af opslaget bestemmes basistykkelsen T_basis:**
-   - Ustabiliseret: *xx mm*
-   - 1 lag armering (referencenet): *xx mm*
-   - 2 lag armering (referencenet): *xx mm*
-5. **Korrektionsfaktorer for friktionsvinkel og effektivitet af geonet**
-
-   **Friktionsvinkel:**
-   Friktionsvinkel-korrektionen justerer basistykkelsen fra opslagstabellen, som er baseret på et standardmateriale med φ ≈ 37°. For hver grad over 37° reduceres tykkelsen med 2 %, og for φ under 37° øges tykkelsen tilsvarende.
-
-   I standardberegningen sættes bærelagets friktionsvinkel φ = 37°.
-
-   I den brugerdefinerede beregning beregnes en vægtet friktionsvinkel ud fra den angivne procentvægtning eller lagtykkelser af lagene, som er prædefinerede materialer med forskellige friktionsvinkler.
-
-   *Eksempel på beregning i brugerdefineret tilstand, ud fra lagtykkelser:*
-
-   | Lag | Materiale | Tykkelse | φ (°) | Vægtet bidrag |
-   |-----|-----------|----------|------:|-------------:|
-   | 1   | SG I 0-32 | 300 mm   | 40,0  | 12 000        |
-   | 2   | Bundsand  | 450 mm   | 37,0  | 16 650        |
-
-   Vægtet φ = Σ(tᵢ × φᵢ) / Σ(tᵢ) = 28 650 / 750 = **38,20°**
-
-   φ-korrektion = −0,02 × (φ − 37°) = −0,02 × (38,20 − 37) = **−0,0240**
-   *(dvs. tykkelsen reduceres med 2,40 % af T_basis)*
-
-   **Net-korrektion:**
-   Designdiagrammerne bruger GS-GRID SX160, E'GRID T6 eller Tensar TriAx TX160 som referencenet (effektindeks 100). Hvis der er valgt en anden armering, skaleres tykkelsen op eller ned med op til 20 % alt efter produkt.
-   En positiv korrektionsfaktor = tykkere bærelag (mindre effektiv armering), negativ = tyndere bærelag (mere effektiv armering).
-
-6. **Den endelige bærelagstykkelse beregnes som:**
-
-   **T_stabiliseret = T_basis × (1 + φ-kor + net-kor)**
-
-        """)
 
 
 def _render_breakdown_tabel(
@@ -4291,6 +4150,24 @@ def _produkttabel_note(eu: float) -> str:
     return "Klik en række for reduktionsopdeling og udførelseskrav"
 
 
+def _vaelg_geonet_note(grundlag: dict) -> str:
+    """Noten ved »Vælg geonet« i resultatblokken.
+
+    Ved dimensionering efter trafikklasse hviler grundlaget på VejDim-kørsler,
+    hvis underbund er forudsat frostsikker. Forbeholdet om koblingshøjden
+    angives derfor sammen med resultatet; ved belastningsklasse forekommer
+    kørslerne ikke, og linjen udelades.
+    """
+    note = "Resultat, opbygning og mellemregninger opdateres med det valgte net"
+    if grundlag.get("type") == "trafikklasse":
+        note += (
+            '<span class="bg-underhoved-forbehold">Beregningen tager ikke '
+            "højde for minimumskrav til koblingshøjde pga frostfarlighed, "
+            "jf. Vejdirektoratets dimensioneringshåndbog</span>"
+        )
+    return note
+
+
 def _resultat_note(eu: float, grundlag: dict) -> str:
     """Forudsætningerne bag resultatet, til resultatblokkens sidehoved."""
     return (
@@ -4451,58 +4328,51 @@ def render_standard() -> None:
         if grupper_2 else None
     )
 
+    # Rækkefølgen i vælgeren fastlægges af _geonet_valgliste().
+    gyldige_geonet = [
+        p["navn"]
+        for p in prod_1lag + prod_2lag
+        if p.get("navn") != "Anden armering (manuel)"
+        and p.get("fejl") is None
+        and p.get("t_armeret_mm") is not None
+    ]
+    if not gyldige_geonet and not haard_fejl:
+        haard_fejl = (
+            "Der forekommer ikke et geonet, som kan dimensioneres for "
+            f"Eu = {ui.mpa(eu)} og det valgte grundlag."
+        )
+
     # --- Resultater -----------------------------------------------------
     vis_kobling = False
     with ui.resultat_blok(_resultat_note(eu, grundlag)):
         if haard_fejl:
             vis_fejl(haard_fejl)
         else:
-            gyldige_geonet = sorted(
-                {
-                    p["navn"]
-                    for p in prod_1lag + prod_2lag
-                    if p.get("navn") != "Anden armering (manuel)"
-                    and p.get("fejl") is None
-                    and p.get("t_armeret_mm") is not None
-                },
-                key=lambda navn: (
-                    _produkt_t(prod_1lag, navn) or float("inf"),
-                    _produkt_t(prod_2lag, navn) or float("inf"),
-                    navn,
-                ),
-            )
-            resultat_geonet_valg = [_REF_VALG] + gyldige_geonet
+            resultat_geonet_valg, std_index = _geonet_valgliste(gyldige_geonet)
             if st.session_state.get("std_geonet") not in resultat_geonet_valg:
                 st.session_state.pop("std_geonet", None)
 
             ui.underhoved(
                 "Vælg geonet",
-                "Resultat, opbygning og mellemregninger opdateres med det valgte net",
+                _vaelg_geonet_note(grundlag),
             )
             vaelger_kol, _ = st.columns([1, 1.6])
             with vaelger_kol:
                 valgt_net = st.selectbox(
                     "Produkt",
                     resultat_geonet_valg,
-                    index=0,
+                    index=std_index,
                     key="std_geonet",
-                    format_func=(
-                        lambda navn: navn if navn == _REF_VALG else _produkt_label(navn)
-                    ),
+                    format_func=_produkt_label,
                     label_visibility="collapsed",
                 )
 
-            er_reference = valgt_net == _REF_VALG
-            valgt_geonet = None if er_reference else find_geonet(valgt_net)
-            valgt_1 = (
-                ref_1["produkter"][0]
-                if er_reference and ref_1 and ref_1.get("produkter")
-                else next((p for p in prod_1lag if p.get("navn") == valgt_net), None)
+            valgt_geonet = find_geonet(valgt_net)
+            valgt_1 = next(
+                (p for p in prod_1lag if p.get("navn") == valgt_net), None
             )
-            valgt_2 = (
-                ref_2["produkter"][0]
-                if er_reference and ref_2 and ref_2.get("produkter")
-                else next((p for p in prod_2lag if p.get("navn") == valgt_net), None)
+            valgt_2 = next(
+                (p for p in prod_2lag if p.get("navn") == valgt_net), None
             )
 
             if t_uarm is not None:
@@ -4533,14 +4403,13 @@ def render_standard() -> None:
                 _render_valgt_net_detaljer(
                     valgt_1,
                     valgt_2,
-                    net_navn=valgt_net if not er_reference else REFERENCE_NAVN,
+                    net_navn=valgt_net,
                     phi=PHI_BASIS,
-                    er_reference=er_reference,
                 )
                 ui.underhoved(
                     "Designdiagram",
                     f"Eo = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
-                    f"{REFERENCE_NAVN if er_reference else valgt_net}",
+                    f"{valgt_net}",
                     skillelinje=True,
                 )
                 _tegn_designdiagram(
@@ -4554,7 +4423,7 @@ def render_standard() -> None:
                 _render_alle_produkter_overblik(
                     prod_1lag,
                     prod_2lag,
-                    valgt_navn=None if er_reference else valgt_net,
+                    valgt_navn=valgt_net,
                 )
 
     if vis_kobling:
@@ -4565,7 +4434,7 @@ def render_standard() -> None:
 
     # --- Informations-expandere ----------------------------------------
     _render_oversigt_expanders(
-        eu, eo, valgt_klasse, bedste_1, bedste_2,
+        eu, eo, bedste_1, bedste_2,
         ref_1=ref_1, ref_2=ref_2,
         prod_1lag=prod_1lag, prod_2lag=prod_2lag,
         t_basis_table=t_basis_table,
@@ -5112,42 +4981,38 @@ def render_brugerdefineret() -> None:
     )
     prod_1lag = _berig_produkter_med_placering(prod_1lag, "1_lag", materialer)
     prod_2lag = _berig_produkter_med_placering(prod_2lag, "2_lag", materialer)
-    gyldige_geonet = sorted(
-        {
-            p["navn"]
-            for p in prod_1lag + prod_2lag
-            if p.get("navn") != "Anden armering (manuel)"
-            and p.get("fejl") is None
-            and p.get("t_armeret_mm") is not None
-        },
-        key=lambda navn: (
-            _produkt_t(prod_1lag, navn) or float("inf"),
-            _produkt_t(prod_2lag, navn) or float("inf"),
-            navn,
-        ),
-    )
-    resultat_geonet_valg = [_REF_VALG] + gyldige_geonet
+    # Rækkefølgen i vælgeren fastlægges af _geonet_valgliste().
+    gyldige_geonet = [
+        p["navn"]
+        for p in prod_1lag + prod_2lag
+        if p.get("navn") != "Anden armering (manuel)"
+        and p.get("fejl") is None
+        and p.get("t_armeret_mm") is not None
+    ]
+    resultat_geonet_valg, std_index = _geonet_valgliste(gyldige_geonet)
+    if not resultat_geonet_valg:
+        # Forekommer der ikke et gyldigt produkt, står vælgeren på
+        # referencenettet, og beregningen føres med netkorrektion 0.
+        resultat_geonet_valg, std_index = [_REF_VALG], 0
     if st.session_state.get("bd_geonet") not in resultat_geonet_valg:
         st.session_state.pop("bd_geonet", None)
 
     with ui.resultat_blok(_resultat_note(eu, grundlag)):
         ui.underhoved(
             "Vælg geonet",
-            "Resultat, opbygning og mellemregninger opdateres med det valgte net",
+            _vaelg_geonet_note(grundlag),
         )
         vaelger_kol, _ = st.columns([1, 1.6])
         with vaelger_kol:
             geonet_navn = st.selectbox(
                 "Produkt",
                 resultat_geonet_valg,
-                index=0,
+                index=std_index,
                 key="bd_geonet",
-                format_func=(
-                    lambda navn: navn if navn == _REF_VALG else _produkt_label(navn)
-                ),
+                format_func=_produkt_label,
                 label_visibility="collapsed",
             )
-        geonet = None if geonet_navn == _REF_VALG else find_geonet(geonet_navn)
+        geonet = find_geonet(geonet_navn)
         if geonet and geonet["navn"] == "Anden armering (manuel)":
                 kor_man = st.number_input(
                     "Korrektionsfaktor (−0.20 til +0.20)",
@@ -5364,9 +5229,8 @@ def render_brugerdefineret() -> None:
                     _render_valgt_net_detaljer(
                         prod_1[0] if prod_1 else None,
                         prod_2[0] if prod_2 else None,
-                        net_navn=geonet_navn or REFERENCE_NAVN,
+                        net_navn=geonet_navn,
                         phi=phi,
-                        er_reference=geonet is None,
                     )
                     t_indtastet_total = _indtastet_total(materialer)
                     ui.underhoved(
@@ -5397,7 +5261,7 @@ def render_brugerdefineret() -> None:
                     _render_alle_produkter_overblik(
                         prod_1lag,
                         prod_2lag,
-                        valgt_navn=geonet_navn if geonet else REFERENCE_NAVN,
+                        valgt_navn=geonet_navn,
                     )
 
     if kobling_args is not None:
@@ -5405,7 +5269,7 @@ def render_brugerdefineret() -> None:
 
     # --- Informations-expandere --------------------------------------------
     _render_oversigt_expanders(
-        eu, eo, valgt_klasse, bedste_1, bedste_2,
+        eu, eo, bedste_1, bedste_2,
         ref_1=ref_1, ref_2=ref_2,
         prod_1lag=prod_1lag, prod_2lag=prod_2lag,
         phi=phi,
@@ -5435,6 +5299,7 @@ _NAV_GRUPPER = [
         (":material/grid_on:",      "Geonet-database",          "geonet_database"),
         (":material/show_chart:",   "Designdiagrammer",         "designdiagrammer"),
         (":material/table_chart:",  "Trafikklasse-korrelation", "trafikklasse_korrelation"),
+        (":material/help:",          "Hjælp og dokumentation",   "hjaelp"),
     ]),
 ]
 
@@ -5478,15 +5343,287 @@ def render_sidebar() -> str:
 
 
 # ===========================================================================
+# Hjælp og dokumentation
+# ===========================================================================
+#
+# Teksten vedligeholdes som markdown-filer i »Dokumenter og data/hjaelp« og
+# indlæses ved visning, jf. core/hjaelp.py, så dokumentationen kun findes ét
+# sted. Siden står for opstillingen: kapitlerne som foldbare kort med resumé,
+# formlerne i egne rammer og figurerne i sidekolonnen ved deres afsnit.
+# ===========================================================================
+
+# Kapitlet, der står åbent, når siden åbnes uden en henvisning.
+_HJAELP_STANDARD_KAPITEL = "beregningsmetoden"
+
+_HJAELP_INTRO = (
+    "Værktøjet fastlægger, hvor tykt et ubundet bærelag en vej kræver, og hvor "
+    "meget tykkelsen kan nedsættes ved at armere opbygningen med geonet. "
+    "Grundlaget er leverandørernes designdiagrammer, ét pr. belastningsklasse.\n\n"
+    "Dimensioneringen kan tage udgangspunkt i to grundlag. **Belastningsklassen** "
+    "henviser direkte til sit designdiagram, hvor lagtykkelserne aflæses ved "
+    "underbundens E-modul. **Trafikklassen** har intet designdiagram; den føres "
+    "ind i diagrammerne gennem en VejDim-kørsel, som fastlægger den ubundne "
+    "lagtykkelse, og derfra til det punkt, hvor den ustabiliserede kurve giver "
+    "samme tykkelse. Der foretages ingen teoretisk omregning mellem de to "
+    "metoder."
+)
+
+_HJAELP_TRIN = (
+    "Underbundens styrke og dimensioneringsgrundlaget angives",
+    "Opbygningens materialelag sammensættes",
+    "Geonettet vælges",
+    "Tykkelsen læses med og uden armering",
+)
+
+# Fagudtrykkene og deres forklaring. Listen er sidens ordforklaring og er
+# samtidig grundlaget for de forklaringer, udtrykkene bærer ude i appen.
+_HJAELP_FAGUDTRYK = (
+    ("Eu", "Underbundens E-modul [MN/m²]. Angives i dimensioneringen."),
+    ("Eo", "Designdiagrammets overflademodul [MN/m²]. Ved dimensionering efter "
+           "belastningsklasse er værdien diagrammets egen, forudsatte "
+           "størrelse."),
+    ("Eo,ækv", "Det tilbageberegnede opslagspunkt ved dimensionering efter "
+               "trafikklasse. En indeksværdi mellem to diagrammer, ikke et "
+               "forventet overflademodul."),
+    ("NÆ10", "Dimensioneringstrafikken over 20 år for trafikklassen, angivet "
+             "i ækvivalente 10-tons akseltryk."),
+    ("φ", "Den tykkelsevægtede friktionsvinkel i de ubundne materialelag [°]. "
+          "Designmanualerne forudsætter 37°."),
+    ("k_net", "Korrektionen for det valgte geonet i forhold til "
+              "referencenettet. Positiv giver et tykkere bærelag."),
+    ("effektindeks", "Produktets effektivitet i forhold til referencenettet, "
+                     "som har indeks 100."),
+)
+
+# Symboler, der sættes med sænket skrift i formlerne. Mønsteret dækker
+# skrivemåden i kapitelfilerne, fx t_SG, k_φ, Eo_ækv og t_lav,armeret.
+_FORMEL_SENKET = re.compile(
+    r"\b([A-Za-zÆØÅæøåφ]+)_([A-Za-zÆØÅæøåφ0-9]+(?:,[A-Za-zÆØÅæøå0-9]+)*)"
+)
+
+
+def _formel_html(udtryk: str) -> str:
+    """Sæt en formel med sænket skrift på symbolernes indeks.
+
+    Formlerne skrives i kapitelfilerne som almindelig tekst — »t_SG«, »k_φ« —
+    og sættes her med sænket skrift, så de fremstår som i håndbogen. Teksten
+    escapes først, da formlerne indgår i sidens HTML.
+    """
+    return _FORMEL_SENKET.sub(
+        lambda m: f"{html.escape(m.group(1))}<sub>{html.escape(m.group(2))}</sub>",
+        html.escape(udtryk),
+    )
+
+
+def _render_hjaelp_formel(formel) -> None:
+    """Formlen i egen ramme med en »hvor:«-liste under, jf. håndbogen."""
+    linjer = "<br>".join(_formel_html(l) for l in formel.udtryk.split("\n"))
+    hvor = ""
+    if formel.hvor:
+        poster = "<br>".join(_formel_html(l) for l in formel.hvor)
+        hvor = f'<div class="hj-hvor">hvor:<br>{poster}</div>'
+    st.html(f'<div class="hj-formel"><div class="hj-udtryk">{linjer}</div>{hvor}</div>')
+
+
+def _render_hjaelp_figur(figur, nummer: int) -> None:
+    """Figuren som en lille tabel med figurtekst under.
+
+    Tabellen sættes af markdown; nummer og figurtekst står omkring den, så
+    figuren kan henvises til fra brødteksten.
+    """
+    st.html(f'<div class="hj-figur-nr">Figur {nummer}</div>')
+    st.markdown(figur.tabel)
+    st.html(f'<div class="hj-figur-tekst">{html.escape(figur.tekst)}</div>')
+
+
+def _render_hjaelp_gaatil(henvisning, key: str) -> None:
+    """Henvisning til en anden side som knap.
+
+    Sidenøglen slås op i navigationen; peger den ikke på en kendt side,
+    udelades knappen, så en skrivefejl i kapitelfilen ikke standser visningen.
+    """
+    kendte = {noegle for _, _, noegle in _NAV_ITEMS}
+    if henvisning.side not in kendte:
+        return
+    kol, _ = st.columns([1, 1.1])
+    with kol:
+        if st.button(henvisning.tekst, key=key, width="stretch"):
+            st.session_state["aktiv_side"] = henvisning.side
+            st.rerun()
+
+
+def _render_hjaelp_kapitel(kapitel) -> None:
+    """Kapitlets afsnit med figurerne i sidekolonnen.
+
+    Hvert afsnit sættes i sin egen række, så figuren står ud for det afsnit,
+    den hører til. Kapitlets indholdsfortegnelse afslutter sidekolonnen.
+    """
+    figur_nr = 0
+    for afsnit in kapitel.afsnit:
+        venstre, hoejre = st.columns([1.75, 1], gap="large")
+        with venstre:
+            st.html(
+                f'<div class="hj-afsnit-titel">'
+                f'<span>{html.escape(afsnit.nummer)}</span>'
+                f'{html.escape(afsnit.titel)}</div>'
+            )
+            for nr, stykke in enumerate(afsnit.indhold):
+                if isinstance(stykke, hjaelp_mod.Formel):
+                    _render_hjaelp_formel(stykke)
+                elif isinstance(stykke, hjaelp_mod.Gaatil):
+                    _render_hjaelp_gaatil(
+                        stykke,
+                        key=f"hj_gaatil_{kapitel.noegle}_{afsnit.nummer}_{nr}",
+                    )
+                else:
+                    st.markdown(stykke)
+        with hoejre:
+            for figur in afsnit.figurer:
+                figur_nr += 1
+                _render_hjaelp_figur(figur, figur_nr)
+
+    _, kol_indhold = st.columns([1.75, 1], gap="large")
+    with kol_indhold:
+        poster = "".join(
+            f'<div><span>{html.escape(a.nummer)}</span>'
+            f'{html.escape(a.titel)}</div>'
+            for a in kapitel.afsnit
+        )
+        st.html(
+            '<div class="hj-indhold"><div class="hj-indhold-hoved">'
+            f'På dette kapitel</div>{poster}</div>'
+        )
+
+
+def aabn_hjaelp(noegle: str) -> None:
+    """Skift til Hjælp og fold det angivne kapitel ud.
+
+    Anvendes af henvisningerne fra beregningssiderne, så et opslag fører
+    direkte til det rette kapitel frem for til sidens top.
+    """
+    st.session_state["aktiv_side"] = "hjaelp"
+    st.session_state["hjaelp_aabne"] = {noegle}
+    st.rerun()
+
+
+def hjaelp_knap(noegle: str, tekst: str, *, key: str, **kwargs) -> None:
+    """Knap, der åbner et kapitel i Hjælp."""
+    if st.button(tekst, key=key, **kwargs):
+        aabn_hjaelp(noegle)
+
+
+def render_hjaelp() -> None:
+    """Hjælp og dokumentation — metoden, datagrundlaget og forbeholdene.
+
+    Kapitlerne indlæses fra markdown ved hver visning og vises som foldbare
+    kort. Resuméet står i kortets hoved, også når kapitlet er lukket, så det
+    rette kapitel kan findes uden at åbne dem alle.
+    """
+    ui.sidehoved(
+        "Hjælp og dokumentation",
+        "Beregningsmetoden, datagrundlaget og forbeholdene bag værktøjet.",
+    )
+
+    kapitler = hjaelp_mod.laes_kapitler()
+    if not kapitler:
+        ui.besked(
+            "Hjælpeteksten kunne ikke indlæses. Kapitlerne forventes at ligge "
+            "som markdown-filer i mappen <i>Dokumenter og data/hjaelp</i>.",
+            "advarsel",
+        )
+        return
+
+    # ── Intro ─────────────────────────────────────────────────────────────
+    with ui.kort("Hvad værktøjet gør", "Grundlaget bag beregningen"):
+        venstre, hoejre = st.columns([1.35, 1], gap="large")
+        with venstre:
+            st.markdown(_HJAELP_INTRO)
+        with hoejre:
+            trin = "".join(
+                f'<div class="hj-trin"><span>{nr}</span>{html.escape(tekst)}</div>'
+                for nr, tekst in enumerate(_HJAELP_TRIN, start=1)
+            )
+            udtryk = "".join(
+                f'<div class="hj-udtryk-post" title="{html.escape(forklaring, quote=True)}">'
+                f'{_formel_html(navn)}</div>'
+                for navn, forklaring in _HJAELP_FAGUDTRYK
+            )
+            st.html(
+                '<div class="hj-trinblok">'
+                '<div class="hj-trinblok-hoved">En beregning i fire trin</div>'
+                f'{trin}'
+                '<div class="hj-fagudtryk-hoved">Fagudtryk — forklaringen '
+                'vises ved markøren</div>'
+                f'<div class="hj-fagudtryk">{udtryk}</div></div>'
+            )
+
+    # ── Kapitler ──────────────────────────────────────────────────────────
+    aabne = st.session_state.setdefault(
+        "hjaelp_aabne", {_HJAELP_STANDARD_KAPITEL}
+    )
+    alle_aabne = len(aabne) == len(kapitler)
+    kol_knap, _ = st.columns([1, 3.4])
+    with kol_knap:
+        if st.button(
+            "Luk alle kapitler" if alle_aabne else "Åbn alle kapitler",
+            key="hjaelp_alle", width="stretch",
+        ):
+            st.session_state["hjaelp_aabne"] = (
+                set() if alle_aabne else {k.noegle for k in kapitler}
+            )
+            st.rerun()
+
+    for kapitel in kapitler:
+        aaben = kapitel.noegle in aabne
+        with st.container(key=f"hj_kap_{kapitel.noegle}"):
+            kol_hoved, kol_toggle = st.columns([1, 0.17], gap="small")
+            with kol_hoved:
+                st.html(
+                    f'<div class="hj-kap-hoved{" hj-kap-aaben" if aaben else ""}">'
+                    f'<div class="hj-kap-nr">Kapitel {kapitel.nummer}</div>'
+                    f'<div class="hj-kap-titel">{html.escape(kapitel.titel)}</div>'
+                    f'<div class="hj-kap-antal">{kapitel.afsnit_tal}</div>'
+                    f'<div class="hj-kap-resume">{html.escape(kapitel.resume)}</div>'
+                    '</div>'
+                )
+            with kol_toggle:
+                if st.button(
+                    "Luk" if aaben else "Læs",
+                    key=f"hj_toggle_{kapitel.noegle}",
+                    width="stretch",
+                    type="primary" if aaben else "secondary",
+                ):
+                    if aaben:
+                        aabne.discard(kapitel.noegle)
+                    else:
+                        aabne.add(kapitel.noegle)
+                    st.session_state["hjaelp_aabne"] = aabne
+                    st.rerun()
+            if aaben:
+                _render_hjaelp_kapitel(kapitel)
+
+    st.caption(
+        "Teksten vedligeholdes som markdown-filer i *Dokumenter og "
+        "data/hjaelp* og indlæses ved visning, så dokumentationen kun findes "
+        "ét sted."
+    )
+
+
+# ===========================================================================
 # Placeholder-sider (Materialer, Geonet database, Designdiagrammer)
 # ===========================================================================
 
 def render_geonet_database() -> None:
-    st.title("Geonet-database")
-    st.caption(
-        "Oversigt over alle geonet-produkter med effektindeks, belastningsklasser og tekniske data. "
+    """Geonet-databasen, opstillet som Hjælp-siden.
+
+    Tabellen står i sit eget kort, og hver note står som et kort for sig, så
+    forbehold og kildehenvisninger kan aflæses enkeltvis.
+    """
+    ui.sidehoved(
+        "Geonet-database",
+        "Oversigt over alle geonet-produkter med effektindeks, "
+        "belastningsklasser og tekniske data fra datablade og designmanualer.",
     )
-    st.divider()
 
     import pandas as pd
 
@@ -5567,28 +5704,42 @@ def render_geonet_database() -> None:
         "Bemærkning": "Særlige forhold, datakilder og rettelser for produktet.",
     }
 
-    st.dataframe(
-        df,
-        width="stretch",
-        hide_index=True,
-        height=tabel_hoejde,
-        column_config={
-            navn: st.column_config.Column(help=tekst)
-            for navn, tekst in kolonne_hjaelp.items()
-        },
-    )
-
     # Kolonnebeskrivelserne ligger som tooltips på kolonneoverskrifterne, jf.
     # kolonne_hjaelp ovenfor. Alle 25 kolonner er dækket.
+    with ui.kort(
+        "Produkter",
+        f"{len(rækker)} produkter · {len(kolonne_hjaelp)} kolonner · "
+        "forklaringen vises ved kolonneoverskriften",
+    ):
+        st.dataframe(
+            df,
+            width="stretch",
+            hide_index=True,
+            height=tabel_hoejde,
+            column_config={
+                navn: st.column_config.Column(help=tekst)
+                for navn, tekst in kolonne_hjaelp.items()
+            },
+        )
 
-    # ── Vigtige noter ─────────────────────────────────────────────────────
-    # Noterne står som et samlet afsnit frem for i expandere, så forbehold og
-    # kildehenvisninger kan læses uden at skulle åbnes enkeltvis.
-    st.subheader("Database-noter og kildehenvisninger")
-    st.markdown("\n\n".join(
-        f"##### {i} {note['titel']}\n{note['tekst']}"
-        for i, note in enumerate(GEONET_NOTER, start=1)
-    ))
+    # ── Noter og kildehenvisninger ────────────────────────────────────────
+    # Hver note står i sit eget kort, jf. kapitlerne på Hjælp-siden. Noterne
+    # er korte og vises derfor åbne; teksten sættes af markdown, idet enkelte
+    # noter rummer opstillinger og henvisninger.
+    ui.underhoved(
+        "Database-noter og kildehenvisninger",
+        f"{len(GEONET_NOTER)} noter",
+        skillelinje=True,
+    )
+    for nr, note in enumerate(GEONET_NOTER, start=1):
+        with st.container(key=f"bg_note_{nr}"):
+            st.html(
+                '<div class="bg-note-hoved">'
+                f'<div class="bg-note-nr">Note {nr}</div>'
+                f'<div class="bg-note-titel">{html.escape(note["titel"])}</div>'
+                '</div>'
+            )
+            st.markdown(note["tekst"])
 
 
 def _diagram_daekning(diagram: dict) -> str:
@@ -5855,227 +6006,129 @@ def _korrelation_pivot_rows(korr: dict) -> list[dict]:
     return rows
 
 
-# Metode-, datagrundlag- og forbeholds-tekster (kondenseret fra
-# "Dokumenter og data/Korrelation_trafikklasse_Eo.md").
-_KORR_METODE_MD = """
-Trafikklassegrundlaget sammenkæder Vejdirektoratets trafikklasser med de
-geonet-designdiagrammer, dimensioneringen bygger på. Sammenkædningen sker uden
-teoretisk omregning mellem de to metoder, idet den alene anvender to
-uafhængige, empiriske datasæt:
+# Metoden bag koblingen — de fire led, siden sammenfatter. Formlerne og det
+# gennemregnede eksempel står i Hjælp, kapitel 1, jf. hjaelp_knap() nedenfor.
+_KORR_TRIN = (
+    ("Ubunden lagtykkelse",
+     "VejDim-kørslen fastlægger den lagtykkelse, trafikklassen kræver ved "
+     "underbundens E-modul. Mellem kørte E-værdier interpoleres."),
+    ("Ækvivalent Eo",
+     "Den Eo-kurve, hvis ustabiliserede lagtykkelse svarer til den fastlagte, "
+     "bestemmes ved interpolation mellem de to nærmeste kurver."),
+    ("Geonet-reduktion",
+     "Reduktionen følger af de samme to kurvers armerede lagtykkelser med "
+     "samme interpolationsfaktor."),
+    ("Korrektion",
+     "Lagtykkelsen korrigeres for friktionsvinkel og for det valgte geonet i "
+     "forhold til referencenettet."),
+)
 
-- **VejDim-kørslerne** fastlægger den ubundne lagtykkelse, en given trafikklasse
-  kræver ved en given underbund.
-- **Designdiagrammerne** fastlægger den reduktion af lagtykkelsen, et geonet
-  medfører i det pågældende punkt.
+# Kørslernes faste forudsætninger. Forbehold og gyldighedsområde står i
+# Hjælp, kapitel 7.
+_KORR_FORUDSAETNINGER = (
+    ("Belastningsmodel", "Æ10 tvillingehjul, 60–80 km/t"),
+    ("Afvanding", "Nej"),
+    ("Underbund", "Frostsikker, E overskrevet til cellens Eu"),
+    ("Levetidsmål", "20 år, alle lag"),
+    ("Ubundne lag", "SG II (E = 300) over BL II U≤3 (E = 100)"),
+    ("Asfalt-E", "Standard, ikke overskrevet"),
+)
 
-Fremgangsmåden er beskrevet i afsnit 1–4 nedenfor. Som gennemgående eksempel
-anvendes trafikklasse T4 ved en underbund med E-værdi Eu = 8 MPa.
+# Kørselstabellens første kolonner bliver stående ved vandret scroll, så den
+# række, der rettes i, altid kan aflæses.
+_KORR_FASTE_KOLONNER = ("Trafikklasse", "Eu (MPa)")
 
----
 
-#### 1 Ubunden lagtykkelse
+# Cellen, regneeksemplet ved siden af Eo-matricen tager udgangspunkt i.
+# Ligger den uden for designdiagrammernes område — hvilket kan ske, når
+# kørslerne er rettet — vælges den første celle i zonen ok i stedet.
+_KORR_EKSEMPEL = ("T3", 15)
 
-For hver kombination af trafikklasse og underbunds-E-værdi er der udført en
-VejDim-kørsel. Kørslerne fremgår af tabellen nederst på siden. Den ubundne
-lagtykkelse fastlægges som summen af de to ubundne lag:
 
-```
-t_ubundet = t_SG + t_BL
-```
+def _korr_eksempel_celle(korr: dict) -> tuple[str, int] | None:
+    """Vælg den celle, regneeksemplet opstilles for.
 
-hvor:
+    Eksemplet skal vise en gennemført tilbageberegning og kan derfor ikke
+    hvile på en celle i zonen under, over eller mangler.
+    """
+    t_std, eu_std = _KORR_EKSEMPEL
+    if isinstance((korr.get(t_std) or {}).get(eu_std), (int, float)):
+        return t_std, eu_std
+    for t_klasse, raekke in korr.items():
+        for eu, vaerdi in raekke.items():
+            if isinstance(vaerdi, (int, float)):
+                return t_klasse, int(eu)
+    return None
 
-- **t_SG** = tykkelsen af stabilgruslaget [mm].
-- **t_BL** = tykkelsen af bundsikringslaget [mm].
 
-Kørslerne er udført ved Eu = 3, 4, 5, 10, 15, 20, 30 og 40 MPa. For
-mellemliggende E-værdier bestemmes lagtykkelsen ved lineær interpolation i
-log(Eu) mellem de to nærmeste kørsler:
+def _render_korr_eksempel(korr: dict, t_basis_table: dict) -> None:
+    """Regneeksempel ved siden af Eo-matricen.
 
-```
-f         = (ln(Eu) − ln(Eu_1)) / (ln(Eu_2) − ln(Eu_1))
-t_ubundet = t_1 + f × (t_2 − t_1)
-```
+    Eksemplet regnes af de aktive kørsler og det aktive designdiagram og
+    følger derfor med, når et af de to grundlag rettes. Trinene svarer til
+    Hjælp, kapitel 1, afsnit 3 og 4.
+    """
+    celle = _korr_eksempel_celle(korr)
+    if celle is None:
+        return
+    t_klasse, eu = celle
+    tal = _eo_aekv_trin_tal(t_klasse, float(eu), t_basis_table)
+    if not tal or "eo_aekv" not in tal["trin2"]:
+        return
+    t1, t2 = tal["trin1"], tal["trin2"]
 
-hvor Eu_1 og Eu_2 er de nærmeste kørte E-værdier, og t_1 og t_2 de tilhørende
-lagtykkelser.
+    def _mm(v: float) -> str:
+        return f"{v:,.0f}".replace(",", ".")
 
-Lagtykkelsen aftager tilnærmelsesvis retlinet med log(Eu) i hele datasættet.
-Ved en udeladelsestest er middelafvigelsen på den ækvivalente Eo bestemt til
-2,9 MPa ved interpolation i log(Eu) mod 5,5 MPa ved interpolation i Eu.
+    # Trin 1 er enten et direkte opslag i en kørsel eller en interpolation i
+    # log(Eu). Eksempelcellen er et kørt punkt, men udtrykket dannes for
+    # begge tilfælde, så eksemplet også holder ved en rettet kørsel.
+    if t1.get("direkte") and t1.get("sg") is not None:
+        trin1_udtryk = (
+            f"t_ubundet = {_mm(t1['sg'])} + {_mm(t1['bl'])} "
+            f"= {_mm(t1['ubundet_mm'])} mm"
+        )
+        trin1_note = "SG + BL fra kørslen"
+    else:
+        trin1_udtryk = f"t_ubundet = {_mm(t1['ubundet_mm'])} mm"
+        trin1_note = f"interpoleret i log(Eu) mellem {t1.get('lav')} og {t1.get('hoej')} MPa"
 
-For T4 ved Eu = 8 MPa fås:
+    frac = t2["frac"]
+    eo_aekv = t2["eo_aekv"]
+    st.html(
+        '<div class="korr-eksempel">'
+        f'<div class="korr-eksempel-hoved">Eksempel · {t_klasse} ved '
+        f'Eu = {eu} MN/m²</div>'
 
-| Trafikklasse | Eu = 5 MPa | Eu = 8 MPa | Eu = 10 MPa |
-|---|---|---|---|
-| T4 | 1184 mm | 1038 mm | 969 mm |
+        '<div class="korr-eksempel-trin"><span>1</span>'
+        f'<div><div class="korr-eksempel-tekst">{trin1_note}</div>'
+        f'<div class="korr-eksempel-tal">{html.escape(trin1_udtryk)}</div>'
+        '</div></div>'
 
-*Figur 1 Ubunden lagtykkelse for T4. Værdien ved Eu = 8 MPa er interpoleret
-(f = 0,678).*
+        '<div class="korr-eksempel-trin"><span>2</span>'
+        '<div><div class="korr-eksempel-tekst">Tykkelsen findes mellem to '
+        'ustabiliserede kurver</div>'
+        f'<div class="korr-eksempel-tal">Eo = {t2["eo_lav"]:.0f} MPa'
+        f'<span class="korr-eksempel-pil">→</span>{_mm(t2["t_lav"])} mm<br>'
+        f'Eo = {t2["eo_hoej"]:.0f} MPa'
+        f'<span class="korr-eksempel-pil">→</span>{_mm(t2["t_hoej"])} mm</div>'
+        '</div></div>'
 
----
+        '<div class="korr-eksempel-trin"><span>3</span>'
+        '<div><div class="korr-eksempel-tekst">Interpolation mellem de '
+        'to kurver</div>'
+        f'<div class="korr-eksempel-tal">f = ({_mm(t1["ubundet_mm"])} − '
+        f'{_mm(t2["t_lav"])}) / ({_mm(t2["t_hoej"])} − {_mm(t2["t_lav"])}) '
+        f'= {_dk_num(frac, ".2f")}<br>'
+        f'Eo_ækv = {t2["eo_lav"]:.0f} + {_dk_num(frac, ".2f")} × '
+        f'({t2["eo_hoej"]:.0f} − {t2["eo_lav"]:.0f}) '
+        f'= {_dk_num(eo_aekv, ".1f")}</div></div></div>'
 
-#### 2 Ækvivalent Eo
-
-Ved den ækvivalente Eo forstås den Eo-værdi, hvis ustabiliserede lagtykkelse
-ved samme Eu svarer til den lagtykkelse, der er fastlagt efter afsnit 1.
-Værdien bestemmes ved lineær interpolation mellem de to nærmeste Eo-kurver i
-designdiagrammet:
-
-```
-f      = (t_ubundet − t_lav) / (t_høj − t_lav)
-Eo_ækv = Eo_lav + f × (Eo_høj − Eo_lav)
-```
-
-hvor t_lav og t_høj er de ustabiliserede lagtykkelser ved de to nærmeste
-Eo-kurver, Eo_lav og Eo_høj.
-
-De ustabiliserede lagtykkelser ved Eu = 8 MPa fremgår af Figur 2.
-
-| Eo [MPa] | 30 | 45 | 60 | 80 | 120 | 150 |
-|---|---|---|---|---|---|---|
-| Belastningsklasse | 1 | 2 | 3 | 4 | 5 | 6 |
-| Ustabiliseret lagtykkelse [mm] | 700 | 800 | 877 | 1000 | 1100 | 1200 |
-
-*Figur 2 Ustabiliserede lagtykkelser ved Eu = 8 MPa.*
-
-En lagtykkelse på 1038 mm ligger mellem kurverne for Eo = 80 MPa og
-Eo = 120 MPa, og der fås f = 0,382 og Eo_ækv = 95,3 MPa.
-
-Den ækvivalente Eo er en indeksværdi, der angiver opslagspunktet i
-designdiagrammet. I modsætning til belastningsklasserne udtrykker den ikke et
-krav til eller en forventet størrelse af overflademodulet på oversiden af de
-ubundne lag. Værdien er alene et resultat af interpolationen.
-
-Opmærksomheden henledes på, at opslagspunktet afhænger af både trafikklasse og
-underbundens E-værdi. En trafikklasse kan derfor ikke henføres til ét bestemt
-designdiagram, jf. Figur 3.
-
-| T4 ved Eu = | 5 MPa | 10 MPa | 15 MPa | 20 MPa |
-|---|---|---|---|---|
-| Eo_ækv [MPa] | 90 | 108 | 135 | 148 |
-| Nærmeste designdiagram | 4 | mellem 4 og 5 | 5 | 6 |
-
-*Figur 3 Ækvivalent Eo for T4 ved forskellige underbunds-E-værdier.*
-
-Forholdet skyldes, at de to klassesystemer beskriver forskellige størrelser:
-belastningsklasserne beskriver lastens størrelse, mens trafikklasserne
-beskriver antallet af belastningsgentagelser.
-
----
-
-#### 3 Geonet-reduktion
-
-Designdiagrammerne indeholder som udgangspunkt tre kurver for hver Eo-værdi:
-én for ustabiliseret opbygning og én for henholdsvis 1 og 2 lag geonet. Alle
-tre er fastlagt ved feltforsøg.
-
-Lagtykkelsen for armeret opbygning bestemmes ved interpolation mellem de samme
-to Eo-kurver som i afsnit 2 og med den samme interpolationsfaktor f:
-
-```
-t_armeret = t_lav,armeret + f × (t_høj,armeret − t_lav,armeret)
-```
-
-For T4 ved Eu = 8 MPa, hvor f = 0,382, fås værdierne i Figur 4.
-
-| Ved Eu = 8 MPa | Eo = 80 MPa (kl. 4) | Eo = 120 MPa (kl. 5) | Eo_ækv = 95,3 MPa |
-|---|---|---|---|
-| Ustabiliseret | 1000 mm | 1100 mm | 1038 mm |
-| 1 lag geonet | 700 mm | 800 mm | 738 mm |
-| 2 lag geonet | 600 mm | 700 mm | 638 mm |
-
-*Figur 4 Lagtykkelser ved Eo_ækv, bestemt ved interpolation mellem de to
-nærmeste Eo-kurver.*
-
-Reduktionen bestemmes som forskellen mellem den ustabiliserede og den armerede
-lagtykkelse:
-
-```
-1 lag geonet:  (1038 − 738) / 1038 = 28,9 %
-2 lag geonet:  (1038 − 638) / 1038 = 38,5 %
-```
-
-Reduktionen interpoleres ikke direkte, men følger af de interpolerede
-lagtykkelser. Den fundne reduktion på 28,9 % ligger følgelig mellem de to
-nærmeste kurvers egne reduktioner på henholdsvis 30,0 % (Eo = 80 MPa) og
-27,3 % (Eo = 120 MPa).
-
-Da den ustabiliserede kurve indgår i begge interpolationer, er
-interpolationsfaktoren den samme, uanset om den bestemmes ud fra lagtykkelsen
-eller ud fra Eo-værdien. Den ækvivalente Eo kan derfor betragtes som en
-angivelse af interpolationsfaktoren.
-
-Der gøres opmærksom på, at designdiagrammerne ikke indeholder armerede kurver
-i alle punkter. Ved Eu = 10 MPa findes eksempelvis ingen kurve for 2 lag
-geonet ved Eo = 30, 45, 60 og 80 MPa. Falder den ækvivalente Eo i dette
-område, kan reduktionen for 2 lag ikke bestemmes, og resultatet udelades.
-
----
-
-#### 4 Korrektion for materialer og geonettype
-
-De lagtykkelser, der bestemmes efter afsnit 3, er designdiagrammernes
-basisværdier, som forudsætter en friktionsvinkel på φ = 37°. Lagtykkelsen
-korrigeres for det valgte materiale og det valgte geonet:
-
-```
-T   = T_basis × (1 + k_φ + k_net)
-k_φ = −0,02 × (φ − 37°)
-```
-
-hvor:
-
-- **k_φ** = korrektion for friktionsvinklen i de ubundne materialer.
-- **k_net** = korrektion for det valgte geonet i forhold til referencenettet.
-  Værdien er 0 for referencenettet og negativ for net med højere effektivitet.
-
-Korrektionen for friktionsvinklen anvendes på samtlige tre kurver. Korrektionen
-for geonettype anvendes alene på de armerede kurver, idet den ustabiliserede
-opbygning ikke indeholder geonet. Reduktionen opgøres derfor i forhold til den
-korrigerede ustabiliserede lagtykkelse, således at begge lagtykkelser er
-korrigeret på samme grundlag.
-
----
-
-#### 5 Sammenfatning
-
-Fremgangsmåden kan sammenfattes i fire trin pr. kombination af trafikklasse og
-underbunds-E-værdi:
-
-1. Den ubundne lagtykkelse fastlægges som t_SG + t_BL fra VejDim-kørslen. Ved
-   E-værdier mellem de kørte punkter interpoleres i log(Eu).
-2. Den ækvivalente Eo bestemmes ved interpolation mellem de to nærmeste
-   Eo-kurver, således at den ustabiliserede lagtykkelse svarer til den
-   fastlagte.
-3. Lagtykkelsen for armeret opbygning bestemmes ved interpolation mellem de
-   samme to Eo-kurver med samme interpolationsfaktor. Reduktionen følger heraf.
-4. Lagtykkelserne korrigeres for friktionsvinkel og geonettype.
-
-Grundlaget er rent bæreevnemæssigt. Kravene til frostsikring og koblingshøjde,
-jf. håndbogens afsnit 5.1 og 5.3, er ikke omfattet og bør kontrolleres
-særskilt.
-"""
-
-_KORR_DATA_INTRO_MD = """
-**{antal} kørsler** = T1–T6 × Eu {{3, 4, 5, 10, 15, 20, 30, 40 MPa}}, alle med:
-
-- Belastningsmodel Æ10 tvillingehjul (standard), 60–80 km/t, afvanding "Nej".
-- Underbund "Frostsikker" med **manuelt overskrevet E = celle-Eu** — fjerner
-  koblingshøjdekravet, så kørslen bliver ren bæreevne (dokumenteret forudsætning).
-- Levetidsmål 20 år; alle lag ≥ 20 år; SG II (E = 300) over BL II U≤3 (E = 100),
-  justeret af VejDim.
-- **Standard asfalt-E** (ikke overskrevet).
-
-**Fast asfaltpakke pr. klasse** (bundet lag låst hvor muligt, ellers
-VejDim-beregnet — derfor et interval, hvor tykkelsen varierer med Eu):
-"""
-
-_KORR_DATA_NOTE_MD = """
-Tykkelser på bundne bærelag, som VejDim selv beregner (kan ikke låses), er
-programmets egne værdier. NÆ10 er dimensioneringstrafikken over
-20 år for klassen.
-"""
+        '<div class="korr-eksempel-svar">Cellen viser '
+        f'<b>{eo_aekv:.0f}</b><span>afrundet fra '
+        f'{_dk_num(eo_aekv, ".1f")} MPa</span></div>'
+        '</div>'
+    )
 
 
 def _tykkelse_interval(vaerdier: list[float]) -> str:
@@ -6116,85 +6169,48 @@ def _asfaltpakke_rows(raekker: list[dict]) -> list[dict]:
         })
     return ud
 
-_KORR_ZONER_MD = """
-Sammenkædningen er gyldig i en veldefineret **kernezone**, som omfatter 30 af
-tabellens 48 celler — typisk T2–T4 ved middel underbund og de lave
-trafikklasser ved stiv underbund. I kernezonen ligger reduktionerne på
-**25–47 %, med en middelværdi på 30 %**, hvilket svarer til niveauet ved
-dimensionering efter belastningsklasse.
-
-Uden for kernezonen falder opslagspunktet uden for designdiagrammernes
-gyldighedsområde. Der foretages ikke ekstrapolation; i stedet afvises cellen:
-
-- **"under"** (blød underbund, lav trafikklasse): den ubundne lagtykkelse fra
-  VejDim er mindre end den mest konservative kurve i diagrammet.
-  Belastningsklassegrundlaget bør anvendes. Koblingshøjden er ofte styrende for
-  disse celler i praksis.
-- **"over"** (stiv underbund, høj trafikklasse): den ubundne lagtykkelse fra
-  VejDim overstiger diagrammernes tykkelsesområde. En konkret VejDim-beregning
-  er nødvendig.
-
-**Forbehold:**
-
-1. **VejDim omfatter ikke geonet.** Reduktionen hviler på feltforsøg fra
-   GS-GRID og Tensar, ikke på vejreglen.
-2. **MSL erstatter stabilgrus og bundsikring samlet.** Sammenligningen foretages
-   på den samlede ubundne lagtykkelse. Materialekravet til MSL svarer til
-   stabilgrus og er dermed strengere end kravet til bundsikring, hvilket er
-   konservativt.
-3. **Frostsikring og koblingshøjde er ikke omfattet.** Kørslerne er udført med
-   frostsikker underbund. En geonet-reduceret opbygning bør ikke bringe
-   totalhøjden under koblingshøjden for frostfarlig underbund, jf. håndbogens
-   afsnit 5.3. Forholdet bør kontrolleres særskilt.
-4. **Manglende armerede kurver i kernezonen.** I enkelte celler mangler
-   diagrammet data for 1 lag geonet ved den ækvivalente Eo, idet kurven er tom
-   ved høj Eo og tynd opbygning. Reduktionen kan da ikke bestemmes, selv om
-   cellen ligger inden for kernezonen.
-5. **Følsomhed over for asfaltpakken.** Den ækvivalente Eo afhænger af den
-   valgte, faste asfaltpakke pr. trafikklasse. De anvendte pakker er VejDims
-   egne værdier.
-6. **Trafikklasse T7 er ikke medtaget**, idet klassen er åben. Der henvises til
-   en konkret VejDim-beregning.
-"""
-
 def render_trafikklasse_korrelation() -> None:
-    """Trafikklasse-korrelationen som nummererede trin, jf. afsnit 5c.
+    """Trafikklasse-korrelationen som fire trin, jf. designgennemgangens 10a.
 
-    Tabellen er sidens hovedindhold og får hele bredden; metoden står ved
-    siden af datagrundlaget.
+    Siden viser tabellerne og hvad de betyder; metoden med formler og
+    gennemregnet eksempel står i Hjælp, kapitel 1 og 2. Eo-matricen er sidens
+    egentlige indhold og fremhæves, idet det er den tabel, dimensioneringen
+    slår op i.
     """
     ui.sidehoved(
         "Trafikklasse-korrelation",
         "Vejledende kobling mellem Vejdirektoratets trafikklasser og "
         "designmanualernes Eo-kurver. Kørslerne kan redigeres — den "
-        "ækvivalente Eo genberegnes og bruges med det samme i beregningen.",
+        "ækvivalente Eo genberegnes og anvendes med det samme i "
+        "dimensioneringen. Metoden er beskrevet i Hjælp og dokumentation.",
     )
 
     raekker = berig_koersel_raekker(_aktiv_koersel_raekker())
 
     import pandas as pd
 
-    with ui.trin_kort(1, "VejDim-kørsler") as t1:
+    # Kortet rummer kørselstabellen i fuld bredde, og brødteksten følger med,
+    # så den ikke står som en smal spalte over tabellen.
+    with ui.trin_kort(1, "VejDim-kørsler", bred_brodtekst=True) as t1:
         t1.opsummering = f"{len(raekker)} kørsler · redigerbar"
-        st.subheader("VejDim-kørsler (redigerbar)")
-        st.caption(
-            "De oprindelige kørsler, præcis som de blev indtastet i VejDim — og "
-            "samtidig det grundlag, dimensioneringen regner på. Ret en værdi, og "
-            "Eo_ækv-tabellen nedenfor og trafikklasse-beregningen følger med med "
-            "det samme. **Ubundet** og **Samlet højde** beregnes automatisk og kan "
-            "ikke redigeres."
+        st.markdown(
+            "Der er udført dimensionering af de ubundne lag med Vejdirektoratets værktøj VejDim. I tabellen herunder er angivet de anvendte materialer og deres tykkelser som angivet i VejDim efter hver beregning. "
+            "Rettes en værdi, følger Eo-matricen nedenfor og dimensioneringen med. **Ubundet** og **Samlet højde** beregnes og kan ikke redigeres."
         )
 
-        if st.button(
-            "Nulstil til standardværdier",
-            type="secondary",
-            help="Kasserer foretagne ændringer og gendanner de oprindelige "
-                 "48 kørsler.",
-        ):
-            slet_koersler_json_og_nulstil()
-            st.session_state["vejdim_koersel_raekker"] = _standard_koersel_raekker()
-            st.session_state.pop("koersel_editor", None)
-            st.rerun()
+        kol_nulstil, kol_csv, _ = st.columns([1, 1, 2.6], gap="small")
+        with kol_nulstil:
+            if st.button(
+                "Nulstil kørsler",
+                key="korr_nulstil",
+                width="stretch",
+                help="Kasserer foretagne ændringer og gendanner de oprindelige "
+                     f"{len(raekker)} kørsler.",
+            ):
+                slet_koersler_json_og_nulstil()
+                st.session_state["vejdim_koersel_raekker"] = _standard_koersel_raekker()
+                st.session_state.pop("koersel_editor", None)
+                st.rerun()
 
         editor_rows = [
             {
@@ -6219,18 +6235,37 @@ def render_trafikklasse_korrelation() -> None:
             }
             for r in raekker
         ]
+        with kol_csv:
+            st.download_button(
+                "Hent som CSV",
+                data=pd.DataFrame(editor_rows).to_csv(index=False, sep=";")
+                     .encode("utf-8-sig"),
+                file_name="vejdim_koersler.csv",
+                mime="text/csv",
+                key="korr_csv",
+                width="stretch",
+                help="De viste kørsler med semikolon som skilletegn.",
+            )
+
         _mm = dict(min_value=0.0, step=10.0, format="%.0f")
-        # Højde nok til alle rækker, så tabellen vises i fuld længde uden scroll.
-        # Streamlit bruger ca. 35 px pr. række + 35 px til overskriftsrækken.
-        editor_hoejde = 35 * (len(editor_rows) + 1) + 3
+        # Siden viser de første ni kørsler og lader resten ligge i tabellens
+        # scrollområde. Det holder siden kompakt, uden at rækkerne bliver
+        # skjult fra editoren.
+        vis_alle = st.session_state.get("korr_vis_alle", False)
+        synlige_rækker = len(editor_rows) if vis_alle else min(9, len(editor_rows))
+        editor_hoejde = 35 * (synlige_rækker + 1) + 3
         redigeret = st.data_editor(
             pd.DataFrame(editor_rows),
             width="stretch",
             height=editor_hoejde,
             hide_index=True,
             column_config={
-                "Trafikklasse": st.column_config.TextColumn("Trafikklasse", disabled=True),
-                "Eu (MPa)": st.column_config.NumberColumn("Eu (MPa)", disabled=True, format="%.0f"),
+                # Trafikklasse og Eu bliver stående ved vandret scroll, så den
+                # række, der rettes i, altid kan aflæses.
+                "Trafikklasse": st.column_config.TextColumn(
+                    "Trafikklasse", disabled=True, pinned=True),
+                "Eu (MPa)": st.column_config.NumberColumn(
+                    "Eu (MPa)", disabled=True, format="%.0f", pinned=True),
                 "t slidlag (mm)": st.column_config.NumberColumn("t slidlag (mm)", **_mm),
                 "t bindelag (mm)": st.column_config.NumberColumn("t bindelag (mm)", **_mm),
                 "t bundet (mm)": st.column_config.NumberColumn("t bundet (mm)", **_mm),
@@ -6258,6 +6293,20 @@ def render_trafikklasse_korrelation() -> None:
             },
             key="koersel_editor",
         )
+        fod_venstre, fod_hoejre = st.columns([1, 1], vertical_alignment="center")
+        with fod_venstre:
+            st.caption(
+                f"Viser {synlige_rækker} af {len(editor_rows)} kørsler · "
+                "Trafikklasse og Eu bliver stående ved vandret scroll"
+            )
+        with fod_hoejre:
+            if st.button(
+                "Vis kun de første 9" if vis_alle else f"Vis alle {len(editor_rows)}",
+                key="korr_vis_alle_knap",
+                type="tertiary",
+            ):
+                st.session_state["korr_vis_alle"] = not vis_alle
+                st.rerun()
 
         nye_raekker = _normaliser_koersel_raekker([
             {
@@ -6287,75 +6336,103 @@ def render_trafikklasse_korrelation() -> None:
             )
             ui.besked(
                 f"<b>{antal} kørsel(er) er ændret</b> i forhold til de oprindelige "
-                f"værdier. Brug <i>Nulstil til standardværdier</i> for at gendanne dem.",
+                f"værdier. Brug <i>Nulstil kørsler</i> for at gendanne dem.",
                 "advarsel",
             )
 
-        st.divider()
-
-        st.subheader("Afledt: ækvivalent Eo (Eo_ækv)")
+    # Eo-matricen er sidens egentlige indhold og fremhæves derfor: det er
+    # denne tabel, dimensioneringen slår op i.
+    with ui.trin_kort(
+        2, "Ækvivalent Eo — opslagstabellen", fremhaevet=True,
+    ) as t2:
+        t2.opsummering = "MPa · afledt af kørslerne ovenfor"
+        # Den fulde forklaring — afledningen, forbeholdet om at matricen alene
+        # gælder trafikklasse, og figuren — står i Hjælp, kapitel 2. Siden
+        # angiver alene, hvad tabellen bruges til.
         st.markdown(
-            "Tabellen angiver resultatet af tilbageberegningen for hver celle, "
-            "det vil sige opslagspunktet i designdiagrammet — den kurve, hvis "
-            "ustabiliserede lagtykkelse svarer til kørslens ubundne opbygning, "
-            "jf. metodeafsnittet ovenfor. Det er denne tabel, dimensioneringen "
-            "slår op i ved valg af trafikklasse.\n\n"
-            "Designdiagrammerne omfatter alene kurverne **Eo = 30–150 MPa**. En "
-            "celle kan derfor kun tildeles et opslagspunkt, hvis den ubundne "
-            "lagtykkelse fra VejDim ligger mellem den tyndeste og den tykkeste "
-            "kurve ved den pågældende E-værdi. I modsat fald angives:\n\n"
-            "- **under** — den ubundne lagtykkelse er mindre end diagrammets mest "
-            "konservative kurve (Eo = 30 MPa). Eksempelvis kræver T1 ved "
-            "Eu = 5 MPa 560 mm, mens kurven for Eo = 30 MPa ligger på 900 mm. Der "
-            "findes ingen kurve med så lille en lagtykkelse, og reduktionen kan "
-            "ikke bestemmes. Belastningsklassegrundlaget bør anvendes. I praksis "
-            "er frostkravet ofte styrende for totalhøjden i disse tilfælde.\n"
-            "- **over** — den ubundne lagtykkelse overstiger diagrammets stiveste "
-            "kurve (Eo = 150 MPa). Eksempelvis kræver T6 ved Eu = 10 MPa 1.146 mm, "
-            "mens kurven for Eo = 150 MPa slutter ved 1.100 mm. Kurverne "
-            "forlænges ikke ud over feltforsøgenes gyldighedsområde, og der "
-            "henvises til en konkret VejDim-beregning.\n\n"
-            "- **mangler** — cellen indeholder endnu ingen VejDim-kørsel, idet den "
-            "ubundne lagtykkelse er 0. Cellen indgår hverken i opslaget eller i "
-            "interpolationen, før den udfyldes i tabellen ovenfor.\n\n"
-            "Vælges en celle i zonen 'under' eller 'over' ved dimensioneringen, "
-            "vises den tilsvarende meddelelse i stedet for resultater. Der gøres "
-            "opmærksom på, at zonerne følger det aktive designdiagram. Ændres "
-            "diagramdata eller kørslerne ovenfor, kan celler skifte zone.\n\n"
-            "For E-værdier mellem to kørte punkter bestemmes den ubundne "
-            "lagtykkelse ved lineær interpolation i log(Eu), hvorefter den "
-            "ækvivalente Eo tilbageberegnes ved den valgte E-værdi. Lagtykkelsen "
-            "aftager tilnærmelsesvis retlinet med log(Eu), hvorfor denne "
-            "fremgangsmåde er mere nøjagtig end interpolation på den ækvivalente "
-            "Eo."
+            "Det er denne tabel, dimensioneringen slår op i ved valg af "
+            "trafikklasse."
         )
-        korr = korrelation_fra_koersler(
-            koersler_fra_raekker(raekker), _aktiv_t_basis_table()
-        )
-        _vis_korrelationstabel(korr)
+        t_basis = _aktiv_t_basis_table()
+        korr = korrelation_fra_koersler(koersler_fra_raekker(raekker), t_basis)
+        # Regneeksemplet står ved siden af tabellen, så en enkelt celle kan
+        # følges fra kørsel til opslagspunkt uden at forlade siden.
+        kol_tabel, kol_eksempel = st.columns([1.15, 1], gap="large")
+        with kol_tabel:
+            _vis_korrelationstabel(korr, med_forklaring=False)
+        with kol_eksempel:
+            _render_korr_eksempel(korr, t_basis)
 
+        kol_zoner, kol_link = st.columns([1, 0.42], gap="small")
+        with kol_zoner:
+            st.html(
+                '<div class="korr-zoneforklaring"><b>under</b> / <b>over</b> — '
+                'trafikklassen kræver en tyndere henholdsvis tykkere opbygning '
+                'end designdiagrammernes område, og reduktionen kan ikke '
+                'bestemmes. <b>mangler</b> — cellen har endnu ingen '
+                'VejDim-kørsel. Den grønne celle er den aktuelle '
+                'beregning.</div>'
+            )
+        with kol_link:
+            hjaelp_knap(
+                "trafikklasse-korrelationen",
+                "Se Hjælp → Trafikklasse-korrelationen",
+                key="korr_link_zoner",
+                width="stretch",
+            )
 
-    kol_metode, kol_data = st.columns([1.25, 1], gap="medium")
+    kol_metode, kol_data = st.columns([1, 1], gap="medium")
     with kol_metode:
-        with ui.trin_kort(2, "Metode og fremgangsmåde") as t2:
-            st.markdown(_KORR_METODE_MD)
-            t2.opsummering = "Fra VejDim til designdiagram"
+        with ui.trin_kort(3, "Sådan er koblingen fremstillet") as t3:
+            t3.opsummering = f"{len(_KORR_TRIN)} trin"
+            poster = "".join(
+                f'<div class="korr-trin"><span>{nr}</span>'
+                f'<div><div class="korr-trin-titel">{html.escape(titel)}</div>'
+                f'<div class="korr-trin-tekst">{html.escape(tekst)}</div>'
+                '</div></div>'
+                for nr, (titel, tekst) in enumerate(_KORR_TRIN, start=1)
+            )
+            st.html(f'<div class="korr-trinliste">{poster}</div>')
+            hjaelp_knap(
+                "beregningsmetoden",
+                "Formler og gennemregnet eksempel",
+                key="korr_link_metode",
+            )
+            st.caption("Hjælp → Beregningsmetoden")
+
     with kol_data:
-        with ui.trin_kort(3, "Datagrundlag") as t3:
-            st.markdown(_KORR_DATA_INTRO_MD.format(antal=len(raekker) or 36))
-            st.dataframe(
-                _asfaltpakke_rows(raekker),
-                width="content",
-                hide_index=True,
+        with ui.trin_kort(4, "Datagrundlag og forudsætninger") as t4:
+            t4.opsummering = "Kan redigeres"
+            st.markdown(
+                f"**{len(raekker)} kørsler** = T1–T6 × Eu "
+                "{3, 4, 5, 10, 15, 20, 30, 40} MPa, alle med:"
             )
-            st.markdown(_KORR_DATA_NOTE_MD)
-            with st.expander("Zoner og forbehold"):
-                st.markdown(_KORR_ZONER_MD)
+            poster = "".join(
+                f'<div class="korr-data-post"><span>{html.escape(navn)}</span>'
+                f'<span>{html.escape(vaerdi)}</span></div>'
+                for navn, vaerdi in _KORR_FORUDSAETNINGER
+            )
+            st.html(f'<div class="korr-dataliste">{poster}</div>')
+            with st.expander(
+                f"Fast asfaltpakke pr. klasse · {len(TRAFIKKLASSER)} rækker"
+            ):
+                st.dataframe(
+                    _asfaltpakke_rows(raekker), width="stretch", hide_index=True,
+                )
+                st.caption(
+                    "Bundne bærelag er låst, hvor det er muligt; ellers er "
+                    "VejDims egne værdier anvendt, og tykkelsen varierer med "
+                    "Eu. NÆ10 er dimensioneringstrafikken over 20 år."
+                )
             st.caption(
-                "Fuld dokumentation: *Dokumenter og data/"
-                "Korrelation_trafikklasse_Eo.md*."
+                "Forbehold og gyldighedsområde er beskrevet i Hjælp → "
+                "Datagrundlag og forbehold."
             )
-            t3.opsummering = "Kan redigeres"
+            hjaelp_knap(
+                "datagrundlag-og-forbehold",
+                "Åbn forbehold og gyldighedsområde",
+                key="korr_link_data",
+            )
 
 
 def _materiale_editor(lagtype: str, materialer: list[dict], noegle: str):
@@ -7240,6 +7317,9 @@ elif aktiv_side == "designdiagrammer":
 
 elif aktiv_side == "trafikklasse_korrelation":
     render_trafikklasse_korrelation()
+
+elif aktiv_side == "hjaelp":
+    render_hjaelp()
 
 elif aktiv_side == "rapport":
     render_rapport()

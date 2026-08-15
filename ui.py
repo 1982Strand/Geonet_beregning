@@ -197,7 +197,10 @@ class Trin:
 
 
 @contextmanager
-def trin_kort(nummer: int, titel: str):
+def trin_kort(
+    nummer: int, titel: str, *,
+    fremhaevet: bool = False, bred_brodtekst: bool = False,
+):
     """Nummereret trin-kort, jf. designgennemgangens flow A.
 
     Dimensioneringen føres igennem som tre trin på én side. Hvert trin står
@@ -211,6 +214,14 @@ def trin_kort(nummer: int, titel: str):
         with ui.trin_kort(1, "Underbund") as trin:
             eu = ...
             trin.opsummering = f"Eu {eu} MPa"
+
+    fremhaevet=True giver kortet grøn ramme og grønt hoved. Anvendes, hvor ét
+    af siden trin bærer dens egentlige indhold — som Eo-matricen på
+    korrelationssiden, der er den tabel, dimensioneringen slår op i.
+
+    bred_brodtekst=True ophæver linjelængden på 78 tegn inde i kortet, så
+    brødteksten følger kortets bredde. Anvendes, hvor kortet i øvrigt rummer
+    en bred tabel, og en smal tekstspalte derfor ville stå afskåret.
     """
     with st.container(key=f"bg_trin_{nummer}"):
         plads = st.empty()
@@ -218,8 +229,13 @@ def trin_kort(nummer: int, titel: str):
         try:
             yield trin
         finally:
+            klasser = ["bg-trin-hoved"]
+            if fremhaevet:
+                klasser.append("bg-trin-groen")
+            if bred_brodtekst:
+                klasser.append("bg-trin-bred")
             plads.html(
-                f'<div class="bg-trin-hoved">'
+                f'<div class="{" ".join(klasser)}">'
                 f'<div class="bg-trin-nr">{nummer}</div>'
                 f'<div class="bg-trin-titel">{escape(titel)}</div>'
                 f'<div class="bg-trin-opsum">{trin.opsummering}</div></div>'
