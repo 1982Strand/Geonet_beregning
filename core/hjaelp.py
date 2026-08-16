@@ -38,6 +38,20 @@ og knapteksten som indhold:
     :::gaatil trafikklasse_korrelation
     Gå til Trafikklasse-korrelation
     :::
+
+Listen over kildedokumenter sættes ind med en tom blok:
+
+    :::kilder
+    :::
+
+Produktdokumenterne vedligeholdes da i core.data.KILDEDOKUMENTER, hvorfra
+også noten under geonet-tabellen dannes; kapitlet angiver alene, hvor listen
+skal stå. Øvrige dokumenter skrives som linjer i blokken, ét pr. linje, i
+formen »titel | udgiver | dato | adresse«; datofeltet må stå tomt:
+
+    :::kilder
+    VejDim | Vejdirektoratet |  | https://vejdim.app.vd.dk/
+    :::
 """
 
 from __future__ import annotations
@@ -51,7 +65,7 @@ KAPITEL_MAPPE = Path(__file__).resolve().parent.parent / "Dokumenter og data" / 
 _HOVED = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.S)
 _AFSNIT = re.compile(r"^##\s+(\S+)\s+(.+?)\s*$", re.M)
 _BLOK = re.compile(
-    r"^:::(formel|figur|gaatil)[ \t]*(.*?)\n(.*?)^:::[ \t]*$", re.M | re.S
+    r"^:::(formel|figur|gaatil|kilder)[ \t]*(.*?)\n(.*?)^:::[ \t]*$", re.M | re.S
 )
 
 
@@ -77,6 +91,18 @@ class Gaatil:
 
     side: str
     tekst: str
+
+
+@dataclass
+class Kilder:
+    """Listen over kildedokumenter, sat ind hvor blokken står.
+
+    Er blokken tom, hentes produktdokumenterne ved visning fra
+    core.data.KILDEDOKUMENTER, så URL'erne kun står ét sted. Ellers vises
+    kapitlets egne poster, jf. _laes_kilder().
+    """
+
+    poster: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -120,11 +146,31 @@ def _laes_hoved(tekst: str) -> tuple[dict, str]:
     return felter, tekst[m.end():]
 
 
-def _del_krop(krop: str) -> tuple[list, list[Figur]]:
-    """Del et afsnits brødtekst i markdown, formler, henvisninger og figurer.
+def _laes_kilder(brod: str) -> list[dict]:
+    """Læs dokumentlinjerne i en :::kilder-blok.
 
-    Figurerne samles for sig, da de sættes i sidekolonnen; markdown, formler
-    og henvisninger bevarer deres indbyrdes rækkefølge.
+    Hver linje skrives »titel | udgiver | dato | adresse«. Linjer uden alle
+    fire felter, uden titel eller uden adresse udelades, så en skrivefejl i
+    kapitelfilen ikke standser visningen.
+    """
+    poster: list[dict] = []
+    for linje in brod.split("\n"):
+        dele = [d.strip() for d in linje.split("|")]
+        if len(dele) != 4 or not dele[0] or not dele[3]:
+            continue
+        poster.append({
+            "titel": dele[0], "udgiver": dele[1],
+            "dato": dele[2], "url": dele[3],
+        })
+    return poster
+
+
+def _del_krop(krop: str) -> tuple[list, list[Figur]]:
+    """Del et afsnits brødtekst i markdown, formler, henvisninger, kildelister
+    og figurer.
+
+    Figurerne samles for sig, da de sættes i sidekolonnen; de øvrige stykker
+    bevarer deres indbyrdes rækkefølge.
     """
     indhold: list = []
     figurer: list[Figur] = []
@@ -146,6 +192,8 @@ def _del_krop(krop: str) -> tuple[list, list[Figur]]:
             ))
         elif slags == "gaatil":
             indhold.append(Gaatil(side=hoved, tekst=brod.strip()))
+        elif slags == "kilder":
+            indhold.append(Kilder(poster=_laes_kilder(brod)))
         else:
             figurer.append(Figur(tekst=hoved, tabel=brod.strip()))
         pos = m.end()

@@ -31,6 +31,7 @@ from core.data import (
     GEONET_NAVNE,
     GEONET_DB,
     GEONET_NOTER,
+    KILDEDOKUMENTER,
     MATERIAL_DB,
     EU_MIN, EU_MAX,
     K_PHI,
@@ -5436,6 +5437,27 @@ def _render_hjaelp_figur(figur, nummer: int) -> None:
     st.html(f'<div class="hj-figur-tekst">{html.escape(figur.tekst)}</div>')
 
 
+def _render_hjaelp_kilder(kilder) -> None:
+    """Kildedokumenterne med link til udgiverens egen offentliggjorte udgave.
+
+    En tom blok viser produktdokumenterne fra core.data.KILDEDOKUMENTER,
+    hvorfra også noten under geonet-tabellen dannes; ellers vises kapitlets
+    egne poster. Linket åbnes i et nyt faneblad, så beregningen ikke forlades.
+    """
+    def _note(d: dict) -> str:
+        # Datoen udelades, hvor dokumentet ikke har en fast udgave.
+        return " · ".join(x for x in (d.get("udgiver"), d.get("dato")) if x)
+
+    poster = "".join(
+        f'<a class="hj-kilde" href="{html.escape(d["url"], quote=True)}" '
+        f'target="_blank" rel="noopener">'
+        f'<span class="hj-kilde-titel">{html.escape(d["titel"])}</span>'
+        f'<span class="hj-kilde-note">{html.escape(_note(d))}</span></a>'
+        for d in (kilder.poster or KILDEDOKUMENTER)
+    )
+    st.html(f'<div class="hj-kilder">{poster}</div>')
+
+
 def _render_hjaelp_gaatil(henvisning, key: str) -> None:
     """Henvisning til en anden side som knap.
 
@@ -5456,7 +5478,7 @@ def _render_hjaelp_kapitel(kapitel) -> None:
     """Kapitlets afsnit med figurerne i sidekolonnen.
 
     Hvert afsnit sættes i sin egen række, så figuren står ud for det afsnit,
-    den hører til. Kapitlets indholdsfortegnelse afslutter sidekolonnen.
+    den hører til.
     """
     figur_nr = 0
     for afsnit in kapitel.afsnit:
@@ -5475,41 +5497,14 @@ def _render_hjaelp_kapitel(kapitel) -> None:
                         stykke,
                         key=f"hj_gaatil_{kapitel.noegle}_{afsnit.nummer}_{nr}",
                     )
+                elif isinstance(stykke, hjaelp_mod.Kilder):
+                    _render_hjaelp_kilder(stykke)
                 else:
                     st.markdown(stykke)
         with hoejre:
             for figur in afsnit.figurer:
                 figur_nr += 1
                 _render_hjaelp_figur(figur, figur_nr)
-
-    _, kol_indhold = st.columns([1.75, 1], gap="large")
-    with kol_indhold:
-        poster = "".join(
-            f'<div><span>{html.escape(a.nummer)}</span>'
-            f'{html.escape(a.titel)}</div>'
-            for a in kapitel.afsnit
-        )
-        st.html(
-            '<div class="hj-indhold"><div class="hj-indhold-hoved">'
-            f'På dette kapitel</div>{poster}</div>'
-        )
-
-
-def aabn_hjaelp(noegle: str) -> None:
-    """Skift til Hjælp og fold det angivne kapitel ud.
-
-    Anvendes af henvisningerne fra beregningssiderne, så et opslag fører
-    direkte til det rette kapitel frem for til sidens top.
-    """
-    st.session_state["aktiv_side"] = "hjaelp"
-    st.session_state["hjaelp_aabne"] = {noegle}
-    st.rerun()
-
-
-def hjaelp_knap(noegle: str, tekst: str, *, key: str, **kwargs) -> None:
-    """Knap, der åbner et kapitel i Hjælp."""
-    if st.button(tekst, key=key, **kwargs):
-        aabn_hjaelp(noegle)
 
 
 def render_hjaelp() -> None:
@@ -5561,17 +5556,6 @@ def render_hjaelp() -> None:
     aabne = st.session_state.setdefault(
         "hjaelp_aabne", {_HJAELP_STANDARD_KAPITEL}
     )
-    alle_aabne = len(aabne) == len(kapitler)
-    kol_knap, _ = st.columns([1, 3.4])
-    with kol_knap:
-        if st.button(
-            "Luk alle kapitler" if alle_aabne else "Åbn alle kapitler",
-            key="hjaelp_alle", width="stretch",
-        ):
-            st.session_state["hjaelp_aabne"] = (
-                set() if alle_aabne else {k.noegle for k in kapitler}
-            )
-            st.rerun()
 
     for kapitel in kapitler:
         aaben = kapitel.noegle in aabne
@@ -5580,7 +5564,7 @@ def render_hjaelp() -> None:
             with kol_hoved:
                 st.html(
                     f'<div class="hj-kap-hoved{" hj-kap-aaben" if aaben else ""}">'
-                    f'<div class="hj-kap-nr">Kapitel {kapitel.nummer}</div>'
+                    f'<div class="hj-kap-nr">{kapitel.nummer}</div>'
                     f'<div class="hj-kap-titel">{html.escape(kapitel.titel)}</div>'
                     f'<div class="hj-kap-antal">{kapitel.afsnit_tal}</div>'
                     f'<div class="hj-kap-resume">{html.escape(kapitel.resume)}</div>'
@@ -5601,12 +5585,6 @@ def render_hjaelp() -> None:
                     st.rerun()
             if aaben:
                 _render_hjaelp_kapitel(kapitel)
-
-    st.caption(
-        "Teksten vedligeholdes som markdown-filer i *Dokumenter og "
-        "data/hjaelp* og indlæses ved visning, så dokumentationen kun findes "
-        "ét sted."
-    )
 
 
 # ===========================================================================
@@ -6007,19 +5985,19 @@ def _korrelation_pivot_rows(korr: dict) -> list[dict]:
 
 
 # Metoden bag koblingen — de fire led, siden sammenfatter. Formlerne og det
-# gennemregnede eksempel står i Hjælp, kapitel 1, jf. hjaelp_knap() nedenfor.
+# gennemregnede eksempel står i Hjælp, kapitel 1 og 2.
 _KORR_TRIN = (
     ("Ubunden lagtykkelse",
      "VejDim-kørslen fastlægger den lagtykkelse, trafikklassen kræver ved "
-     "underbundens E-modul. Mellem kørte E-værdier interpoleres."),
+     "underbundens E-modul. Hvis der er valgt et Eu mellem kørte E-værdier interpoleres værdien."),
     ("Ækvivalent Eo",
      "Den Eo-kurve, hvis ustabiliserede lagtykkelse svarer til den fastlagte, "
-     "bestemmes ved interpolation mellem de to nærmeste kurver."),
+     "bestemmes ved interpolation mellem de to nærmeste kurver fra de originale designdiagrammer."),
     ("Geonet-reduktion",
      "Reduktionen følger af de samme to kurvers armerede lagtykkelser med "
      "samme interpolationsfaktor."),
     ("Korrektion",
-     "Lagtykkelsen korrigeres for friktionsvinkel og for det valgte geonet i "
+     "Lagtykkelsen korrigeres for friktionsvinkel og for det valgte geonets effektindeks i "
      "forhold til referencenettet."),
 )
 
@@ -6095,6 +6073,9 @@ def _render_korr_eksempel(korr: dict, t_basis_table: dict) -> None:
 
     frac = t2["frac"]
     eo_aekv = t2["eo_aekv"]
+    st.markdown(
+        "**Eksempel på udregning af ækvivalent Eo-værdi i tabellen**"
+    )
     st.html(
         '<div class="korr-eksempel">'
         f'<div class="korr-eksempel-hoved">Eksempel · {t_klasse} ved '
@@ -6363,23 +6344,13 @@ def render_trafikklasse_korrelation() -> None:
         with kol_eksempel:
             _render_korr_eksempel(korr, t_basis)
 
-        kol_zoner, kol_link = st.columns([1, 0.42], gap="small")
-        with kol_zoner:
-            st.html(
-                '<div class="korr-zoneforklaring"><b>under</b> / <b>over</b> — '
-                'trafikklassen kræver en tyndere henholdsvis tykkere opbygning '
-                'end designdiagrammernes område, og reduktionen kan ikke '
-                'bestemmes. <b>mangler</b> — cellen har endnu ingen '
-                'VejDim-kørsel. Den grønne celle er den aktuelle '
-                'beregning.</div>'
-            )
-        with kol_link:
-            hjaelp_knap(
-                "trafikklasse-korrelationen",
-                "Se Hjælp → Trafikklasse-korrelationen",
-                key="korr_link_zoner",
-                width="stretch",
-            )
+        st.html(
+            '<div class="korr-zoneforklaring"><b>under</b> / <b>over</b> — '
+            'trafikklassen kræver en tyndere henholdsvis tykkere opbygning '
+            'end designdiagrammernes område, og reduktionen kan ikke '
+            'bestemmes</div>'
+        )
+        st.caption("Se Hjælp afsnit 2 for yderligere detaljer om trafikklasse korrelationen.")
 
     kol_metode, kol_data = st.columns([1, 1], gap="medium")
     with kol_metode:
@@ -6393,12 +6364,10 @@ def render_trafikklasse_korrelation() -> None:
                 for nr, (titel, tekst) in enumerate(_KORR_TRIN, start=1)
             )
             st.html(f'<div class="korr-trinliste">{poster}</div>')
-            hjaelp_knap(
-                "beregningsmetoden",
-                "Formler og gennemregnet eksempel",
-                key="korr_link_metode",
+            st.caption(
+                "Se Hjælp afsnit 1 for yderligere detaljer om "
+                "beregningsmetoden."
             )
-            st.caption("Hjælp → Beregningsmetoden")
 
     with kol_data:
         with ui.trin_kort(4, "Datagrundlag og forudsætninger") as t4:
@@ -6425,35 +6394,24 @@ def render_trafikklasse_korrelation() -> None:
                     "Eu. NÆ10 er dimensioneringstrafikken over 20 år."
                 )
             st.caption(
-                "Forbehold og gyldighedsområde er beskrevet i Hjælp → "
-                "Datagrundlag og forbehold."
-            )
-            hjaelp_knap(
-                "datagrundlag-og-forbehold",
-                "Åbn forbehold og gyldighedsområde",
-                key="korr_link_data",
+                "Se Hjælp afsnit 7 for yderligere detaljer om datagrundlag og forbehold."
             )
 
 
 def _materiale_editor(lagtype: str, materialer: list[dict], noegle: str):
     """Redigerbar tabel for én lagtype, jf. afsnit 5b.
 
-    Kolonnen Standard viser materialets oprindelige friktionsvinkel, så en
-    ændring altid kan aflæses i forhold til udgangspunktet.
+    Friktionsvinklen står i én kolonne. Standardværdierne er fastlagt i
+    _standard_materialer() og gendannes med Nulstil til standard; hvilke
+    materialer der afviger, fremgår af meddelelsen øverst på siden.
     """
     import pandas as pd
 
-    std_phi = {
-        m["navn"]: m["phi"] for m in _standard_materialer()
-    }
-    raekker = [
-        {**m, "standard_phi": std_phi.get(m["navn"])}
-        for m in materialer if m.get("lagtype") == lagtype
-    ]
+    raekker = [m for m in materialer if m.get("lagtype") == lagtype]
     df = pd.DataFrame(
         raekker,
         columns=[
-            "navn", "phi", "standard_phi", "max_korn",
+            "navn", "phi", "max_korn",
             "krav_maskestoerrelse_mm", "anvendelse",
         ],
     )
@@ -6465,16 +6423,14 @@ def _materiale_editor(lagtype: str, materialer: list[dict], noegle: str):
         column_config={
             "navn": st.column_config.TextColumn("Materiale", required=True),
             "phi": st.column_config.NumberColumn(
-                "φ (°)", min_value=20, max_value=60, step=1,
-                format="%d", required=True,
-            ),
-            "standard_phi": st.column_config.NumberColumn(
-                "Standard",
+                "φ (°)",
                 help=(
-                    "Materialets oprindelige friktionsvinkel. Afviger φ "
-                    "herfra, er værdien tilpasset lokalt."
+                    "Materialets friktionsvinkel. Værdien kan tilpasses "
+                    "lokalt; standardværdien gendannes med Nulstil til "
+                    "standard."
                 ),
-                format="%d", disabled=True,
+                min_value=20, max_value=60, step=1,
+                format="%d", required=True,
             ),
             "max_korn": st.column_config.NumberColumn(
                 "Maks. korn (mm)", min_value=0, max_value=500, step=1,
@@ -6496,19 +6452,18 @@ def _materiale_editor(lagtype: str, materialer: list[dict], noegle: str):
     )
     ud = []
     for r in redigeret.to_dict("records"):
-        r.pop("standard_phi", None)
         r["lagtype"] = lagtype
         ud.append(r)
     return ud
 
 
-def _antal_afvigende(materialer: list[dict]) -> int:
-    """Antal materialer, hvis friktionsvinkel afviger fra standarden."""
+def _afvigende_materialer(materialer: list[dict]) -> list[str]:
+    """Materialer, hvis friktionsvinkel afviger fra standarden."""
     std = {m["navn"]: m["phi"] for m in _standard_materialer()}
-    return sum(
-        1 for m in materialer
+    return [
+        m["navn"] for m in materialer
         if m["navn"] in std and m["phi"] != std[m["navn"]]
-    )
+    ]
 
 
 def render_materialer() -> None:
@@ -6521,11 +6476,12 @@ def render_materialer() -> None:
     )
 
     materialer = st.session_state.get("materialer", [])
-    afvigende = _antal_afvigende(materialer)
+    afvigende = _afvigende_materialer(materialer)
     if afvigende:
         ui.besked(
-            f"{afvigende} værdi(er) afviger fra standarden. "
-            "Brug <i>Nulstil til standard</i> for at gendanne dem.",
+            "Friktionsvinklen afviger fra standarden for "
+            f"<b>{html.escape(', '.join(afvigende))}</b>. Brug "
+            "<i>Nulstil til standard</i> for at gendanne værdierne.",
             "advarsel",
         )
 

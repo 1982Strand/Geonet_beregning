@@ -940,11 +940,15 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
   display:grid; grid-template-columns:auto 1fr auto; gap:4px 12px;
   align-items:baseline; padding:14px 0 12px;
 }
+/* Afsnitsnummeret sættes som trin-numrene på beregningssiderne, jf.
+   .bg-trin-nr, så nummereringen er den samme overalt i appen. */
 .hj-kap-nr{
-  font:600 9.5px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--bg-ink-45);
+  align-self:center;
+  width:20px; height:20px; border-radius:3px;
+  background:var(--bg-ink); color:#fff;
+  font:600 11px/20px 'IBM Plex Mono',monospace; text-align:center;
 }
-.hj-kap-aaben .hj-kap-nr{ color:var(--bg-green-700); }
+.hj-kap-aaben .hj-kap-nr{ background:var(--bg-green-700); }
 .hj-kap-titel{ font:600 13.5px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
 .hj-kap-aaben .hj-kap-titel{ color:var(--bg-green-900); }
 .hj-kap-antal{ font:400 11px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
@@ -993,20 +997,21 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
   margin-top:-.4rem;
   font:400 10.5px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
 }
-.hj-indhold{
-  margin-top:1.4rem; padding-top:.7rem;
-  border-top:1px solid var(--bg-line-soft);
+/* Kildedokumenterne: hvert dokument på sin linje med udgiver og dato til
+   højre. Linket peger på udgiverens egen offentliggjorte udgave. */
+.hj-kilder{ margin:.7rem 0 .4rem; border-top:1px solid var(--bg-line-soft); }
+.hj-kilde{
+  display:flex; align-items:baseline; justify-content:space-between; gap:18px;
+  padding:.6rem 0; border-bottom:1px solid var(--bg-line-soft);
+  text-decoration:none;
 }
-.hj-indhold-hoved{
-  font:600 9px/1 'IBM Plex Mono',monospace; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--bg-ink-25); margin-bottom:.5rem;
+.hj-kilde-titel{
+  font:500 12px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-green-700);
 }
-.hj-indhold div{
-  display:flex; gap:9px; padding:.2rem 0;
-  font:400 11px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
-}
-.hj-indhold div span{
-  font:500 11px/1.5 'IBM Plex Mono',monospace; color:var(--bg-ink-25);
+.hj-kilde:hover .hj-kilde-titel{ text-decoration:underline; }
+.hj-kilde-note{
+  flex:none;
+  font:400 10.5px/1.5 'IBM Plex Mono',monospace; color:var(--bg-ink-45);
 }
 
 /* Introkortets fire trin og ordforklaringen. */

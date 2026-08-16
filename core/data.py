@@ -1887,7 +1887,8 @@ GEONET_NAVNE = [g["navn"] for g in GEONET_DB]
 # ---------------------------------------------------------------------------
 
 # Kildedokumenterne bag produktdatabasen, med link til udgiverens egen
-# offentliggjorte udgave. URL'erne peger direkte på PDF-filerne.
+# offentliggjorte udgave. URL'erne peger direkte på PDF-filerne. Listen vises
+# i Hjælp, kapitel 8, jf. :::kilder-blokken i kapitelfilen.
 KILDEDOKUMENTER = [
     {
         "titel": "GS-GRID/E'GRID Designmanual",
@@ -1989,13 +1990,8 @@ GEONET_NOTER = [
     # E-værdi og vises derfor under "Krav til nettet" i produktlisten, hvor
     # E-værdien er kendt (se placement.overlap_krav_mm). Værdierne pr. produkt
     # står fortsat i kolonnerne "Overlæg Eu ≥ 5" og "Overlæg Eu < 5" ovenfor.
-    {
-        "titel": "Kildedokumenter",
-        "tekst": "\n".join(
-            f"{i}. [{d['titel']}]({d['url']}) — {d['udgiver']}, {d['dato']}"
-            for i, d in enumerate(KILDEDOKUMENTER, start=1)
-        ),
-    },
+    # Kildedokumenterne indgår heller ikke som note; de står samlet i Hjælp,
+    # kapitel 8, dannet af KILDEDOKUMENTER ovenfor.
 ]
 
 
