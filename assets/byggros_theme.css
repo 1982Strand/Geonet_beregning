@@ -972,6 +972,9 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
   white-space:pre; overflow-x:auto;
 }
 .kob-formel b{ font-weight:600; color:var(--bg-ink); }
+/* Mellemregningen bag et led står nedtonet efter talkolonnen, så linjens
+   eget tal fortsat læses først. */
+.kob-svag{ color:var(--bg-ink-25); }
 .kob-note{
   font:400 10.5px/1.55 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
   text-wrap:pretty;

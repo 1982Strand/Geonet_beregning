@@ -1266,6 +1266,11 @@ def _kob_regnelinje(tekst: str, tal: str, bredde: int = 33, tal_bredde: int = 10
     return f"{tekst:<{bredde}}{tal:>{tal_bredde}}"
 
 
+def _kob_svag(tekst: str) -> str:
+    """Mellemregningen bag et led, sat nedtonet efter linjens talkolonne."""
+    return f'<span class="kob-svag">   ({_kob_esc(tekst)})</span>'
+
+
 def _kob_slutlinje(tekst: str, tal: str, bredde: int = 33, tal_bredde: int = 10) -> str:
     """Regnestykkets sidste linje: resultatet fremhævet i samme talkolonne.
 
@@ -1563,18 +1568,25 @@ def _kob_figur_diagram(
         f'fill="#4A554E" font-size="9" font-weight="600" text-anchor="middle">'
         f'Bærelagstykkelse [mm]</text>'
     )
-    for kurve, klasse in naboer:
+    # Nabokurverne ligger tæt, og etiketterne ville falde sammen, hvis de sad
+    # samme sted på hver kurve. Den lave Eo-kurve mærkes derfor højt oppe og
+    # til venstre for kurven, den høje længere nede og til højre — de to
+    # kurver ligger netop til hver sin side af hinanden.
+    for (kurve, klasse), andel, side in zip(naboer, (0.60, 0.24), (-1, 1)):
         if len(kurve) < 2:
             continue
         dele.append(
             f'<polyline points="{bane(kurve)}" fill="none" stroke="#C4CAC5" '
             f'stroke-width="1.2" stroke-dasharray="4 3"></polyline>'
         )
-        x, y = kurve[len(kurve) // 3]
+        x, y = kurve[round((len(kurve) - 1) * andel)]
+        # Teksten klemmes inden for tegnefladen, så en kurve tæt ved kanten
+        # ikke skubber etiketten uden for figuren.
+        tx = min(max(sx(x) + side * 5, _KOB_X0 + 6), _KOB_X1 - 6)
         dele.append(
-            f'<text x="{sx(x) + 4:.1f}" y="{sy(y) - 4:.1f}" fill="#9AA39C" '
-            f'font-size="8.5" font-family="IBM Plex Mono, monospace">'
-            f'KL. {klasse}</text>'
+            f'<text x="{tx:.1f}" y="{sy(y) - 5:.1f}" fill="#9AA39C" '
+            f'font-size="8.5" text-anchor="{"end" if side < 0 else "start"}" '
+            f'font-family="IBM Plex Mono, monospace">KL. {klasse}</text>'
         )
     for kurve, farve in armerede:
         if len(kurve) >= 2:
@@ -1772,12 +1784,12 @@ def _kob_trin3(eu: float, eo_aekv: float, t1: dict, t2: dict) -> str:
     ub_dec = 0 if abs(ub - round(ub)) < 0.05 else 1
     kl_lav, kl_hoej = eo_til_klasse(t2["eo_lav"]), eo_til_klasse(t2["eo_hoej"])
     krop = (
-        '<div class="kob-brod">Kravet slås tilbage til den Eo-kurve i '
+        '<div class="kob-brod">Kravet kædes sammen med den Eo-kurve i '
         "designdiagrammerne, der giver netop denne tykkelse uarmeret ved "
         "samme E-værdi. Opslaget foretages i diagrammets egen række for "
-        f"Eu = {_kob_esc(ui.mpa(eu))} — ikke ved at interpolere nabokørslernes "
+        f"Eu = {_kob_esc(ui.mpa(eu))} - ikke ved at interpolere nabokørslernes "
         "ækvivalente Eo. Værdien er en indeksværdi, der peger på en kurve, "
-        "og ikke et krav til underbunden.</div>"
+        "og ikke et forventet overflademodul.</div>"
     )
     krop += _kob_formel(
         _kob_esc(f"uarmeret kurve ved Eu = {_kob_tal(eu)} MPa:"),
@@ -1799,8 +1811,8 @@ def _kob_trin3(eu: float, eo_aekv: float, t1: dict, t2: dict) -> str:
         ) + f"<b>{_kob_esc(_kob_tal(eo_aekv))} MPa</b>",
     )
     return _kob_trin(
-        3, "Driftspunkt — ækvivalent Eo",
-        "korrelationstabellen, tilbageberegnet i diagrammets række",
+        3, "Ækvivalent Eo",
+        "korrelationstabellen, tilbageberegnet i diagrammerne",
         krop,
         resultat=f"{_kob_tal(eo_aekv)} MPa",
         resultat_note="kurven beregningen læses på",
@@ -1813,13 +1825,20 @@ def _kob_trin4(
     eo_aekv: float,
     t1: dict,
     t2: dict,
+    t3: dict,
     t_basis_table: dict,
     phi: float,
     net_kor: float,
     punkter: list[tuple[float, str, str]],
     sign: list[str],
 ) -> str:
-    """Kurvens plads mellem de to belastningsklasser, reduktionen aflæses på."""
+    """Kurvens plads mellem de to belastningsklasser, reduktionen aflæses på.
+
+    Under kortene opstilles diagrammets egne aflæsninger: rækkerne er de tre
+    kurver, kolonnerne de to Eo-værdier, punktet ligger imellem. Samme faktor
+    anvendes på alle tre rækker, og udregningen skrives ud, så det fremgår,
+    hvilke to tal hver kurve interpoleres af.
+    """
     ub = t1["ubundet_mm"]
     ub_dec = 0 if abs(ub - round(ub)) < 0.05 else 1
     kl_lav, kl_hoej = eo_til_klasse(t2["eo_lav"]), eo_til_klasse(t2["eo_hoej"])
@@ -1837,18 +1856,59 @@ def _kob_trin4(
         f'<div class="kob-klasse-tal">{_kob_tal(t2["t_hoej"])} mm</div></div>'
         "</div>"
     )
-    venstre = klasser + _kob_formel(
-        _kob_esc(f"uarmeret tykkelse ved Eu = {_kob_tal(eu)} MPa, aflæst i "
-                 "diagrammerne"),
+    # Den ustabiliserede række først — den er kalibreret mod VejDims krav —
+    # og derefter de armerede kurver, diagrammet har i punktet.
+    raekker: list[tuple[str, float, float, float, int]] = [
+        ("ustabiliseret", t2["t_lav"], t2["t_hoej"], ub, ub_dec)
+    ]
+    for noegle, navn in (("1_lag", "1 lag geonet"), ("2_lag", "2 lag geonet")):
+        if noegle in t3:
+            d = t3[noegle]
+            raekker.append((navn, d["lav"], d["hoej"], d["basis"], 1))
+
+    f = _kob_tal(t2["frac"], 3)
+    h_lav, h_hoej = f"Eo {t2['eo_lav']} MPa", f"Eo {t2['eo_hoej']} MPa"
+    # Bredderne følger de faktiske tal, så opstillingen holder ved både tre-
+    # og firecifrede tykkelser.
+    e_bred = max(len(r[0]) for r in raekker) + 2
+    tal_bred = max(len(_kob_tal(v)) for _, a, h, *_ in raekker for v in (a, h))
+    res_bred = max(len(_kob_tal(v, dec)) for *_, v, dec in raekker)
+    kol = max(tal_bred, len(h_lav), len(h_hoej)) + 3
+
+    linjer = [
         _kob_esc(
-            f"Eo,ækv ligger {_kob_tal(t2['frac'] * 100, 1)} % inde mellem "
-            f"klasse {kl_lav} og {kl_hoej}"
+            f"aflæsning i diagrammets række for Eu = {_kob_tal(eu)} MPa"
+            f"   ·   f = {f}  (jf. trin 3)"
         ),
-        _kob_esc("reduktionen aflæses på samme to kurver med samme faktor"),
+        "",
+        _kob_esc(
+            f"{'':<{e_bred}}{h_lav:>{kol}}{h_hoej:>{kol}}"
+            "     t_lav + f × (t_høj − t_lav)"
+        ),
+    ]
+    for navn, a, h, v, dec in raekker:
+        linjer.append(
+            _kob_esc(
+                f"{navn:<{e_bred}}{_kob_tal(a):>{kol}}{_kob_tal(h):>{kol}}     "
+                f"{_kob_tal(a):>{tal_bred}} + {f} × "
+                f"({_kob_tal(h):>{tal_bred}} − {_kob_tal(a):>{tal_bred}}) = "
+            )
+            + f"<b>{_kob_esc(_kob_tal(v, dec).rjust(res_bred))} mm</b>"
+        )
+    venstre = klasser + _kob_formel(*linjer)
+
+    basis_red = " og ".join(_kob_tal(ub - r[3]) for r in raekker[1:])
+    red_saetning = (
+        f"Forskellen mellem øverste og de armerede rækker — "
+        f"{_kob_esc(basis_red)} mm — er basisreduktionen i trin 6. "
+        if basis_red else ""
     )
     venstre += (
-        '<div class="kob-note">Da Eo,ækv per konstruktion er valgt, så den '
-        "uarmerede kurve rammer VejDims krav, er reduktionen i trin 6 "
+        '<div class="kob-note">Faktoren f angiver punktets plads på Eo-aksen '
+        "og er derfor den samme i alle tre rækker; den ganges ikke på "
+        "tykkelsen, men bestemmer, hvor mellem de to kolonner hver kurve "
+        f"aflæses. {red_saetning}Da Eo,ækv per konstruktion er valgt, så den "
+        "ustabiliserede kurve rammer VejDims krav, er reduktionen "
         "designdiagrammets egen, feltdokumenterede værdi. VejDim omfatter "
         "ikke geonet, og de to metoders kriterier sammenblandes ikke.</div>"
     )
@@ -1875,7 +1935,9 @@ def _kob_trin5(
     # står tilbage i teksten.
     phi_kor = K_PHI * (phi - PHI_BASIS)
     phi_kor = 0.0 if abs(phi_kor) < 1e-12 else phi_kor
-    linjer: list[str] = []
+    # Hver linje benævnes, og regnestykkerne stilles op i samme kolonne efter
+    # benævnelserne. Fortsættelseslinjer står med tom benævnelse.
+    poster: list[tuple[str, str]] = []
     kilde = "materialetabellen"
     if materialer:
         data = _phi_tabel_data(materialer)
@@ -1884,35 +1946,46 @@ def _kob_trin5(
             f" × {_kob_tal(m['phi'], 1)}"
             for m in materialer
         )
-        linjer += [
-            _kob_esc(
-                f"φ = Σ({data['symbol']}ᵢ × φᵢ) / Σ{data['symbol']}ᵢ = "
-                f"({led}) / {_kob_tal(data['total_v'])}"
+        poster += [
+            (
+                "Vægtet friktionsvinkel:",
+                _kob_esc(
+                    f"φ = Σ({data['symbol']}ᵢ × φᵢ) / Σ{data['symbol']}ᵢ = "
+                    f"({led}) / {_kob_tal(data['total_v'])}"
+                ),
             ),
-            _kob_esc(
-                f"  = {_kob_tal(data['total_bidrag'])} / "
-                f"{_kob_tal(data['total_v'])} = "
-            ) + f"<b>{_kob_esc(_kob_tal(data['phi_weighted'], 2))}°</b>",
+            (
+                "",
+                _kob_esc(
+                    f"  = {_kob_tal(data['total_bidrag'])} / "
+                    f"{_kob_tal(data['total_v'])} = "
+                ) + f"<b>{_kob_esc(_kob_tal(data['phi_weighted'], 2))}°</b>",
+            ),
         ]
         navne = ", ".join(
             f"{m['navn']} {_kob_tal(m['phi'], 1)}°" for m in materialer
         )
         kilde = f"materialetabellen, {navne.lower()}"
     t_efter = t_uarm_kor if t_uarm_kor else t_krav
-    linjer.append(
+    poster.append((
+        "Korrektionsfaktor:",
         _kob_esc(
             f"k_φ = {_kob_tal(K_PHI, 2)} × ({_kob_tal(phi, 2)} − "
             f"{_kob_tal(PHI_BASIS, 0)}) = {_kob_tal(phi_kor, 4)} = "
-        ) + f"<b>{_kob_esc(_kob_tal(phi_kor * 100, 2))} %</b>"
-    )
+        ) + f"<b>{_kob_esc(_kob_tal(phi_kor * 100, 2))} %</b>",
+    ))
     if abs(phi_kor) >= 1e-9:
-        linjer.append(
+        poster.append((
+            "φ-korrigeret tykkelse:",
             _kob_esc(
                 f"t = {_kob_tal(t_krav)} × (1 {'−' if phi_kor < 0 else '+'} "
                 f"{_kob_tal(abs(phi_kor), 4)}) = "
-            ) + f"<b>{_kob_esc(_kob_tal(t_efter))} mm</b>"
-        )
-    krop = _kob_formel(*linjer)
+            ) + f"<b>{_kob_esc(_kob_tal(t_efter))} mm</b>",
+        ))
+    e_bred = max(len(e) for e, _ in poster) + 2
+    krop = _kob_formel(*[
+        _kob_esc(f"{etiket:<{e_bred}}") + beregning for etiket, beregning in poster
+    ])
     if abs(phi_kor) >= 1e-9:
         note = (
             "Diagrammerne er tegnet for et referencemateriale med "
@@ -1968,34 +2041,49 @@ def _kob_trin6(
         if lag not in t3 or t_arm is None:
             continue
         basis = t3[lag]["basis"]
+        # Mellemregningen står nedtonet efter hvert led. Korrektionerne
+        # regnes af den armerede kurve i punktet — trin 4's basisværdi — og
+        # ikke af VejDims krav.
+        b_tal = _kob_tal(basis)
         linjer = [
             _kob_esc(_kob_regnelinje(
                 "ustabiliseret bærelagstykkelse", f"{_kob_tal(t_krav)} mm")),
             _kob_esc(_kob_regnelinje(
                 "− basisreduktion, referencenet",
-                f"{_kob_tal(t_krav - basis)} mm")),
+                f"{_kob_tal(t_krav - basis)} mm"))
+            + _kob_svag(f"{_kob_tal(t_krav)} − {b_tal}, jf. trin 4"),
         ]
         if abs(net_kor) >= 0.005:
-            linjer.append(_kob_esc(_kob_regnelinje(
-                f"{'+' if net_kor > 0 else '−'} net-korrektion, {net_maerkat}",
-                f"{_kob_tal(abs(basis * net_kor))} mm")))
+            linjer.append(
+                _kob_esc(_kob_regnelinje(
+                    f"{'+' if net_kor > 0 else '−'} net-korrektion, "
+                    f"{net_maerkat}",
+                    f"{_kob_tal(abs(basis * net_kor))} mm"))
+                + _kob_svag(f"{b_tal} × {_kob_tal(abs(net_kor) * 100, 1)} %")
+            )
         if abs(phi_kor) >= 1e-9:
-            linjer.append(_kob_esc(_kob_regnelinje(
-                f"{'+' if phi_kor > 0 else '−'} φ-korrektion, "
-                f"{_kob_tal(phi_kor * 100, 1)} %",
-                f"{_kob_tal(abs(basis * phi_kor))} mm")))
+            linjer.append(
+                _kob_esc(_kob_regnelinje(
+                    f"{'+' if phi_kor > 0 else '−'} φ-korrektion",
+                    f"{_kob_tal(abs(basis * phi_kor))} mm"))
+                + _kob_svag(f"{b_tal} × {_kob_tal(abs(phi_kor) * 100, 2)} %")
+            )
         red_krav = (t_krav - t_arm) / t_krav * 100 if t_krav else None
         red_kor = (ref or {}).get("reduktion_pct")
         hale = ""
         if red_krav is not None:
-            hale = f"   (−{_kob_tal(red_krav)} % af {_kob_tal(t_krav)}"
+            hale = f"−{_kob_tal(red_krav)} % af {_kob_tal(t_krav)}"
             # Den anden reference nævnes kun, når φ-korrektionen flytter
             # udgangspunktet — ellers er de to procenter det samme tal.
             if red_kor is not None and t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
                 hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_tal(t_uarm_kor)}"
-            hale += ")"
+        # Resultatet stilles i samme talkolonne som leddene ovenfor, så
+        # procentangivelsen flugter med linjernes mellemregninger.
+        slut = f"= {_kob_tal(t_arm)} mm"
         linjer.append(
-            "= " + f"<b>{_kob_esc(_kob_tal(t_arm))} mm</b>" + _kob_esc(hale)
+            _kob_esc("= ") + f"<b>{_kob_esc(_kob_tal(t_arm))} mm</b>"
+            + _kob_esc(" " * max(0, 43 - len(slut)))
+            + (_kob_svag(hale) if hale else "")
         )
         kolonner.append(
             f'<div><div class="kob-lag-hoved {klasse}">{navn}</div>'
@@ -2090,7 +2178,7 @@ def _render_trafik_kobling_forklaring(
         _kob_trin1(t_klasse, eu),
         _kob_trin2(t_klasse, eu, t1),
         _kob_trin3(eu, eo_aekv, t1, t2),
-        _kob_trin4(eu, eo_aekv, t1, t2, t_basis_table, phi, net_kor,
+        _kob_trin4(eu, eo_aekv, t1, t2, t3, t_basis_table, phi, net_kor,
                    punkter, sign),
         _kob_trin5(t_krav, t_uarm_kor, phi, materialer),
         _kob_trin6(t_krav, t_uarm_kor, t3, phi, net_kor, net_navn,

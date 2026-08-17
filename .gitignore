@@ -13,6 +13,11 @@ rapport_metadata_brugerdefineret.json
 # Words låsefiler — dannes automatisk, mens et dokument er åbent
 ~$*
 
+# Prøverapporter fra afprøvning af rapportgeneringen. Dokumenterne dannes af
+# appen og hører til det enkelte forsøg, ikke til repoet, jf. oprydningen i
+# commit 7823dde.
+/testrapporter/
+
 # Arbejdsmateriale fra designarbejdet. Appens eget logo ligger i
 # assets/byggros_logo.jpeg og static/byggros_logo.png; filerne herunder er
 # løse kopier og indgår ikke i appen.
