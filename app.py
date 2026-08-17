@@ -1478,7 +1478,7 @@ def _kob_akse_ticks(lav: float, hoej: float, antal: int = 4) -> list[float]:
 def _kob_figur_diagram(
     eu: float,
     eo_aekv: float,
-    t2: dict,
+    eo_naboer: list[float],
     t_basis_table: dict,
     phi: float,
     net_kor: float,
@@ -1488,7 +1488,8 @@ def _kob_figur_diagram(
 
     Kurverne bærer samme korrektion som beregningen — φ på den ustabiliserede
     og φ + net på de armerede — så de afsatte punkter ligger på deres egen
-    kurve. Nabokurverne er de to belastningsklasser, Eo_ækv ligger imellem.
+    kurve. Nabokurverne er de belastningsklasser, punktet ligger imellem; ved
+    dimensionering efter belastningsklasse er det klasserne over og under.
     """
     phi_kor = K_PHI * (phi - PHI_BASIS)
     eu_vals = sorted(t_basis_table.keys())
@@ -1505,8 +1506,8 @@ def _kob_figur_diagram(
     if len(hoved) < 2:
         return ""
     naboer = [
-        (_kurve(t2["eo_lav"], "uarmeret", 1 + phi_kor), eo_til_klasse(t2["eo_lav"])),
-        (_kurve(t2["eo_hoej"], "uarmeret", 1 + phi_kor), eo_til_klasse(t2["eo_hoej"])),
+        (_kurve(eo_n, "uarmeret", 1 + phi_kor), eo_til_klasse(eo_n))
+        for eo_n in eo_naboer
     ]
     armerede = [
         (_kurve(eo_aekv, "1_lag", 1 + phi_kor + net_kor), _KOB_FARVE_1LAG),
@@ -1913,7 +1914,8 @@ def _kob_trin4(
         "ikke geonet, og de to metoders kriterier sammenblandes ikke.</div>"
     )
     figur = _kob_figurramme(
-        _kob_figur_diagram(eu, eo_aekv, t2, t_basis_table, phi, net_kor, punkter),
+        _kob_figur_diagram(eu, eo_aekv, [t2["eo_lav"], t2["eo_hoej"]],
+                           t_basis_table, phi, net_kor, punkter),
         sign,
         f"De stiplede kurver er belastningsklasse {kl_lav} og {kl_hoej}; den "
         "fuldt optrukne er Eo,ækv. Punkterne på Eu-linjen er trin 5 og 6.",
@@ -1929,8 +1931,13 @@ def _kob_trin4(
 
 def _kob_trin5(
     t_krav: float, t_uarm_kor: float | None, phi: float, materialer: list[dict],
+    *, nr: int = 5,
 ) -> str:
-    """Korrektionen for de valgte materialers friktionsvinkel."""
+    """Korrektionen for de valgte materialers friktionsvinkel.
+
+    Trinnets nummer afhænger af grundlaget: femte trin ved trafikklasse,
+    tredje ved belastningsklasse, hvor kæden er kortere.
+    """
     # Uden afvigelse giver produktet −0,0; nulstilles, så fortegnet ikke
     # står tilbage i teksten.
     phi_kor = K_PHI * (phi - PHI_BASIS)
@@ -2003,7 +2010,7 @@ def _kob_trin5(
         )
     krop += f'<div class="kob-note">{note}</div>'
     return _kob_trin(
-        5, "φ-korrektion for materialerne", kilde, krop,
+        nr, "φ-korrektion for materialerne", kilde, krop,
         resultat=f"{_kob_tal(t_efter)} mm",
         resultat_note=(
             "ustabiliseret, korrigeret" if abs(phi_kor) >= 1e-9
@@ -2021,8 +2028,18 @@ def _kob_trin6(
     net_navn: str,
     ref_1: dict | None,
     ref_2: dict | None,
+    *, nr: int = 6, aflaes_trin: int = 4, krav_kilde: str = "VejDims",
 ) -> str:
-    """Reduktionen med geonet, led for led fra VejDims krav."""
+    """Reduktionen med geonet, led for led fra den ustabiliserede tykkelse.
+
+    aflaes_trin er det trin, de armerede kurver blev aflæst i, og som
+    basisreduktionen henviser til — fjerde trin ved trafikklasse, andet ved
+    belastningsklasse.
+
+    krav_kilde benævner den ustabiliserede tykkelse i noten om de to
+    procentreferencer. Ved trafikklasse hidrører den fra VejDim; ved
+    belastningsklasse er den aflæst i designdiagrammet.
+    """
     phi_kor = K_PHI * (phi - PHI_BASIS)
     # Nettets afvigelse angives ved effektindekset, hvor det er kendt —
     # det er den størrelse, geonet-databasen ordner produkterne efter.
@@ -2042,8 +2059,8 @@ def _kob_trin6(
             continue
         basis = t3[lag]["basis"]
         # Mellemregningen står nedtonet efter hvert led. Korrektionerne
-        # regnes af den armerede kurve i punktet — trin 4's basisværdi — og
-        # ikke af VejDims krav.
+        # regnes af den armerede kurve i punktet — aflæsningstrinnets
+        # basisværdi — og ikke af den ustabiliserede tykkelse.
         b_tal = _kob_tal(basis)
         linjer = [
             _kob_esc(_kob_regnelinje(
@@ -2051,7 +2068,7 @@ def _kob_trin6(
             _kob_esc(_kob_regnelinje(
                 "− basisreduktion, referencenet",
                 f"{_kob_tal(t_krav - basis)} mm"))
-            + _kob_svag(f"{_kob_tal(t_krav)} − {b_tal}, jf. trin 4"),
+            + _kob_svag(f"{_kob_tal(t_krav)} − {b_tal}, jf. trin {aflaes_trin}"),
         ]
         if abs(net_kor) >= 0.005:
             linjer.append(
@@ -2099,10 +2116,12 @@ def _kob_trin6(
     krop += (
         '<div class="kob-note">Basisreduktionen gælder referencenettet i '
         "punktet, og net-korrektionen er det valgte nets afvigelse herfra. "
-        "<b>To referencer for procenterne:</b> resultatkortet øverst regner "
-        f"fra VejDims {_kob_esc(_kob_tal(t_krav))} mm, mens diagrammets "
-        f"punkter ligger på de φ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor))} "
-        "mm. Begge er angivet, så de to sæt procenter ikke fremstår som en "
+        "<b>To referencer for procenterne:</b> regnestykket her tager udgangspunkt i den ukorrigerede værdi på "
+        f"{_kob_esc(krav_kilde)} {_kob_esc(_kob_tal(t_krav))} mm, så leddene "
+        "summerer til resultatet, mens resultatkortet øverst måler "
+        f"reduktionen mod de φ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor))} "
+        "mm, hvor begge sider hviler på de valgte materialer. Begge er "
+        "angivet, så de to sæt procenter ikke fremstår som en "
         "uoverensstemmelse.</div>"
         if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1 else
         '<div class="kob-note">Basisreduktionen gælder referencenettet i '
@@ -2110,7 +2129,7 @@ def _kob_trin6(
         "</div>"
     )
     return _kob_trin(
-        6, "Reduktion med geonet", f"geonet-databasen, {_kob_esc(net_navn)}",
+        nr, "Reduktion med geonet", f"geonet-databasen, {_kob_esc(net_navn)}",
         krop,
         resultat=f' <span class="kob-skraa">/</span> '.join(resultater) + " mm",
         resultat_note=" / ".join(pct_krav) + f" af {_kob_tal(t_krav)}",
@@ -2119,10 +2138,132 @@ def _kob_trin6(
     )
 
 
-def _render_trafik_kobling_forklaring(
-    t_klasse: str,
+def _kob_eo_naboer(eo: float) -> list[float]:
+    """Eo-kolonnerne umiddelbart under og over den valgte.
+
+    Anvendes som stiplede referencekurver i figuren; ved yderklasserne
+    forekommer der kun én nabo.
+    """
+    kols = sorted(EO_KOLONNER)
+    if eo not in kols:
+        return []
+    i = kols.index(eo)
+    return [k for k in (
+        kols[i - 1] if i > 0 else None,
+        kols[i + 1] if i + 1 < len(kols) else None,
+    ) if k is not None]
+
+
+def _kob_bk_trin1(klasse: int, eu: float, eo: float) -> str:
+    """Belastningsklassen og den kurve i diagrammerne, den svarer til."""
+    info = BELASTNINGSKLASSER.get(klasse) or {}
+    krop = _kob_formel(
+        _kob_esc(f"klasse {klasse} = {info.get('belastning', '')}"),
+        _kob_esc(f"    {info.get('anvendelse', '')}"),
+        "",
+        _kob_slutlinje("Eo  (opslagsværdi)", f"{_kob_tal(eo)} MPa"),
+    )
+    krop += (
+        '<div class="kob-note">Belastningsklassen og '
+        f"Eu = {_kob_esc(ui.mpa(eu))} er indtastet i trin 1. "
+        "Alt herunder følger af dem. Klassen svarer til én af "
+        "designdiagrammernes seks kurver, og der foretages derfor ingen "
+        "tilbageberegning af et driftspunkt.</div>"
+    )
+    return _kob_trin(
+        1, "Belastningsklasse",
+        f"belastningsklassetabellen, klasse {klasse} "
+        f"{(info.get('belastning') or '').split('(')[0].strip().lower()}",
+        krop,
+        resultat=f"{_kob_tal(eo)} MPa",
+        resultat_note="diagrammets kurve",
+        groent_resultat=True,
+    )
+
+
+def _kob_bk_trin2(
+    klasse: int,
     eu: float,
-    eo_aekv: float,
+    eo: float,
+    raa: dict,
+    t_basis_table: dict,
+    phi: float,
+    net_kor: float,
+    punkter: list[tuple[float, str, str]],
+    sign: list[str],
+) -> str:
+    """Aflæsningen af de tre kurver ved den valgte klasse og E-værdi."""
+    navne = (
+        ("uarmeret", "ustabiliseret"),
+        ("1_lag", "1 lag geonet"),
+        ("2_lag", "2 lag geonet"),
+    )
+    linjer = [
+        _kob_esc(
+            f"aflæsning ved Eu = {_kob_tal(eu)} MPa   ·   klasse {klasse}"
+            f"  (Eo {_kob_tal(eo)} MPa)"
+        ),
+        "",
+    ]
+    linjer += [
+        _kob_slutlinje(navn, f"{_kob_tal(raa[noegle])} mm")
+        for noegle, navn in navne if noegle in raa
+    ]
+    venstre = _kob_formel(*linjer)
+    venstre += (
+        f'<div class="kob-note">Eo = {_kob_esc(ui.mpa(eo))} er en af '
+        f"diagrammernes egne kurver, og Eu = {_kob_esc(ui.mpa(eu))} en af "
+        "tabellens rækker; beregningen foretager derfor ingen interpolation. "
+        "Opmærksomheden henledes på, at tabellens rækker er fastlagt ved "
+        "digitaliseringen af diagrammerne, og at en del af værdierne herved "
+        "er indlagt ved interpolation mellem kurvernes aflæste punkter. "
+        "Rækkerne kan efterses under <b>Designdiagrammer</b>.</div>"
+    )
+    naboer = _kob_eo_naboer(eo)
+    nabo_tekst = " og ".join(str(eo_til_klasse(n)) for n in naboer)
+    figur = _kob_figurramme(
+        _kob_figur_diagram(eu, eo, naboer, t_basis_table, phi, net_kor,
+                           punkter),
+        sign,
+        f"Den fuldt optrukne kurve er klasse {klasse}"
+        + (f"; de stiplede er klasse {nabo_tekst}" if nabo_tekst else "")
+        + ". Punkterne på Eu-linjen er trin 3 og 4.",
+    )
+    return _kob_trin(
+        2, "Aflæsning i designdiagrammet",
+        f"designdiagram {klasse}, GS-GRID/Tensar-feltforsøg",
+        _kob_kol(venstre, figur),
+        resultat=f"{_kob_tal(raa['uarmeret'])} mm",
+        resultat_note="ustabiliseret",
+    )
+
+
+def _kob_punkter(
+    t_krav: float,
+    t_uarm_kor: float | None,
+    t_1lag: float | None,
+    t_2lag: float | None,
+) -> tuple[list[tuple[float, str, str]], list[str]]:
+    """Punkterne på Eu-linjen i diagramfiguren, med deres signatur."""
+    punkter: list[tuple[float, str, str]] = [(t_krav, "#15211A", "ring")]
+    sign = [f'<div class="kob-prik-ring"></div>{_kob_tal(t_krav)} mm krav']
+    if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
+        punkter.append((t_uarm_kor, "#15211A", "fyldt"))
+        sign.append('<div class="kob-prik"></div>'
+                    f"{_kob_tal(t_uarm_kor)} mm φ-korrigeret")
+    for t, farve, mærkat in (
+        (t_1lag, _KOB_FARVE_1LAG, "1 lag"), (t_2lag, _KOB_FARVE_2LAG, "2 lag"),
+    ):
+        if t is not None:
+            punkter.append((t, farve, "fyldt"))
+            sign.append(f'<div class="kob-prik" style="background:{farve}">'
+                        f"</div>{_kob_tal(t)} mm · {mærkat}")
+    return punkter, sign
+
+
+def _render_kobling_sektion(
+    grundlag: dict,
+    eu: float,
     phi: float,
     ref_1: dict | None,
     ref_2: dict | None,
@@ -2130,74 +2271,99 @@ def _render_trafik_kobling_forklaring(
     geonet: dict | None = None,
     materialer: list[dict] | None = None,
 ) -> None:
-    """Sporet fra trafikklasse til bærelagstykkelse, trin for trin.
+    """Sporet fra grundlaget til bærelagstykkelsen, trin for trin.
 
     Sektionen forklarer, hvordan de tal, resultatkortene viser, er fremkommet:
-    hvert trin står med sin kilde, sit regnestykke og sit resultat, og de to
-    figurer hører til hvert sit trin. Ekspanderen er lukket som udgangspunkt
-    — forklaringen er baggrundsstof, der slås op efter behov — og alle seks
-    trin står åbne, når den foldes ud.
+    hvert trin står med sin kilde, sit regnestykke og sit resultat.
+
+    Kæden afhænger af grundlaget. Ved trafikklasse føres den over VejDims
+    kørsler og en tilbageberegning af driftspunktet og tæller seks trin. Ved
+    belastningsklasse er klassen selv en af diagrammernes kurver, og de tre
+    første trin bortfalder; kæden tæller da fire.
     """
-    tal = _eo_aekv_trin_tal(t_klasse, eu, t_basis_table)
-    kobling = _trafik_kobling_tal(eu, eo_aekv, t_basis_table)
+    materialer = materialer or []
+    eo = grundlag.get("eo")
+    er_trafik = grundlag.get("type") == "trafikklasse"
+    t_klasse = grundlag.get("t_klasse")
+    klasse = grundlag.get("valgt_klasse")
+    if eo is None:
+        return
+
+    kobling = _trafik_kobling_tal(eu, eo, t_basis_table)
     t_krav = kobling["t_krav_mm"]
-    if not tal or "eo_aekv" not in tal["trin2"] or t_krav is None:
-        with st.expander("Sådan er tallene fremkommet", expanded=False):
+    tal = _eo_aekv_trin_tal(t_klasse, eu, t_basis_table) if er_trafik else None
+    mangler = t_krav is None or (
+        er_trafik and (not tal or "eo_aekv" not in tal["trin2"])
+    )
+    if mangler:
+        with st.expander("Beregningsdetaljer", expanded=False):
             st.caption(
                 "Designdiagrammet indeholder ingen ustabiliseret kurve i dette "
-                "punkt, og sammenkædningen kan derfor ikke vises trinvist."
+                "punkt, og beregningen kan derfor ikke vises trinvist."
             )
         return
 
-    t1, t2, t3 = tal["trin1"], tal["trin2"], tal["trin3"]
-    materialer = materialer or []
     t_uarm_kor = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm")
     t_1lag = (ref_1 or {}).get("t_armeret_mm")
     t_2lag = (ref_2 or {}).get("t_armeret_mm")
     net_kor = float((geonet or {}).get("korrektion") or 0.0)
     net_navn = (geonet or {}).get("navn") or "referencenet"
+    punkter, sign = _kob_punkter(t_krav, t_uarm_kor, t_1lag, t_2lag)
 
-    # Punkterne på Eu-linjen i trin 4's figur, med den signatur de hører til.
-    punkter: list[tuple[float, str, str]] = [(t_krav, "#15211A", "ring")]
-    sign = ['<div class="kob-prik-ring"></div>'
-            f"{_kob_tal(t_krav)} mm krav"]
-    if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
-        punkter.append((t_uarm_kor, "#15211A", "fyldt"))
-        sign.append('<div class="kob-prik"></div>'
-                    f"{_kob_tal(t_uarm_kor)} mm φ-korrigeret")
-    if t_1lag is not None:
-        punkter.append((t_1lag, _KOB_FARVE_1LAG, "fyldt"))
-        sign.append(f'<div class="kob-prik" style="background:{_KOB_FARVE_1LAG}">'
-                    f"</div>{_kob_tal(t_1lag)} mm · 1 lag")
-    if t_2lag is not None:
-        punkter.append((t_2lag, _KOB_FARVE_2LAG, "fyldt"))
-        sign.append(f'<div class="kob-prik" style="background:{_KOB_FARVE_2LAG}">'
-                    f"</div>{_kob_tal(t_2lag)} mm · 2 lag")
+    if er_trafik:
+        t1, t2, t3 = tal["trin1"], tal["trin2"], tal["trin3"]
+        trin = [
+            _kob_trin1(t_klasse, eu),
+            _kob_trin2(t_klasse, eu, t1),
+            _kob_trin3(eu, eo, t1, t2),
+            _kob_trin4(eu, eo, t1, t2, t3, t_basis_table, phi, net_kor,
+                       punkter, sign),
+            _kob_trin5(t_krav, t_uarm_kor, phi, materialer, nr=5),
+            _kob_trin6(t_krav, t_uarm_kor, t3, phi, net_kor, net_navn,
+                       ref_1, ref_2, nr=6, aflaes_trin=4),
+        ]
+        fod = (
+            '<div class="kob-fod">VejDim omfatter ikke geonet. Kørslerne '
+            "fastlægger alene driftspunktet, mens reduktionen i trin 6 er "
+            "designdiagrammets egen, feltdokumenterede værdi. Kørslerne står "
+            "under Trafikklasse-korrelation, og metoden er beskrevet i Hjælp, "
+            "afsnit 1 og 2.</div>"
+        )
+        grundlag_tekst = f"fra trafikklasse {t_klasse}"
+    else:
+        # De rå aflæsninger i punktet. Kurver, diagrammet ikke fører i
+        # punktet, udelades — det forekommer for 2 lag ved lave E-værdier.
+        raa: dict[str, float] = {}
+        for lag in ("uarmeret", "1_lag", "2_lag"):
+            v = _slaa_op_interp(eu, eo, lag, t_basis_table=t_basis_table)
+            if v is not None:
+                raa[lag] = v * 10.0
+        trin = [
+            _kob_bk_trin1(klasse, eu, eo),
+            _kob_bk_trin2(klasse, eu, eo, raa, t_basis_table, phi, net_kor,
+                          punkter, sign),
+            _kob_trin5(t_krav, t_uarm_kor, phi, materialer, nr=3),
+            _kob_trin6(
+                t_krav, t_uarm_kor,
+                {k: {"basis": v} for k, v in raa.items() if k != "uarmeret"},
+                phi, net_kor, net_navn, ref_1, ref_2, nr=4, aflaes_trin=2,
+                krav_kilde="den ustabiliserede aflæsning på",
+            ),
+        ]
+        fod = (
+            '<div class="kob-fod">Designdiagrammerne hviler på feltforsøg fra '
+            "GS-GRID og Tensar. Kurverne og deres gyldighedsområde er "
+            "beskrevet i Hjælp, afsnit 3, og produkternes effektindeks i "
+            "afsnit 5. Diagrammernes egne tabeller står under "
+            "Designdiagrammer.</div>"
+        )
+        grundlag_tekst = f"fra belastningsklasse {klasse}"
 
-    trin = [
-        _kob_trin1(t_klasse, eu),
-        _kob_trin2(t_klasse, eu, t1),
-        _kob_trin3(eu, eo_aekv, t1, t2),
-        _kob_trin4(eu, eo_aekv, t1, t2, t3, t_basis_table, phi, net_kor,
-                   punkter, sign),
-        _kob_trin5(t_krav, t_uarm_kor, phi, materialer),
-        _kob_trin6(t_krav, t_uarm_kor, t3, phi, net_kor, net_navn,
-                   ref_1, ref_2),
-    ]
     krop = '<div class="kob-skel"></div>'.join(t for t in trin if t)
-    fod = (
-        '<div class="kob-fod">VejDim omfatter ikke geonet. Kørslerne '
-        "fastlægger alene driftspunktet, mens reduktionen i trin 6 er "
-        "designdiagrammets egen, feltdokumenterede værdi. Kørslerne står "
-        "under Trafikklasse-korrelation, og metoden er beskrevet i Hjælp, "
-        "afsnit 1 og 2.</div>"
-    )
     # Titlen sættes fed og underrubrikken normal, som i sektionens hoved i
     # designforslaget; ekspanderens etiket sættes af markdown.
     resultat = t_1lag if t_1lag is not None else t_2lag
-    overskrift = (
-        f"**Sådan er tallene fremkommet** — fra trafikklasse {t_klasse}"
-    )
+    overskrift = f"**Beregningsdetaljer** -> {grundlag_tekst}"
     if resultat is not None:
         overskrift += f" til {ui.mm(resultat)} bærelag"
     with st.expander(overskrift, expanded=False):
@@ -3185,7 +3351,26 @@ def _render_valgt_net_detaljer(
                 '<div class="rt-detaljer-optimal-note">'
                 'Der gøres opmærksom på, at regnestykket ovenfor er opgjort ved '
                 f'indeks {html.escape(str(index))}. Mellemregningen bag den '
-                'optimale værdi vises ved markøren.</div>'
+                'optimale værdi vises ved resultatet.</div>'
+            )
+
+        # Regnestykket dekomponerer den rå aflæsning, så leddene summerer til
+        # resultatet. Resultatkortet og produkttabellen måler derimod mod den
+        # φ-korrigerede reference, hvor begge sider hviler på de valgte
+        # materialer. Forskellen anføres, så de to procenter ikke fremstår
+        # som en uoverensstemmelse.
+        t_uarm_kor = produkt.get("t_uarmeret_phi_kor_mm")
+        ref_note = ""
+        if (t_uarm and t_arm and t_uarm_kor
+                and abs(t_uarm_kor - t_uarm) >= 1):
+            ref_note = (
+                '<div class="rt-detaljer-optimal-note">'
+                "Regnestykket tager udgangspunkt i den ukorrigerede værdi på "
+                f"{html.escape(ui.mm(t_uarm))}. Resultatkortet øverst måler "
+                "reduktionen mod de φ-korrigerede "
+                f"{html.escape(ui.mm(t_uarm_kor))} og angiver derfor "
+                f"{html.escape(ui.procent((t_uarm_kor - t_arm) / t_uarm_kor * 100))}"
+                ".</div>"
             )
 
         return (
@@ -3199,7 +3384,7 @@ def _render_valgt_net_detaljer(
             '<div class="rt-detaljer-samlet">Reduktion i alt '
             f'{html.escape(_delta_mm(-(reduktion_mm or 0)))} · '
             f'{html.escape(ui.procent((reduktion_pct or 0) * 100))}</div>'
-            f'{optimal_html}'
+            f'{ref_note}{optimal_html}'
             '</section>'
         )
 
@@ -4763,11 +4948,20 @@ def _vis_resultatkort(
     navne_1: str = "",
     navne_2: str = "",
     indtastet_total: float | None = None,
+    t_uarm_raa: float | None = None,
 ) -> None:
     """Resultatrækken: ustabiliseret tykkelse og de to armerede alternativer.
 
-    Reduktionen måles mod den rå ustabiliserede tykkelse, som produkttabellens
-    kolonne 'Reduktion i alt' gør det, så de to opgørelser ikke kan divergere.
+    Kortet kaldes med den φ-korrigerede ustabiliserede tykkelse, og
+    reduktionen måles derfor mod den — som produkttabellens reduktioner,
+    snittene i opbygningen og rapporten gør det. Begge sider af
+    sammenligningen hviler dermed på de valgte materialer, og de fire
+    opgørelser kan ikke divergere. Den rå aflæsning forekommer alene i
+    mellemregningerne, hvor leddene dekomponeres, jf. _rt_reduktion_linjer().
+
+    t_uarm_raa er den ikke-korrigerede aflæsning; er den angivet og afviger
+    den fra t_uarm, anføres den i parentes efter note_uarm, så tallet i
+    mellemregningerne (»Ustabiliseret bærelagstykkelse«) kan genfindes her.
 
     Det tyndeste alternativ fremhæves. I brugerdefineret tilstand fremhæves
     alene et alternativ, som den indtastede opbygning holder til; holder ingen
@@ -4775,6 +4969,8 @@ def _vis_resultatkort(
     """
     if t_uarm is None:
         return
+    if t_uarm_raa is not None and abs(t_uarm_raa - t_uarm) >= 1:
+        note_uarm += f" ({ui.mm(t_uarm_raa)} ukorrigeret)"
 
     def _kort(etiket: str, t: float | None, navne: str) -> dict | None:
         if t is None:
@@ -4869,10 +5065,17 @@ def render_standard() -> None:
                 haard_fejl = p["fejl"]
                 break
 
+    # Den ustabiliserede reference vises φ-korrigeret — som snittene i
+    # opbygningen, rapporten og produkttabellens reduktioner gør det — så de
+    # to sider af sammenligningen hviler på samme materialer. Den rå aflæsning
+    # anføres i parentes under kortet, jf. _vis_resultatkort().
     t_uarm = None
+    t_uarm_raa = None
     for p in prod_1lag + prod_2lag:
-        if p["t_uarmeret_mm"] is not None:
-            t_uarm = p["t_uarmeret_mm"]
+        v = p.get("t_uarmeret_phi_kor_mm") or p.get("t_uarmeret_mm")
+        if v is not None:
+            t_uarm = v
+            t_uarm_raa = p.get("t_uarmeret_mm")
             break
 
     grupper_1 = _gyldige_grupper(grupper_produkter(prod_1lag, tolerance_mm=5.0))
@@ -4944,6 +5147,7 @@ def render_standard() -> None:
                         "Ubunden opbygning · interpoleret mellem Eo-kurverne"
                         if eo_interpoleret else "Ubunden opbygning"
                     ),
+                    t_uarm_raa=t_uarm_raa,
                 )
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
@@ -4976,7 +5180,9 @@ def render_standard() -> None:
                     None, valgt_1, valgt_2,
                 )
 
-            vis_kobling = eo_interpoleret
+            # Beregningsdetaljerne vises for begge grundlag; kæden tilpasser
+            # sig, jf. _render_kobling_sektion().
+            vis_kobling = True
 
             with ui.kort("Alle produkter", _produkttabel_note(eu)):
                 _render_alle_produkter_overblik(
@@ -4986,9 +5192,9 @@ def render_standard() -> None:
                 )
 
     if vis_kobling:
-        _render_trafik_kobling_forklaring(
-            grundlag["t_klasse"], eu, grundlag["eo_aekv"], PHI_BASIS,
-            ref_1, ref_2, t_basis_table,
+        _render_kobling_sektion(
+            grundlag, eu, PHI_BASIS, valgt_1, valgt_2, t_basis_table,
+            geonet=valgt_geonet,
         )
 
     # --- Informations-expandere ----------------------------------------
@@ -5596,10 +5802,14 @@ def render_brugerdefineret() -> None:
                         haard_fejl = p["fejl"]
                         break
 
+            # Vises φ-korrigeret, jf. standard-tilstanden ovenfor.
             t_uarm = None
+            t_uarm_raa = None
             for p in prod_1lag + prod_2lag:
-                if p["t_uarmeret_mm"] is not None:
-                    t_uarm = p["t_uarmeret_mm"]
+                v = p.get("t_uarmeret_phi_kor_mm") or p.get("t_uarmeret_mm")
+                if v is not None:
+                    t_uarm = v
+                    t_uarm_raa = p.get("t_uarmeret_mm")
                     break
 
             grupper_1 = _gyldige_grupper(grupper_produkter(prod_1lag, tolerance_mm=5.0))
@@ -5626,6 +5836,7 @@ def render_brugerdefineret() -> None:
                         navne_1=_navne_kort(bedste_1) if bedste_1 else "",
                         navne_2=_navne_kort(bedste_2) if bedste_2 else "",
                         indtastet_total=_indtastet_total(materialer),
+                        t_uarm_raa=t_uarm_raa,
                     )
                 else:
                     _render_uarmeret_mangler_besked(eu, eo)
@@ -5635,11 +5846,7 @@ def render_brugerdefineret() -> None:
                     materialer=materialer, phi=phi,
                 )
                 # Renderes nederst i resultatsektionen, lige over Opbygning.
-                if eo_interpoleret:
-                    kobling_args = (
-                        grundlag["t_klasse"], eu, grundlag["eo_aekv"], phi,
-                        ref_1, ref_2, t_basis_table,
-                    )
+                kobling_args = (grundlag, eu, phi, ref_1, ref_2, t_basis_table)
                 _render_produkt_tabel(
                     ref_1, ref_2, ref_fejl_1, ref_fejl_2,
                     prod_1lag, prod_2lag, valgt_klasse, phi=phi, eu=eu,
@@ -5706,10 +5913,16 @@ def render_brugerdefineret() -> None:
                         if k in res_best
                     }
 
+            # Vises φ-korrigeret, jf. _vis_resultatkort().
             t_uarm = None
+            t_uarm_raa = None
             for r in (res_1, res_2):
-                if not r.get("fejl") and r.get("t_uarmeret_mm") is not None:
-                    t_uarm = r["t_uarmeret_mm"]
+                if r.get("fejl"):
+                    continue
+                v = r.get("t_uarmeret_phi_kor_mm") or r.get("t_uarmeret_mm")
+                if v is not None:
+                    t_uarm = v
+                    t_uarm_raa = r.get("t_uarmeret_mm")
                     break
 
             haard_fejl_specifikt: str | None = None
@@ -5730,7 +5943,12 @@ def render_brugerdefineret() -> None:
                     "phi": phi, "materialer": materialer,
                     "geonet": geonet, "geonet_navn": geonet_navn,
                     "res_1": res_1, "res_2": res_2,
-                    "t_uarmeret_mm": t_uarm,
+                    # Den rå aflæsning gemmes under sit eget navn; rapporten
+                    # danner selv den φ-korrigerede værdi af res_1/res_2.
+                    "t_uarmeret_mm": (
+                        res_1.get("t_uarmeret_mm")
+                        or res_2.get("t_uarmeret_mm")
+                    ),
                     "t_1_lag_best_mm": (
                         bedste_1["produkter"][0].get("t_armeret_mm_min")
                         if bedste_1 and bedste_1.get("produkter") else None
@@ -5748,6 +5966,7 @@ def render_brugerdefineret() -> None:
                         standard=False,
                         note_uarm=_note_uarmeret(eo_interpoleret, phi),
                         indtastet_total=_indtastet_total(materialer),
+                        t_uarm_raa=t_uarm_raa,
                     )
                 else:
                     _render_uarmeret_mangler_besked(eu, eo)
@@ -5759,17 +5978,16 @@ def render_brugerdefineret() -> None:
                     laas_geonetvalg=True, som_kort=True,
                 )
 
-                if eo_interpoleret:
-                    # res_1/res_2 er beregnet med det VALGTE nets korrektion —
-                    # ref_1/ref_2 er altid referencenettet. Forklaringen skal vise
-                    # det net, brugeren rent faktisk har valgt. Renderes nederst i
-                    # resultatsektionen, lige over Opbygning.
-                    kobling_args = (
-                        grundlag["t_klasse"], eu, grundlag["eo_aekv"], phi,
-                        None if res_1.get("fejl") else res_1,
-                        None if res_2.get("fejl") else res_2,
-                        t_basis_table, geonet, materialer,
-                    )
+                # res_1/res_2 er beregnet med det VALGTE nets korrektion —
+                # ref_1/ref_2 er altid referencenettet. Forklaringen skal vise
+                # det net, brugeren rent faktisk har valgt. Renderes nederst i
+                # resultatsektionen, lige over Opbygning.
+                kobling_args = (
+                    grundlag, eu, phi,
+                    None if res_1.get("fejl") else res_1,
+                    None if res_2.get("fejl") else res_2,
+                    t_basis_table, geonet, materialer,
+                )
 
                 # Mellemregninger for det valgte net. Enkeltprodukt-listerne
                 # læses fra de interval-berigede grupper.
@@ -5824,7 +6042,7 @@ def render_brugerdefineret() -> None:
                     )
 
     if kobling_args is not None:
-        _render_trafik_kobling_forklaring(*kobling_args)
+        _render_kobling_sektion(*kobling_args)
 
     # --- Informations-expandere --------------------------------------------
     _render_oversigt_expanders(
