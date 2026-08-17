@@ -14,7 +14,7 @@ Søjlerne viser hver sin opbygning:
 
 - **Indtastet opbygning** gengiver de indtastede lagtykkelser.
 - **Ustabiliseret basistykkelse** er lagtykkelsen fra designdiagrammet,
-  bestemt ud fra Eu og Eo og korrigeret for den vægtede friktionsvinkel.
+  bestemt ud fra Eᵤ og Eₒ og korrigeret for den vægtede friktionsvinkel.
 - **1 lag og 2 lag geonet** viser den stabiliserede lagtykkelse med samme
   proportionale lagfordeling.
 

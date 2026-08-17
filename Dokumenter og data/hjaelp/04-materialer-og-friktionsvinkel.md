@@ -20,7 +20,7 @@ I Standard-tilstand forudsættes ét samlet ubundet bærelag med φ = 37°, og d
 sammensættes ikke materialelag. Den vægtede friktionsvinkel forekommer derfor
 alene i Brugerdefineret-tilstand.
 
-:::figur Eksemplet fra dimensioneringssiden. Den vægtede vinkel giver k_φ = −0,0257.
+:::figur Eksemplet fra dimensioneringssiden. Den vægtede vinkel giver kᵩ = −0,0257.
 | Lag | mm | φ |
 | --- | --- | --- |
 | Stabilgrus | 300 | 40,0° |
@@ -30,11 +30,11 @@ alene i Brugerdefineret-tilstand.
 
 ## 2 φ-korrektionen
 
-Korrektionsfaktoren k_φ er lineær omkring φ = 37°. En positiv afvigelse giver
-en negativ k_φ, det vil sige en tyndere opbygning.
+Korrektionsfaktoren kᵩ er lineær omkring φ = 37°. En positiv afvigelse giver
+en negativ kᵩ, det vil sige en tyndere opbygning.
 
 :::formel
-k_φ  =  −0,02 × (φ − 37°)
+kᵩ  =  −0,02 × (φ − 37°)
 --
 φ   er den vægtede friktionsvinkel [°]
 :::

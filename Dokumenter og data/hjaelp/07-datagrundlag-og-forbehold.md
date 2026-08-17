@@ -5,13 +5,13 @@ resume: Forudsætningerne bag de 48 VejDim-kørsler, korrelationens gyldighedsom
 
 ## 1 Kørslernes forudsætninger
 
-De 48 VejDim-kørsler omfatter T1–T6 ved Eu = 3, 4, 5, 10, 15, 20, 30 og
+De 48 VejDim-kørsler omfatter T1–T6 ved Eᵤ = 3, 4, 5, 10, 15, 20, 30 og
 40 MPa. Samtlige kørsler er udført med:
 
 - **Belastningsmodel:** Æ10 tvillingehjul, standard, ved 60–80 km/t.
 - **Afvanding:** nej.
 - **Underbund:** frostsikker, hvis E-modul er manuelt overskrevet til cellens
-  Eu-værdi. Herved bortfalder koblingshøjdekravet, og kørslen bliver ren
+  Eᵤ-værdi. Herved bortfalder koblingshøjdekravet, og kørslen bliver ren
   bæreevne.
 - **Levetidsmål:** 20 år for alle lag.
 - **Ubundne lag:** SG II med E = 300 over BL II U≤3 med E = 100, justeret af
@@ -20,7 +20,7 @@ De 48 VejDim-kørsler omfatter T1–T6 ved Eu = 3, 4, 5, 10, 15, 20, 30 og
 
 Asfaltpakken er fast pr. trafikklasse. Bundne bærelag er låst, hvor det er
 muligt; hvor VejDim selv beregner tykkelsen, er programmets egne værdier
-anvendt, og tykkelsen kan derfor variere med Eu.
+anvendt, og tykkelsen kan derfor variere med Eᵤ.
 
 ## 2 Gyldighedsområde
 
@@ -42,10 +42,10 @@ Følgende forbehold gælder:
    totalhøjden under koblingshøjden for frostfarlig underbund, jf. håndbogens
    afsnit 5.3. Forholdet bør kontrolleres særskilt.
 4. **Manglende armerede kurver i kernezonen.** I enkelte celler mangler
-   diagrammet data for 1 lag geonet ved den ækvivalente Eo, idet kurven er tom
-   ved høj Eo og tynd opbygning. Reduktionen kan da ikke bestemmes, selv om
+   diagrammet data for 1 lag geonet ved den ækvivalente Eₒ, idet kurven er tom
+   ved høj Eₒ og tynd opbygning. Reduktionen kan da ikke bestemmes, selv om
    cellen ligger inden for kernezonen.
-5. **Følsomhed over for asfaltpakken.** Den ækvivalente Eo afhænger af den
+5. **Følsomhed over for asfaltpakken.** Den ækvivalente Eₒ afhænger af den
    faste asfaltpakke pr. trafikklasse. De anvendte pakker er VejDims egne
    værdier.
 6. **Trafikklasse T7 er ikke medtaget**, idet klassen er åben. Der henvises til
@@ -63,4 +63,4 @@ gør sig gældende:
 - Opslagspunktet falder i zonen under eller over, jf. kapitel 2, afsnit 2.
 
 Foreligger en konkret kørsel, kan den indtastes i kørselstabellen på
-korrelationssiden, hvorefter Eo_ækv-matricen og dimensioneringen følger med.
+korrelationssiden, hvorefter Eₒ,ækv-matricen og dimensioneringen følger med.

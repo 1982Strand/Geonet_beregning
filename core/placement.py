@@ -63,8 +63,8 @@ def overlap_krav_mm(krav: dict, eu: float | None) -> tuple[float, str]:
     krav for blød underbund.
     """
     if eu is None or eu < OVERLAP_EU_GRAENSE_MPA:
-        return krav["overlap_lt5_mm"], f"Eu < {OVERLAP_EU_GRAENSE_MPA:g} MPa"
-    return krav["overlap_ge5_mm"], f"Eu ≥ {OVERLAP_EU_GRAENSE_MPA:g} MPa"
+        return krav["overlap_lt5_mm"], f"Eᵤ < {OVERLAP_EU_GRAENSE_MPA:g} MPa"
+    return krav["overlap_ge5_mm"], f"Eᵤ ≥ {OVERLAP_EU_GRAENSE_MPA:g} MPa"
 
 
 def _top_cover_requirement_text(krav: dict) -> str:

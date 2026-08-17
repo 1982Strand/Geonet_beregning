@@ -69,7 +69,7 @@ def byg_designdiagram(
                 ys.append(eu_v)
         return xs, ys
 
-    HOVER = "%{x:.0f} cm · Eu %{y:.1f} MN/m²<extra>%{fullData.name}</extra>"
+    HOVER = "%{x:.0f} cm · Eᵤ %{y:.1f} MN/m²<extra>%{fullData.name}</extra>"
 
     fig = go.Figure()
 
@@ -182,7 +182,7 @@ def byg_designdiagram(
         ),
         xaxis=dict(title="Bærelagstykkelse [cm]", range=[0, max(x_maks, 80)], **akse),
         yaxis=dict(
-            title="Bundmodul Eu [MN/m²]",
+            title="Bundmodul Eᵤ [MN/m²]",
             range=[0, max(max(eu_vals) * 1.05, eu * 1.2, 50)],
             **akse,
         ),
@@ -239,7 +239,7 @@ def byg_raadiagram(diagram: dict, hoejde_px: int = 400):
             line=dict(color=farve, width=2),
             marker=dict(color=farve, size=3.5),
             hovertemplate=(
-                "%{x:.1f} cm · Eu %{y:.0f} MN/m²<extra>%{fullData.name}</extra>"
+                "%{x:.1f} cm · Eᵤ %{y:.0f} MN/m²<extra>%{fullData.name}</extra>"
             ),
         ))
     if not fig.data:
@@ -268,7 +268,7 @@ def byg_raadiagram(diagram: dict, hoejde_px: int = 400):
             title="Bærelagstykkelse [cm]", range=[0, x_maks * 1.08], **akse,
         ),
         yaxis=dict(
-            title="Bundmodul Eu [MN/m²]",
+            title="Bundmodul Eᵤ [MN/m²]",
             range=[0, max(eu_vals) * 1.05], **akse,
         ),
     )

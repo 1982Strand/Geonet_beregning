@@ -153,7 +153,7 @@ def beregn(
     if not (EO_MIN <= eo <= EO_MAX):
         return {
             "fejl": (
-                f"Eo={eo:g} MPa er uden for gyldigt interval "
+                f"Eₒ={eo:g} MPa er uden for gyldigt interval "
                 f"({EO_MIN:g}–{EO_MAX:g} MPa)."
             )
         }
@@ -168,12 +168,12 @@ def beregn(
     naboer = _find_eu_naboer(eu, t_basis_table=t_basis_table)
     if naboer is None:
         if not eu_raekker:
-            return {"fejl": "Diagramtabellen indeholder ingen Eu-rækker. Nulstil diagramdata til standard under Designdiagrammer."}
+            return {"fejl": "Diagramtabellen indeholder ingen Eᵤ-rækker. Nulstil diagramdata til standard under Designdiagrammer."}
         if eu < eu_raekker[0] or eu > eu_raekker[-1]:
-            return {"fejl": f"Eu={eu} MPa er uden for tabelområdet ({eu_raekker[0]}–{eu_raekker[-1]} MPa)"}
+            return {"fejl": f"Eᵤ={eu} MPa er uden for tabelområdet ({eu_raekker[0]}–{eu_raekker[-1]} MPa)"}
         return {
             "fejl": (
-                f"Eu={eu} MPa findes ikke som række i den aktive diagramtabel. "
+                f"Eᵤ={eu} MPa findes ikke som række i den aktive diagramtabel. "
                 f"Rækken kan være fjernet under Designdiagrammer — gendan den, "
                 f"eller nulstil diagramdata til standard."
             )
@@ -189,9 +189,9 @@ def beregn(
     if t_low_arm is None or t_high_arm is None:
         return {
             "fejl": (
-                f"Kombinationen Eu={eu} MPa / Eo={eo} MPa / {lag_mode} er "
+                f"Kombinationen Eᵤ={eu} MPa / Eₒ={eo} MPa / {lag_mode} er "
                 f"uden for diagrammets gyldighedsområde (\"—\" i opslagstabellen). "
-                f"Prøv et lavere Eu, et lavere Eo, eller færre lag."
+                f"Prøv et lavere Eᵤ, et lavere Eₒ, eller færre lag."
             )
         }
 
@@ -267,7 +267,7 @@ def beregn(
         "reduktion_pct": round(reduktion_pct, 4) if reduktion_pct is not None else None,
         "uarmeret_mangler": uarmeret_mangler,
         "uarmeret_fejl": (
-            f"Der er ikke defineret nogen uarmeret bærelagstykkelse for Eu={eu} MPa / Eo={eo} MPa."
+            f"Der er ikke defineret nogen uarmeret bærelagstykkelse for Eᵤ={eu} MPa / Eₒ={eo} MPa."
             if uarmeret_mangler
             else None
         ),

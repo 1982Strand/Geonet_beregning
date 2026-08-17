@@ -38,7 +38,7 @@ særskilt og vises i detaljeboksen, i opbygningssnittene og i designdiagrammet,
 hvor den tegnes som en prikket kurve med et tonet bånd op til den
 konservative.
 
-:::figur Bærelagstykkelse i mm ved Eu = 8 MPa, T4, 1 lag geonet.
+:::figur Bærelagstykkelse i mm ved Eᵤ = 8 MPa, T4, 1 lag geonet.
 | Produkt | Indeks | 1 lag |
 | --- | --- | --- |
 | TX160 (ref.) | 100 | 762 |

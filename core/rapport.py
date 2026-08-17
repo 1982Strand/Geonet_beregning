@@ -334,7 +334,7 @@ def render_personligt_designdiagram_png(
         klasse_str = grundlag_label
     else:
         klasse_str = (
-            f"Klasse {klasse}" if klasse is not None else f"Eo = {eo:.0f}"
+            f"Klasse {klasse}" if klasse is not None else f"Eₒ = {eo:.0f}"
         )
     phi_str = f"{phi:.1f}".replace(".", ",")
     # Geonettets navn står i figurteksten frem for i signaturen, hvor det
@@ -343,7 +343,7 @@ def render_personligt_designdiagram_png(
     fig.update_layout(
         title=dict(
             text=(
-                f"Eo = {eo:.0f} MN/m² · {klasse_str} · φ = {phi_str}° · "
+                f"Eₒ = {eo:.0f} MN/m² · {klasse_str} · φ = {phi_str}° · "
                 f"{net_navn}"
             ),
             x=0, xanchor="left", y=0.98, yanchor="top",
@@ -401,7 +401,7 @@ def formatér_dimensioneringsgrundlag(
     er_trafikklasse = dim.get("grundlag_type") == "trafikklasse"
 
     rows: list[tuple[str, str]] = [
-        ("Underbundens E-modul (Eu)", f"{dim.get('eu', 0):.0f} MPa"),
+        ("Underbundens E-modul (Eᵤ)", f"{dim.get('eu', 0):.0f} MPa"),
     ]
     if er_trafikklasse:
         # Trafikklasse-grundlag: vis T-klasse + den ækvivalente Eo (Eo_ækv),
@@ -410,7 +410,7 @@ def formatér_dimensioneringsgrundlag(
         eo_aekv = dim.get("eo_aekv")
         rows.append(("Dimensioneringsgrundlag", f"Trafikklasse {t_klasse} (VejDim)"))
         if isinstance(eo_aekv, (int, float)):
-            rows.append(("Ækvivalent Eo (Eo_ækv)", f"{eo_aekv:.0f} MPa"))
+            rows.append(("Ækvivalent Eₒ (Eₒ,ækv)", f"{eo_aekv:.0f} MPa"))
     else:
         rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
     rows.append(("Materialeopbygning", _materiale_resume(materialer)))

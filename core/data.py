@@ -833,9 +833,9 @@ TRAFIKKLASSER = {
 TRAFIKKLASSE_NOTE = (
     "Trafikklasse-grundlaget kobler Vejdirektoratets trafikklasser til "
     "designdiagrammerne via en dokumenteret tilbageberegning: VejDim fastlægger "
-    "den krævede ubundne lagtykkelse (SG + BL) for (trafikklasse, Eu), og "
+    "den krævede ubundne lagtykkelse (SG + BL) for (trafikklasse, Eᵤ), og "
     "geonet-reduktionen aflæses som diagrammets egen feltdokumenterede værdi ved "
-    "den ækvivalente Eo. Grundlaget er rent bæreevne (frostsikker underbund) — "
+    "den ækvivalente Eₒ. Grundlaget er rent bæreevne (frostsikker underbund) — "
     "frost/koblingshøjde skal kontrolleres separat. Se "
     "'Korrelation_trafikklasse_Eo.md' for fuld dokumentation og forbehold."
 )

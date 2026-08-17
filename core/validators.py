@@ -96,22 +96,22 @@ def valider_input(
     # F1: Eu uden for gyldigt interval
     if eu < EU_MIN:
         fejl.append(
-            f"Eu={eu} MPa er for lavt. Minimum er {EU_MIN} MPa. "
+            f"Eᵤ={eu} MPa er for lavt. Minimum er {EU_MIN} MPa. "
         )
     elif eu > EU_MAX:
         fejl.append(
-            f"Eu={eu} MPa er for højt. Maximum er {EU_MAX} MPa. "
-            f"Ved Eu > {EU_MAX} MPa reduceres effekten af stabilisering med geonet."
+            f"Eᵤ={eu} MPa er for højt. Maximum er {EU_MAX} MPa. "
+            f"Ved Eᵤ > {EU_MAX} MPa reduceres effekten af stabilisering med geonet."
         )
 
     # F2: Eo uden for gyldigt interval
     if eo < EO_MIN:
         fejl.append(
-            f"Eo={eo} MPa er for lavt. Minimum er {EO_MIN} MPa."
+            f"Eₒ={eo} MPa er for lavt. Minimum er {EO_MIN} MPa."
         )
     elif eo > EO_MAX:
         fejl.append(
-            f"Eo={eo} MPa er for højt. Maximum er {EO_MAX} MPa "
+            f"Eₒ={eo} MPa er for højt. Maximum er {EO_MAX} MPa "
             f"(svarer til klasse 6 — meget tung trafik)."
         )
 
@@ -123,8 +123,8 @@ def valider_input(
         and eo not in EO_KOLONNER
     ):
         fejl.append(
-            f"Eo={eo} MPa svarer ikke til en belastningsklasse. "
-            f"Gyldige Eo-værdier: {EO_KOLONNER} MPa. "
+            f"Eₒ={eo} MPa svarer ikke til en belastningsklasse. "
+            f"Gyldige Eₒ-værdier: {EO_KOLONNER} MPa. "
             f"Vælg en gyldig belastningsklasse."
         )
 
@@ -146,7 +146,7 @@ def valider_input(
             t_upper = _opslag(eu_upper, eo, lag_mode, t_basis_table=t_basis_table)
             if t_lower is None or t_upper is None:
                 fejl.append(
-                    f"Kombinationen Eu={eu} MPa / Eo={eo} MPa / {lag_mode.replace('_', ' ')} "
+                    f"Kombinationen Eᵤ={eu} MPa / Eₒ={eo} MPa / {lag_mode.replace('_', ' ')} "
                     f"er uden for opslagstabellens gyldige område (\"—\"). "
                 )
             # Tjek også uarmeret (til resultatvisning), men lad ikke
@@ -156,7 +156,7 @@ def valider_input(
             if t_u_lower is None or t_u_upper is None:
                 advarsler.append(
                     f"Der er ikke defineret nogen ustabiliseret bærelagstykkelse "
-                    f"for Eu={eu} MPa / Eo={eo} MPa."
+                    f"for Eᵤ={eu} MPa / Eₒ={eo} MPa."
                 )
 
     # -----------------------------------------------------------------------
@@ -204,7 +204,7 @@ def valider_input(
     # A3: Eu nær tabelgrænsen — uarmeret område indskrænket
     if eu >= 35.0:
         advarsler.append(
-            f"Eu={eu} MPa er i den øvre del af opslagstabellen. "
+            f"Eᵤ={eu} MPa er i den øvre del af opslagstabellen. "
             f"Den ustabiliserede tykkelse er meget lille, og "
             f"den relative besparelse ved stabilisering er begrænset. "
         )

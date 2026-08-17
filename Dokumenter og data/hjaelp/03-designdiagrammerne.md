@@ -16,7 +16,7 @@ gennemgående de samme farver som værktøjets øvrige diagrammer: sort for
 ustabiliseret, blåt for 1 lag og lilla for 2 lag.
 
 :::figur Uddrag af diagram 4, belastningsklasse 4. Værdien ved 95 MPa er interpoleret.
-| Eo [MPa] | Ustab. [cm] | 1 lag [cm] |
+| Eₒ [MPa] | Ustab. [cm] | 1 lag [cm] |
 | --- | --- | --- |
 | 90 | 95,9 | 64,7 |
 | 95 | 92,9 | 62,3 |
@@ -34,7 +34,7 @@ egne søjler — 30, 45, 60, 80, 120 og 150 MPa — og værdien aflæses uændre
 
 Rammes en søjle ikke, bestemmes værdien ved lineær interpolation mellem de to
 nærmeste søjler. Dette er tilfældet ved dimensionering efter trafikklasse, hvor
-Eo er den tilbageberegnede ækvivalente Eo, jf. kapitel 1, afsnit 4.
+Eₒ er den tilbageberegnede ækvivalente Eₒ, jf. kapitel 1, afsnit 4.
 
 :::formel
 t  =  t_lav  +  f × (t_høj − t_lav)
@@ -47,8 +47,8 @@ Interpolationen udføres særskilt for hver af de tre kurver med samme f.
 
 ## 3 Uden for diagrammets område
 
-Diagrammerne er ikke optegnet for hele Eu-området. Den ustabiliserede
-opbygning er ikke dimensioneret under Eu = 3 MN/m², og de armerede kurver
+Diagrammerne er ikke optegnet for hele Eᵤ-området. Den ustabiliserede
+opbygning er ikke dimensioneret under Eᵤ = 3 MN/m², og de armerede kurver
 ophører ved hver sin øvre grænse; 2 lag geonet forekommer slet ikke i
 diagram 1.
 
@@ -58,4 +58,4 @@ kombination. Forholdet svarer til zonerne under og over, jf. kapitel 2.
 
 De aflæste værdier kan redigeres på siden Designdiagrammer. Ændres en værdi,
 dannes opslagstabellen på ny, og både dimensioneringen og
-Eo_ækv-matricen følger med.
+Eₒ,ækv-matricen følger med.
