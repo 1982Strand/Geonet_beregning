@@ -924,6 +924,144 @@ details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
   font:600 13.5px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink);
 }
 
+/* --- 14.3bd Koblingssektionen »Sådan er tallene fremkommet« --------------
+   Sporet fra trafikklasse til bærelagstykkelse som seks trin, jf.
+   designforslag 12b. Hvert trin er en linje med resultatet i højre kant og
+   regnestykket indrykket under; formelboksene har samme udtryk som
+   φ-korrektionsboksen i trin 2 på dimensioneringssiden. Tal sættes altid i
+   IBM Plex Mono med tabular-nums, så cifrene står lodret på linje. */
+.kob{ margin:.1rem 0 .2rem; }
+.kob-trin{
+  display:grid; grid-template-columns:22px 1fr auto; gap:0 12px;
+  align-items:baseline; padding:12px 0 0;
+}
+.kob-nr{
+  font:600 11px/1.6 'IBM Plex Mono',monospace; color:var(--bg-green-700);
+}
+.kob-titel{ font:600 12.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink); }
+.kob-kilde{ font:400 11px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
+.kob-res{ text-align:right; }
+.kob-res-tal{
+  font:600 15px/1.3 'IBM Plex Mono',monospace; color:var(--bg-ink);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.kob-res-tal.kob-groen{ color:var(--bg-green-900); }
+.kob-res-tal .kob-skraa{ font-weight:400; color:var(--bg-ink-45); }
+.kob-res-note{
+  font:400 10px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+}
+.kob-res-note.kob-groen{
+  font-family:'IBM Plex Mono',monospace; color:var(--bg-green-700);
+}
+.kob-krop{
+  padding:9px 0 16px 34px; display:flex; flex-direction:column; gap:10px;
+}
+/* Regnestykke til venstre, trinnets egen figur til højre. Venstre side har
+   sit eget element, så dens dele står under hinanden i stedet for at blive
+   fordelt hver for sig som celler i gitteret, jf. _kob_kol(). */
+.kob-kol{ display:grid; grid-template-columns:1fr minmax(0,400px); gap:18px;
+  align-items:start; }
+.kob-venstre{ display:flex; flex-direction:column; gap:10px; min-width:0; }
+/* Linjerne er sat op med mellemrum, så tallene står lodret på linje;
+   white-space:pre bevarer opstillingen, og boksen ruller vandret på
+   smalle skærme frem for at bryde et regnestykke midt over. */
+.kob-formel{
+  font:400 11px/1.75 'IBM Plex Mono',monospace; color:var(--bg-ink-70);
+  background:#FBFCFB; border:1px solid var(--bg-line-soft); border-radius:4px;
+  padding:10px 12px; font-variant-numeric:tabular-nums;
+  white-space:pre; overflow-x:auto;
+}
+.kob-formel b{ font-weight:600; color:var(--bg-ink); }
+.kob-note{
+  font:400 10.5px/1.55 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+  text-wrap:pretty;
+}
+.kob-note b{ font-weight:600; color:var(--bg-ink-70); }
+.kob-brod{
+  font:400 10.5px/1.6 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
+  max-width:104ch; text-wrap:pretty;
+}
+/* Kørslen er ikke et kørt punkt — tallet interpoleres. */
+.kob-chip{
+  display:inline-block; white-space:nowrap;
+  font:500 9.5px/1 'IBM Plex Mono',monospace; color:#8A6A1F;
+  background:#FDF6E7; border:1px solid #EBDCB8; border-radius:3px;
+  padding:3px 6px; margin-left:4px;
+}
+/* Nabokørsler (trin 2) og nabokurver (trin 4) som små kort. */
+.kob-kort-par{ display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+.kob-kort{
+  border:1px solid var(--bg-line-soft); border-radius:4px; background:#FBFCFB;
+  padding:9px 11px;
+}
+.kob-kort-hoved{
+  font:600 8.5px/1.35 'IBM Plex Mono',monospace; letter-spacing:.06em;
+  color:var(--bg-ink-45);
+}
+.kob-kort-linje{
+  font:400 11px/1.6 'IBM Plex Mono',monospace; color:var(--bg-ink-70);
+  margin-top:5px; font-variant-numeric:tabular-nums;
+}
+.kob-kort-tal{
+  font:600 13px/1.3 'IBM Plex Mono',monospace; color:var(--bg-ink);
+  font-variant-numeric:tabular-nums;
+}
+.kob-klasser{
+  display:grid; grid-template-columns:1fr 1fr 1fr; gap:1px;
+  background:var(--bg-line); border:1px solid var(--bg-line);
+  border-radius:4px; overflow:hidden;
+}
+.kob-klasse{ background:var(--bg-surface); padding:9px 11px; }
+.kob-klasse-hoved{
+  font:600 8.5px/1.35 'IBM Plex Mono',monospace; letter-spacing:.06em;
+  color:var(--bg-ink-25);
+}
+.kob-klasse-tal{
+  font:500 13px/1.4 'IBM Plex Mono',monospace; color:var(--bg-ink-45);
+  margin-top:4px; font-variant-numeric:tabular-nums;
+}
+.kob-klasse.kob-din{ background:var(--bg-green-lys); }
+.kob-din .kob-klasse-hoved{ color:var(--bg-green-700); }
+.kob-din .kob-klasse-tal{ font-weight:600; color:var(--bg-green-900); }
+/* Trinnets figur i højre spalte. */
+.kob-figur{
+  border:1px solid var(--bg-line-soft); border-radius:4px; background:#FBFCFB;
+  padding:12px;
+}
+.kob-figur img{ width:100%; height:auto; display:block; }
+.kob-sign{
+  display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:9px;
+  font:400 10px/1.4 'IBM Plex Mono',monospace; color:var(--bg-ink-70);
+}
+.kob-sign > div{ display:flex; align-items:center; gap:5px; }
+.kob-prik{ width:6px; height:6px; border-radius:50%; background:var(--bg-ink); }
+.kob-prik-ring{
+  width:7px; height:7px; border-radius:50%; background:var(--bg-surface);
+  border:1.5px solid var(--bg-ink); box-sizing:border-box;
+}
+.kob-figur-tekst{
+  font:400 10px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+  margin-top:7px; text-wrap:pretty;
+}
+/* Geonet-trinnet: ét regnestykke pr. lag-mode. */
+.kob-lag{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.kob-lag-hoved{
+  font:600 9px/1 'IBM Plex Mono',monospace; letter-spacing:.08em;
+  margin-bottom:7px;
+}
+.kob-1lag{ color:#2C5AA0; }
+.kob-2lag{ color:#7B3F8C; }
+.kob-skel{ height:1px; background:#F0F2F0; margin:0; }
+.kob-fod{
+  margin-top:14px; padding-top:11px; border-top:1px solid var(--bg-line-soft);
+  font:400 10.5px/1.5 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+  text-wrap:pretty;
+}
+@media (max-width:1100px){
+  .kob-kol{ grid-template-columns:1fr; }
+  .kob-lag{ grid-template-columns:1fr; }
+}
+
 /* --- 14.3c Hjælp og dokumentation ---------------------------------------
    Kapitlerne står som foldbare kort. Resuméet bliver stående, også når
    kapitlet er lukket, så det rette kapitel kan findes uden at åbne dem alle;

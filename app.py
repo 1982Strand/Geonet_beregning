@@ -18,6 +18,7 @@ ui.topbjaelke(version="v0.4")
 # ---------------------------------------------------------------------------
 # Imports — efter sideopsætningen
 # ---------------------------------------------------------------------------
+import base64
 import contextlib
 import json
 import hashlib
@@ -1203,220 +1204,831 @@ def _eo_aekv_trin_tal(t_klasse: str, eu: float, t_basis_table: dict) -> dict | N
     return {"trin1": trin1, "trin2": trin2, "trin3": trin3}
 
 
-def _eo_aekv_tooltips(
-    t_klasse: str,
-    eu: float,
-    eo_aekv: float,
-    t_basis_table: dict,
-    t_krav_mm: float | None = None,
-    ref_1: dict | None = None,
-    ref_2: dict | None = None,
-    phi: float = PHI_BASIS,
-    geonet: dict | None = None,
-) -> dict[str, str]:
-    """Regnestykket bag Eo_ækv, opdelt som tooltip-tekst til hver flow-boks.
+# ===========================================================================
+# Koblingssektionen »Sådan er tallene fremkommet«
+# ===========================================================================
+# Sporet fra trafikklasse til færdig bærelagstykkelse, opstillet som seks trin
+# i beregningens egen rækkefølge: dimensioneringstrafikken, VejDims krav til
+# de ubundne lag, driftspunktet i designdiagrammet, kurvens plads mellem to
+# belastningsklasser, korrektionen for friktionsvinklen og reduktionen med
+# geonet. Hvert trin viser sit eget regnestykke med brugerens tal.
+#
+# Trinnene står åbne, så kæden kan læses ovenfra og ned. Det tal, der bæres
+# videre til næste trin, står som resultat i højre kant af sit eget trin.
 
-    Nøglerne svarer til boksene: "valg", "krav", "driftspunkt", "geonet".
-    Trin 1 ("krav") skifter form, alt efter om Eu rammer et kørt punkt
-    (direkte opslag) eller ligger imellem to (interpolation i log(Eu)).
-    Tomme strenge, hvor der ikke er noget at regne på.
+# Figurernes tegneflade. Begge figurer har samme viewBox, så de står ens i
+# hver sin spalte, og samme margener, så akserne flugter.
+_KOB_SVG_B, _KOB_SVG_H = 400.0, 250.0
+_KOB_X0, _KOB_X1 = 50.0, 380.0
+_KOB_Y0, _KOB_Y1 = 36.0, 208.0
+
+# Kurvefarver i trin 4. De to lag-farver følger designdiagrammets egne.
+_KOB_FARVE_1LAG = "#2C5AA0"
+_KOB_FARVE_2LAG = "#7B3F8C"
+
+
+def _kob_tal(v: float | None, decimaler: int = 0) -> str:
+    """Tal med dansk tusindtalsseparator og decimalkomma, uden enhed.
+
+    ui.mm() og _dk_num() dækker hver sin halvdel — den ene sætter tusinder,
+    den anden decimalkomma. Regnestykkerne har brug for begge dele på én gang.
     """
-    tips = {"valg": "", "krav": "", "driftspunkt": "", "materiale": "",
-            "geonet": ""}
-    eu_txt = _dk_num(eu, ".0f")
-    tal = _eo_aekv_trin_tal(t_klasse, eu, t_basis_table)
-    if not tal:
-        return tips
-    t1, t2 = tal["trin1"], tal["trin2"]
-    ub = t1["ubundet_mm"]
-    # Et interpoleret krav har decimaler — vis dem, så trin 2's brøk går op.
-    ub_txt = _dk_num(ub, ".0f" if abs(ub - round(ub)) < 0.05 else ".1f")
+    if v is None:
+        return "—"
+    s = f"{v:,.{decimaler}f}"
+    heltal, _, dec = s.partition(".")
+    ud = heltal.replace(",", ".")
+    if dec:
+        ud = f"{ud},{dec}"
+    return "−" + ud[1:] if ud.startswith("-") else ud
 
-    # --- Boks 1: valgt grundlag ------------------------------------------
-    kendte = ", ".join(str(p) for p in t1.get("kendte", []))
-    tips["valg"] = (
-        f"Trafikklasse {t_klasse} ved en underbund med E-værdi "
-        f"Eu = {eu_txt} MPa.\n\n"
-        f"For denne trafikklasse er der udført VejDim-kørsler ved "
-        f"Eu = {kendte} MPa. "
-        + (
-            f"Eu = {eu_txt} MPa er et af de kørte punkter, og lagtykkelsen "
-            f"aflæses direkte."
-            if t1["direkte"]
-            else f"Eu = {eu_txt} MPa ligger mellem to kørte punkter, og "
-                 f"lagtykkelsen bestemmes ved interpolation."
-        )
+
+def _kob_esc(tekst) -> str:
+    """Tekst klar til at indgå i sektionens HTML."""
+    return html.escape(str(tekst))
+
+
+def _kob_formel(*linjer: str) -> str:
+    """Regnestykket i egen ramme, sat op som i φ-korrektionsboksen.
+
+    Linjerne sættes med white-space:pre, jf. stylesheettets .kob-formel, så
+    mellemrummene i opstillingen bevares og tallene står lodret på linje.
+    """
+    return '<div class="kob-formel">' + "\n".join(linjer) + "</div>"
+
+
+def _kob_regnelinje(tekst: str, tal: str, bredde: int = 33, tal_bredde: int = 10) -> str:
+    """En linje i et regnestykke: betegnelse til venstre, tallet højrestillet.
+
+    Justeringen sker med mellemrum og forudsætter derfor, at hverken tekst
+    eller tal indeholder opmærkning — den ville tælle med i bredden.
+    """
+    return f"{tekst:<{bredde}}{tal:>{tal_bredde}}"
+
+
+def _kob_slutlinje(tekst: str, tal: str, bredde: int = 33, tal_bredde: int = 10) -> str:
+    """Regnestykkets sidste linje: resultatet fremhævet i samme talkolonne.
+
+    Opmærkningen sættes efter justeringen, så tallet står lodret under de
+    øvrige linjers tal.
+    """
+    return (
+        _kob_esc(f"{tekst:<{bredde}}")
+        + f"<b>{_kob_esc(tal.rjust(tal_bredde))}</b>"
     )
 
-    # --- Boks 2: trin 1, den ubundne lagtykkelse fra VejDim --------------
-    if t1["direkte"]:
-        aflaes = (
-            f"bundsikring {_dk_num(t1['bl'], '.0f')} mm + "
-            f"stabilgrus {_dk_num(t1['sg'], '.0f')} mm = {ub_txt} mm"
-            if t1.get("sg") is not None else f"{ub_txt} mm"
+
+def _kob_trin(
+    nr: int,
+    titel: str,
+    kilde: str,
+    krop: str,
+    *,
+    resultat: str = "",
+    resultat_note: str = "",
+    chip: str = "",
+    groent_resultat: bool = False,
+    mono_note: bool = False,
+) -> str:
+    """Ét trin: overskriftslinje med resultatet i højre kant og kroppen under."""
+    chip_html = f'<span class="kob-chip">{chip}</span>' if chip else ""
+    res_klasse = "kob-res-tal kob-groen" if groent_resultat else "kob-res-tal"
+    note_klasse = "kob-res-note kob-groen" if mono_note else "kob-res-note"
+    res_html = ""
+    if resultat:
+        res_html = (
+            f'<div class="{res_klasse}">{resultat}</div>'
+            + (f'<div class="{note_klasse}">{resultat_note}</div>'
+               if resultat_note else "")
         )
-        tips["krav"] = (
-            f"1 UBUNDEN LAGTYKKELSE\n\n"
-            f"Eu = {eu_txt} MPa er et kørt punkt, og lagtykkelsen aflæses "
-            f"direkte i kørselstabellen:\n\n"
-            f"    {t_klasse} / Eu {t1['eu_punkt']}:  {aflaes}"
+    return (
+        '<div class="kob-trin">'
+        f'<div class="kob-nr">{nr}</div>'
+        f'<div><span class="kob-titel">{titel}</span> '
+        f'<span class="kob-kilde">— {kilde}</span>{chip_html}</div>'
+        f'<div class="kob-res">{res_html}</div>'
+        "</div>"
+        f'<div class="kob-krop">{krop}</div>'
+    )
+
+
+def _kob_kol(venstre: str, figur: str) -> str:
+    """Regnestykket til venstre, trinnets figur til højre.
+
+    Venstre side pakkes i sit eget element: dens dele — kort, formel og note
+    — ville ellers hver især blive placeret i en celle i gitteret og lægge
+    sig ved siden af figuren i stedet for under hinanden.
+
+    Uden figur fylder regnestykket hele bredden; en tom spalte ville blot
+    forskyde teksten.
+    """
+    if not figur:
+        return venstre
+    return (
+        '<div class="kob-kol">'
+        f'<div class="kob-venstre">{venstre}</div>'
+        f"{figur}</div>"
+    )
+
+
+# --- Figurerne -------------------------------------------------------------
+# Begge figurer tegnes som SVG med brugerens egne tal. De hører til hvert sit
+# trin og gentager ikke designdiagrammet længere oppe på siden: den første
+# viser trafikklassens VejDim-kørsler, den anden de tre kurver, reduktionen
+# aflæses på.
+
+def _kob_skala(vaerdier: list[float], log: bool = False):
+    """Afbildning fra dataområde til tegneflade, med lidt luft i hver ende."""
+    lav, hoej = min(vaerdier), max(vaerdier)
+    if hoej <= lav:
+        hoej = lav + 1.0
+    if log:
+        lav, hoej = math.log(lav), math.log(hoej)
+    spand = hoej - lav
+    lav, hoej = lav - spand * 0.08, hoej + spand * 0.08
+    return lav, hoej
+
+
+def _kob_figur_koersler(t_klasse: str, eu: float, t1: dict) -> str:
+    """Trafikklassens VejDim-kørsler med brugerens Eu markeret.
+
+    Kørslerne står som punkter, og E-værdien er afsat i log-skala — det er
+    den skala, tykkelsen aftager retlinet i, og dermed den, interpolationen
+    foretages i, jf. trafik_ubundet_tykkelse().
+    """
+    rk = (_aktiv_koersler() or {}).get(t_klasse) or {}
+    punkter: list[tuple[float, float]] = []
+    for p in sorted(rk):
+        v = rk[p]
+        t = ((v.get("sg") or 0) + (v.get("bl") or 0)) if isinstance(v, dict) else float(v or 0)
+        if t > 0:
+            punkter.append((float(t), float(p)))
+    if len(punkter) < 2:
+        return ""
+
+    ub = t1["ubundet_mm"]
+    x_lav, x_hoej = _kob_skala([p[0] for p in punkter] + [ub])
+    y_lav, y_hoej = _kob_skala([p[1] for p in punkter] + [float(eu)], log=True)
+
+    def sx(v: float) -> float:
+        return _KOB_X0 + (v - x_lav) / (x_hoej - x_lav) * (_KOB_X1 - _KOB_X0)
+
+    def sy(v: float) -> float:
+        return _KOB_Y1 - (math.log(v) - y_lav) / (y_hoej - y_lav) * (_KOB_Y1 - _KOB_Y0)
+
+    dele: list[str] = []
+    # Netlinjer ved de kørte E-værdier og ved fire tykkelser.
+    x_ticks = _kob_akse_ticks(x_lav, x_hoej)
+    dele.append('<g stroke="#EEF1EE" stroke-width="1">' + "".join(
+        f'<line x1="{sx(v):.1f}" y1="{_KOB_Y0 - 2:.1f}" '
+        f'x2="{sx(v):.1f}" y2="{_KOB_Y1:.1f}"></line>' for v in x_ticks
+    ) + "".join(
+        f'<line x1="{_KOB_X0:.1f}" y1="{sy(p):.1f}" '
+        f'x2="{_KOB_X1:.1f}" y2="{sy(p):.1f}"></line>'
+        for p in sorted({p[1] for p in punkter})
+    ) + "</g>")
+    dele.append(
+        f'<g stroke="#C4CAC5" stroke-width="1">'
+        f'<line x1="{_KOB_X0:.1f}" y1="{_KOB_Y0 - 4:.1f}" '
+        f'x2="{_KOB_X0:.1f}" y2="{_KOB_Y1:.1f}"></line>'
+        f'<line x1="{_KOB_X0:.1f}" y1="{_KOB_Y1:.1f}" '
+        f'x2="{_KOB_X1 + 4:.1f}" y2="{_KOB_Y1:.1f}"></line></g>'
+    )
+    # Aksernes tal og benævnelser.
+    dele.append(
+        '<g fill="#9AA39C" font-size="9" text-anchor="end" '
+        'font-family="IBM Plex Mono, monospace">' + "".join(
+            f'<text x="{_KOB_X0 - 6:.1f}" y="{sy(p) + 3:.1f}">{p:.0f}</text>'
+            for p in sorted({p[1] for p in punkter})
+        ) + "</g>"
+    )
+    dele.append(
+        '<g fill="#9AA39C" font-size="9" text-anchor="middle" '
+        'font-family="IBM Plex Mono, monospace">' + "".join(
+            f'<text x="{sx(v):.1f}" y="{_KOB_Y1 + 14:.1f}">{_kob_tal(v)}</text>'
+            for v in x_ticks
+        ) + "</g>"
+    )
+    dele.append(
+        f'<text x="14" y="{(_KOB_Y0 + _KOB_Y1) / 2:.0f}" fill="#4A554E" '
+        f'font-size="9" font-weight="600" text-anchor="middle" '
+        f'transform="rotate(-90 14 {(_KOB_Y0 + _KOB_Y1) / 2:.0f})">'
+        f'Underbund Eu [MPa]</text>'
+        f'<text x="{(_KOB_X0 + _KOB_X1) / 2:.0f}" y="{_KOB_Y1 + 34:.0f}" '
+        f'fill="#4A554E" font-size="9" font-weight="600" text-anchor="middle">'
+        f'Ubunden lagtykkelse SG + BL [mm]</text>'
+    )
+    # Kørslerne som en linje med punkter.
+    bane = " ".join(f"{sx(t):.1f},{sy(p):.1f}" for t, p in punkter)
+    dele.append(
+        f'<polyline points="{bane}" fill="none" stroke="#15211A" '
+        f'stroke-width="1.6"></polyline>'
+    )
+    dele.append('<g fill="#15211A">' + "".join(
+        f'<circle cx="{sx(t):.1f}" cy="{sy(p):.1f}" r="3.2"></circle>'
+        for t, p in punkter
+    ) + "</g>")
+    # Brugerens punkt med hjælpelinjer ud til akserne.
+    px, py = sx(ub), sy(float(eu))
+    dele.append(
+        f'<line x1="{_KOB_X0:.1f}" y1="{py:.1f}" x2="{px:.1f}" y2="{py:.1f}" '
+        f'stroke="#1B6B34" stroke-width="1" stroke-dasharray="3 3"></line>'
+        f'<line x1="{px:.1f}" y1="{py:.1f}" x2="{px:.1f}" y2="{_KOB_Y1:.1f}" '
+        f'stroke="#1B6B34" stroke-width="1" stroke-dasharray="3 3"></line>'
+        f'<circle cx="{px:.1f}" cy="{py:.1f}" r="5" fill="#1B6B34" '
+        f'stroke="#fff" stroke-width="2"></circle>'
+    )
+    dele.append(
+        f'<text x="{px + 9:.1f}" y="{py - 7:.1f}" fill="#12401F" font-size="10" '
+        f'font-weight="600" font-family="IBM Plex Mono, monospace">'
+        f'{_kob_tal(ub)} mm</text>'
+    )
+    return (
+        f'<svg viewBox="0 0 {_KOB_SVG_B:.0f} {_KOB_SVG_H:.0f}" '
+        f'xmlns="http://www.w3.org/2000/svg" '
+        f'font-family="IBM Plex Sans, sans-serif">{"".join(dele)}</svg>'
+    )
+
+
+def _kob_akse_ticks(lav: float, hoej: float, antal: int = 4) -> list[float]:
+    """Fire runde værdier inden for aksens område."""
+    spand = hoej - lav
+    if spand <= 0:
+        return [lav]
+    raat = spand / antal
+    trin = 10 ** math.floor(math.log10(raat))
+    for m in (1, 2, 2.5, 5, 10):
+        if trin * m >= raat:
+            trin *= m
+            break
+    start = math.ceil(lav / trin) * trin
+    ud: list[float] = []
+    v = start
+    while v <= hoej + 1e-9:
+        ud.append(v)
+        v += trin
+    return ud
+
+
+def _kob_figur_diagram(
+    eu: float,
+    eo_aekv: float,
+    t2: dict,
+    t_basis_table: dict,
+    phi: float,
+    net_kor: float,
+    punkter: list[tuple[float, str, str]],
+) -> str:
+    """Designdiagrammets tre kurver i punktet, med nabokurverne stiplet.
+
+    Kurverne bærer samme korrektion som beregningen — φ på den ustabiliserede
+    og φ + net på de armerede — så de afsatte punkter ligger på deres egen
+    kurve. Nabokurverne er de to belastningsklasser, Eo_ækv ligger imellem.
+    """
+    phi_kor = K_PHI * (phi - PHI_BASIS)
+    eu_vals = sorted(t_basis_table.keys())
+
+    def _kurve(eo: float, lag: str, faktor: float) -> list[tuple[float, float]]:
+        ud: list[tuple[float, float]] = []
+        for e in eu_vals:
+            v = _slaa_op_interp(e, eo, lag, t_basis_table=t_basis_table)
+            if v is not None:
+                ud.append((v * 10.0 * faktor, float(e)))
+        return ud
+
+    hoved = _kurve(eo_aekv, "uarmeret", 1 + phi_kor)
+    if len(hoved) < 2:
+        return ""
+    naboer = [
+        (_kurve(t2["eo_lav"], "uarmeret", 1 + phi_kor), eo_til_klasse(t2["eo_lav"])),
+        (_kurve(t2["eo_hoej"], "uarmeret", 1 + phi_kor), eo_til_klasse(t2["eo_hoej"])),
+    ]
+    armerede = [
+        (_kurve(eo_aekv, "1_lag", 1 + phi_kor + net_kor), _KOB_FARVE_1LAG),
+        (_kurve(eo_aekv, "2_lag", 1 + phi_kor + net_kor), _KOB_FARVE_2LAG),
+    ]
+
+    alle_x = [x for k, _ in naboer for x, _ in k] + [x for x, _ in hoved]
+    alle_x += [x for k, _ in armerede for x, _ in k]
+    alle_x += [p[0] for p in punkter]
+    x_lav, x_hoej = _kob_skala(alle_x)
+    y_lav, y_hoej = _kob_skala([float(e) for e in eu_vals] + [float(eu)])
+
+    def sx(v: float) -> float:
+        return _KOB_X0 + (v - x_lav) / (x_hoej - x_lav) * (_KOB_X1 - _KOB_X0)
+
+    def sy(v: float) -> float:
+        return _KOB_Y1 - (v - y_lav) / (y_hoej - y_lav) * (_KOB_Y1 - _KOB_Y0)
+
+    def bane(k: list[tuple[float, float]]) -> str:
+        return " ".join(f"{sx(x):.1f},{sy(y):.1f}" for x, y in k)
+
+    x_ticks = _kob_akse_ticks(x_lav, x_hoej)
+    y_ticks = _kob_akse_ticks(y_lav, y_hoej)
+    dele: list[str] = []
+    dele.append('<g stroke="#EEF1EE" stroke-width="1">' + "".join(
+        f'<line x1="{sx(v):.1f}" y1="{_KOB_Y0 - 2:.1f}" '
+        f'x2="{sx(v):.1f}" y2="{_KOB_Y1:.1f}"></line>' for v in x_ticks
+    ) + "".join(
+        f'<line x1="{_KOB_X0:.1f}" y1="{sy(v):.1f}" '
+        f'x2="{_KOB_X1:.1f}" y2="{sy(v):.1f}"></line>' for v in y_ticks
+    ) + "</g>")
+    dele.append(
+        f'<g stroke="#C4CAC5" stroke-width="1">'
+        f'<line x1="{_KOB_X0:.1f}" y1="{_KOB_Y0 - 4:.1f}" '
+        f'x2="{_KOB_X0:.1f}" y2="{_KOB_Y1:.1f}"></line>'
+        f'<line x1="{_KOB_X0:.1f}" y1="{_KOB_Y1:.1f}" '
+        f'x2="{_KOB_X1 + 4:.1f}" y2="{_KOB_Y1:.1f}"></line></g>'
+    )
+    dele.append(
+        '<g fill="#9AA39C" font-size="9" text-anchor="end" '
+        'font-family="IBM Plex Mono, monospace">' + "".join(
+            f'<text x="{_KOB_X0 - 6:.1f}" y="{sy(v) + 3:.1f}">{v:.0f}</text>'
+            for v in y_ticks
+        ) + "</g>"
+    )
+    dele.append(
+        '<g fill="#9AA39C" font-size="9" text-anchor="middle" '
+        'font-family="IBM Plex Mono, monospace">' + "".join(
+            f'<text x="{sx(v):.1f}" y="{_KOB_Y1 + 14:.1f}">{_kob_tal(v)}</text>'
+            for v in x_ticks
+        ) + "</g>"
+    )
+    dele.append(
+        f'<text x="14" y="{(_KOB_Y0 + _KOB_Y1) / 2:.0f}" fill="#4A554E" '
+        f'font-size="9" font-weight="600" text-anchor="middle" '
+        f'transform="rotate(-90 14 {(_KOB_Y0 + _KOB_Y1) / 2:.0f})">'
+        f'Underbund Eu [MPa]</text>'
+        f'<text x="{(_KOB_X0 + _KOB_X1) / 2:.0f}" y="{_KOB_Y1 + 34:.0f}" '
+        f'fill="#4A554E" font-size="9" font-weight="600" text-anchor="middle">'
+        f'Bærelagstykkelse [mm]</text>'
+    )
+    for kurve, klasse in naboer:
+        if len(kurve) < 2:
+            continue
+        dele.append(
+            f'<polyline points="{bane(kurve)}" fill="none" stroke="#C4CAC5" '
+            f'stroke-width="1.2" stroke-dasharray="4 3"></polyline>'
+        )
+        x, y = kurve[len(kurve) // 3]
+        dele.append(
+            f'<text x="{sx(x) + 4:.1f}" y="{sy(y) - 4:.1f}" fill="#9AA39C" '
+            f'font-size="8.5" font-family="IBM Plex Mono, monospace">'
+            f'KL. {klasse}</text>'
+        )
+    for kurve, farve in armerede:
+        if len(kurve) >= 2:
+            dele.append(
+                f'<polyline points="{bane(kurve)}" fill="none" stroke="{farve}" '
+                f'stroke-width="1.6"></polyline>'
+            )
+    dele.append(
+        f'<polyline points="{bane(hoved)}" fill="none" stroke="#15211A" '
+        f'stroke-width="1.8"></polyline>'
+    )
+    # Brugerens E-værdi som vandret linje med trinnenes punkter afsat.
+    py = sy(float(eu))
+    dele.append(
+        f'<line x1="{_KOB_X0:.1f}" y1="{py:.1f}" x2="{_KOB_X1:.1f}" y2="{py:.1f}" '
+        f'stroke="#B9C1BA" stroke-width="1" stroke-dasharray="3 3"></line>'
+        f'<text x="{_KOB_X0 + 4:.1f}" y="{py - 5:.1f}" fill="#7A857D" '
+        f'font-size="9" font-family="IBM Plex Mono, monospace">'
+        f'Eu {_kob_tal(eu)}</text>'
+    )
+    for x, farve, form in punkter:
+        if form == "ring":
+            dele.append(
+                f'<circle cx="{sx(x):.1f}" cy="{py:.1f}" r="4.4" fill="#fff" '
+                f'stroke="{farve}" stroke-width="1.6"></circle>'
+            )
+        else:
+            dele.append(
+                f'<circle cx="{sx(x):.1f}" cy="{py:.1f}" r="3.4" '
+                f'fill="{farve}"></circle>'
+            )
+    return (
+        f'<svg viewBox="0 0 {_KOB_SVG_B:.0f} {_KOB_SVG_H:.0f}" '
+        f'xmlns="http://www.w3.org/2000/svg" '
+        f'font-family="IBM Plex Sans, sans-serif">{"".join(dele)}</svg>'
+    )
+
+
+def _kob_figurramme(svg: str, signatur: list[str], tekst: str) -> str:
+    """Figuren med signatur og figurtekst under.
+
+    Tegningen indsættes som et billede med figuren i adressen, ikke som
+    inline SVG: Streamlit renser den HTML, st.html() modtager, og fjerner
+    svg-elementet, hvorved rammen ville stå tom.
+    """
+    if not svg:
+        return ""
+    data = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    sign = "".join(f"<div>{s}</div>" for s in signatur)
+    return (
+        '<div class="kob-figur">'
+        f'<img alt="{_kob_esc(tekst)}" '
+        f'src="data:image/svg+xml;base64,{data}">'
+        f'<div class="kob-sign">{sign}</div>'
+        f'<div class="kob-figur-tekst">{tekst}</div>'
+        "</div>"
+    )
+
+
+# --- De seks trin ----------------------------------------------------------
+
+def _kob_trin1(t_klasse: str, eu: float) -> str:
+    """Dimensioneringstrafikken, som trafikklassen er defineret ved."""
+    tk = TRAFIKKLASSER.get(t_klasse) or {}
+    naae_aar = tk.get("naae10_aar") or "—"
+    naae_20 = (tk.get("naae10_mio_20aar") or 0) * 1e6
+    krop = _kob_formel(
+        _kob_esc(
+            f"{t_klasse} = {tk.get('tunge_koeretoejer', '—')} tunge køretøjer "
+            f"pr. døgn, begge retninger"
+        ),
+        _kob_esc(f"    {tk.get('anvendelse', '')}"),
+        "",
+        _kob_esc(_kob_regnelinje("NÆ10 pr. år  (tabelværdi)", naae_aar)),
+        _kob_slutlinje(f"NÆ10, 20 år = {naae_aar} × 20", _kob_tal(naae_20)),
+    )
+    krop += (
+        '<div class="kob-note">Trafikklassen og '
+        f"Eu = {_kob_esc(ui.mpa(eu))} er indtastet i trin 1. "
+        "Alt herunder følger af dem.</div>"
+    )
+    return _kob_trin(
+        1, "Dimensioneringstrafik", "trafikklassetabellen, "
+        f"{t_klasse} {_kob_esc((tk.get('beskrivelse') or '').lower())}",
+        krop,
+        resultat=f"{_kob_tal(naae_20)} NÆ10",
+        resultat_note="over 20 år",
+    )
+
+
+def _kob_trin2(t_klasse: str, eu: float, t1: dict) -> str:
+    """VejDims krav til de ubundne lag — kørt punkt eller interpolation."""
+    ub = t1["ubundet_mm"]
+    ub_dec = 0 if abs(ub - round(ub)) < 0.05 else 1
+    kendte = ", ".join(str(p) for p in t1.get("kendte", []))
+
+    if t1["direkte"]:
+        sg, bl = t1.get("sg"), t1.get("bl")
+        linjer = [
+            _kob_esc(f"kørsel {t_klasse} · Eu {t1['eu_punkt']} MPa"),
+        ]
+        if sg is not None:
+            linjer += [
+                _kob_esc(_kob_regnelinje("  stabilgrus SG", f"{_kob_tal(sg)} mm")),
+                _kob_esc(_kob_regnelinje("  bundsikring BL", f"{_kob_tal(bl)} mm")),
+            ]
+        linjer.append(_kob_slutlinje("= ubundet i alt", f"{_kob_tal(ub)} mm"))
+        krop = _kob_formel(*linjer)
+        krop += (
+            f'<div class="kob-note">Eu = {_kob_esc(ui.mpa(eu))} er et kørt '
+            f"punkt, og lagtykkelsen aflæses direkte i kørselstabellen. "
+            f"Kørslerne for {_kob_esc(t_klasse)} findes ved Eu = "
+            f"{_kob_esc(kendte)} MPa.</div>"
+        )
+        chip = ""
+    else:
+        kort = (
+            '<div class="kob-kort-par">'
+            + "".join(
+                '<div class="kob-kort">'
+                f'<div class="kob-kort-hoved">NÆRMESTE KØRSEL {mærkat} · '
+                f'EU {p} MPA</div>'
+                f'<div class="kob-kort-linje">SG {_kob_tal(sg)} mm + '
+                f'BL {_kob_tal(bl)} mm</div>'
+                f'<div class="kob-kort-tal">= {_kob_tal(t)} mm</div></div>'
+                for mærkat, p, sg, bl, t in (
+                    ("UNDER", t1["lav"], *_kob_koersel_lag(t_klasse, t1["lav"]),
+                     t1["t_lav"]),
+                    ("OVER", t1["hoej"], *_kob_koersel_lag(t_klasse, t1["hoej"]),
+                     t1["t_hoej"]),
+                )
+            )
+            + "</div>"
+        )
+        f = t1["frac"]
+        krop = kort + _kob_formel(
+            _kob_esc(
+                f"f = ln({_kob_tal(eu)} / {t1['lav']}) / "
+                f"ln({t1['hoej']} / {t1['lav']}) = "
+                f"{_kob_tal(math.log(eu / t1['lav']), 4)} / "
+                f"{_kob_tal(math.log(t1['hoej'] / t1['lav']), 4)} = "
+            ) + f"<b>{_kob_esc(_kob_tal(f, 3))}</b>",
+            _kob_esc(
+                f"t = {_kob_tal(t1['t_lav'])} − {_kob_tal(f, 3)} × "
+                f"({_kob_tal(t1['t_lav'])} − {_kob_tal(t1['t_hoej'])}) = "
+            ) + f"<b>{_kob_esc(_kob_tal(ub, ub_dec))} mm</b>",
+        )
+        krop += (
+            '<div class="kob-note">Interpolationen foretages i log(Eu), ikke '
+            "i Eu: lagtykkelsen aftager tilnærmelsesvis retlinet med log(Eu), "
+            "og lineær interpolation ville give en for tynd opbygning. "
+            f"Er E-værdien et kørt punkt ({_kob_esc(kendte)} MPa), aflæses "
+            "kørslen direkte.</div>"
+        )
+        chip = f"Eu {_kob_esc(_kob_tal(eu))} er ikke kørt — interpoleres"
+
+    figur = _kob_figurramme(
+        _kob_figur_koersler(t_klasse, eu, t1),
+        [
+            '<div class="kob-prik"></div>kørte punkter',
+            '<div class="kob-prik" style="background:#1B6B34"></div>'
+            f"dit Eu = {_kob_esc(_kob_tal(eu))} MPa",
+        ],
+        f"{_kob_esc(t_klasse)}s VejDim-kørsler. E-værdien er afsat i "
+        "log-skala — den skala, interpolationen foretages i.",
+    )
+    antal = sum(
+        1
+        for raekker in (_aktiv_koersler() or {}).values()
+        for v in raekker.values()
+        if (((v.get("sg") or 0) + (v.get("bl") or 0)) if isinstance(v, dict)
+            else float(v or 0)) > 0
+    )
+    return _kob_trin(
+        2, "VejDims ubundne krav",
+        f"{antal} VejDim-kørsler, T1–T6 × Eu 3–40 MPa",
+        _kob_kol(krop, figur),
+        resultat=f"{_kob_tal(ub, ub_dec)} mm",
+        resultat_note="ubundet i alt, SG + BL",
+        chip=chip,
+    )
+
+
+def _kob_koersel_lag(t_klasse: str, eu_punkt: int) -> tuple[float, float]:
+    """Kørslens stabilgrus og bundsikring ved et kørt punkt."""
+    v = ((_aktiv_koersler() or {}).get(t_klasse) or {}).get(eu_punkt)
+    if isinstance(v, dict):
+        return float(v.get("sg") or 0), float(v.get("bl") or 0)
+    return 0.0, 0.0
+
+
+def _kob_trin3(eu: float, eo_aekv: float, t1: dict, t2: dict) -> str:
+    """Driftspunktet: den Eo-kurve, VejDims krav svarer til ved samme Eu."""
+    ub = t1["ubundet_mm"]
+    ub_dec = 0 if abs(ub - round(ub)) < 0.05 else 1
+    kl_lav, kl_hoej = eo_til_klasse(t2["eo_lav"]), eo_til_klasse(t2["eo_hoej"])
+    krop = (
+        '<div class="kob-brod">Kravet slås tilbage til den Eo-kurve i '
+        "designdiagrammerne, der giver netop denne tykkelse uarmeret ved "
+        "samme E-værdi. Opslaget foretages i diagrammets egen række for "
+        f"Eu = {_kob_esc(ui.mpa(eu))} — ikke ved at interpolere nabokørslernes "
+        "ækvivalente Eo. Værdien er en indeksværdi, der peger på en kurve, "
+        "og ikke et krav til underbunden.</div>"
+    )
+    krop += _kob_formel(
+        _kob_esc(f"uarmeret kurve ved Eu = {_kob_tal(eu)} MPa:"),
+        _kob_esc(_kob_regnelinje(
+            f"  Eo {t2['eo_lav']:>3} MPa  (klasse {kl_lav})",
+            f"{_kob_tal(t2['t_lav'])} mm")),
+        _kob_esc(_kob_regnelinje(
+            f"  Eo {t2['eo_hoej']:>3} MPa  (klasse {kl_hoej})",
+            f"{_kob_tal(t2['t_hoej'])} mm")),
+        "",
+        _kob_esc(
+            f"f = ({_kob_tal(ub, ub_dec)} − {_kob_tal(t2['t_lav'])}) / "
+            f"({_kob_tal(t2['t_hoej'])} − {_kob_tal(t2['t_lav'])}) = "
+        ) + f"<b>{_kob_esc(_kob_tal(t2['frac'], 3))}</b>",
+        _kob_esc(
+            f"Eo,ækv = {t2['eo_lav']} + {_kob_tal(t2['frac'], 3)} × "
+            f"({t2['eo_hoej']} − {t2['eo_lav']}) = "
+            f"{_kob_tal(t2['eo_aekv'], 1)} → "
+        ) + f"<b>{_kob_esc(_kob_tal(eo_aekv))} MPa</b>",
+    )
+    return _kob_trin(
+        3, "Driftspunkt — ækvivalent Eo",
+        "korrelationstabellen, tilbageberegnet i diagrammets række",
+        krop,
+        resultat=f"{_kob_tal(eo_aekv)} MPa",
+        resultat_note="kurven beregningen læses på",
+        groent_resultat=True,
+    )
+
+
+def _kob_trin4(
+    eu: float,
+    eo_aekv: float,
+    t1: dict,
+    t2: dict,
+    t_basis_table: dict,
+    phi: float,
+    net_kor: float,
+    punkter: list[tuple[float, str, str]],
+    sign: list[str],
+) -> str:
+    """Kurvens plads mellem de to belastningsklasser, reduktionen aflæses på."""
+    ub = t1["ubundet_mm"]
+    ub_dec = 0 if abs(ub - round(ub)) < 0.05 else 1
+    kl_lav, kl_hoej = eo_til_klasse(t2["eo_lav"]), eo_til_klasse(t2["eo_hoej"])
+    naermeste = eo_til_naermeste_klasse(eo_aekv)
+    klasser = (
+        '<div class="kob-klasser">'
+        f'<div class="kob-klasse"><div class="kob-klasse-hoved">'
+        f'BELASTNINGSKLASSE {kl_lav}<br>Eo {t2["eo_lav"]} MPa</div>'
+        f'<div class="kob-klasse-tal">{_kob_tal(t2["t_lav"])} mm</div></div>'
+        f'<div class="kob-klasse kob-din"><div class="kob-klasse-hoved">'
+        f'DIN KURVE<br>Eo,ækv {_kob_tal(eo_aekv)} MPa</div>'
+        f'<div class="kob-klasse-tal">{_kob_tal(ub, ub_dec)} mm</div></div>'
+        f'<div class="kob-klasse"><div class="kob-klasse-hoved">'
+        f'BELASTNINGSKLASSE {kl_hoej}<br>Eo {t2["eo_hoej"]} MPa</div>'
+        f'<div class="kob-klasse-tal">{_kob_tal(t2["t_hoej"])} mm</div></div>'
+        "</div>"
+    )
+    venstre = klasser + _kob_formel(
+        _kob_esc(f"uarmeret tykkelse ved Eu = {_kob_tal(eu)} MPa, aflæst i "
+                 "diagrammerne"),
+        _kob_esc(
+            f"Eo,ækv ligger {_kob_tal(t2['frac'] * 100, 1)} % inde mellem "
+            f"klasse {kl_lav} og {kl_hoej}"
+        ),
+        _kob_esc("reduktionen aflæses på samme to kurver med samme faktor"),
+    )
+    venstre += (
+        '<div class="kob-note">Da Eo,ækv per konstruktion er valgt, så den '
+        "uarmerede kurve rammer VejDims krav, er reduktionen i trin 6 "
+        "designdiagrammets egen, feltdokumenterede værdi. VejDim omfatter "
+        "ikke geonet, og de to metoders kriterier sammenblandes ikke.</div>"
+    )
+    figur = _kob_figurramme(
+        _kob_figur_diagram(eu, eo_aekv, t2, t_basis_table, phi, net_kor, punkter),
+        sign,
+        f"De stiplede kurver er belastningsklasse {kl_lav} og {kl_hoej}; den "
+        "fuldt optrukne er Eo,ækv. Punkterne på Eu-linjen er trin 5 og 6.",
+    )
+    return _kob_trin(
+        4, "Hvor kurven ligger i designdiagrammet",
+        f"designdiagram {kl_lav} og {kl_hoej}, GS-GRID/Tensar-feltforsøg",
+        _kob_kol(venstre, figur),
+        resultat=f"mellem klasse {kl_lav} og {kl_hoej}",
+        resultat_note=f"nærmeste hele klasse: {naermeste}",
+    )
+
+
+def _kob_trin5(
+    t_krav: float, t_uarm_kor: float | None, phi: float, materialer: list[dict],
+) -> str:
+    """Korrektionen for de valgte materialers friktionsvinkel."""
+    # Uden afvigelse giver produktet −0,0; nulstilles, så fortegnet ikke
+    # står tilbage i teksten.
+    phi_kor = K_PHI * (phi - PHI_BASIS)
+    phi_kor = 0.0 if abs(phi_kor) < 1e-12 else phi_kor
+    linjer: list[str] = []
+    kilde = "materialetabellen"
+    if materialer:
+        data = _phi_tabel_data(materialer)
+        led = " + ".join(
+            f"{_kob_tal((m.get('pct') if data['lag_mode_pct'] else m.get('tykkelse_mm')) or 0)}"
+            f" × {_kob_tal(m['phi'], 1)}"
+            for m in materialer
+        )
+        linjer += [
+            _kob_esc(
+                f"φ = Σ({data['symbol']}ᵢ × φᵢ) / Σ{data['symbol']}ᵢ = "
+                f"({led}) / {_kob_tal(data['total_v'])}"
+            ),
+            _kob_esc(
+                f"  = {_kob_tal(data['total_bidrag'])} / "
+                f"{_kob_tal(data['total_v'])} = "
+            ) + f"<b>{_kob_esc(_kob_tal(data['phi_weighted'], 2))}°</b>",
+        ]
+        navne = ", ".join(
+            f"{m['navn']} {_kob_tal(m['phi'], 1)}°" for m in materialer
+        )
+        kilde = f"materialetabellen, {navne.lower()}"
+    t_efter = t_uarm_kor if t_uarm_kor else t_krav
+    linjer.append(
+        _kob_esc(
+            f"k_φ = {_kob_tal(K_PHI, 2)} × ({_kob_tal(phi, 2)} − "
+            f"{_kob_tal(PHI_BASIS, 0)}) = {_kob_tal(phi_kor, 4)} = "
+        ) + f"<b>{_kob_esc(_kob_tal(phi_kor * 100, 2))} %</b>"
+    )
+    if abs(phi_kor) >= 1e-9:
+        linjer.append(
+            _kob_esc(
+                f"t = {_kob_tal(t_krav)} × (1 {'−' if phi_kor < 0 else '+'} "
+                f"{_kob_tal(abs(phi_kor), 4)}) = "
+            ) + f"<b>{_kob_esc(_kob_tal(t_efter))} mm</b>"
+        )
+    krop = _kob_formel(*linjer)
+    if abs(phi_kor) >= 1e-9:
+        note = (
+            "Diagrammerne er tegnet for et referencemateriale med "
+            f"φ = {_kob_esc(_kob_tal(PHI_BASIS, 0))}°. De valgte lag afviger "
+            "herfra, og kurven forskydes tilsvarende; den korrigerede "
+            "tykkelse er det punkt, materialerne faktisk ligger på."
         )
     else:
-        tips["krav"] = (
-            f"1 UBUNDEN LAGTYKKELSE\n\n"
-            f"Eu = {eu_txt} MPa ligger mellem to kørte punkter. Lagtykkelsen "
-            f"bestemmes ved lineær interpolation i log(Eu), idet lagtykkelsen "
-            f"aftager tilnærmelsesvis retlinet med log(Eu):\n\n"
-            f"    {t_klasse} / Eu {t1['lav']}:  "
-            f"{_dk_num(t1['t_lav'], '.0f')} mm   (kørt punkt)\n"
-            f"    {t_klasse} / Eu {t1['hoej']}:  "
-            f"{_dk_num(t1['t_hoej'], '.0f')} mm   (kørt punkt)\n\n"
-            f"    frac = (ln {eu_txt} − ln {t1['lav']}) / "
-            f"(ln {t1['hoej']} − ln {t1['lav']}) = {_dk_num(t1['frac'], '.3f')}\n"
-            f"    krav = {_dk_num(t1['t_lav'], '.0f')} + "
-            f"{_dk_num(t1['frac'], '.3f')} × ({_dk_num(t1['t_hoej'], '.0f')} − "
-            f"{_dk_num(t1['t_lav'], '.0f')}) = {ub_txt} mm"
+        note = (
+            "Diagrammerne er tegnet for et referencemateriale med "
+            f"φ = {_kob_esc(_kob_tal(PHI_BASIS, 0))}°, og beregningen føres "
+            "med samme værdi. Korrektionen er dermed nul, og diagrammets "
+            "værdi anvendes uændret. Vælges andre materialer under "
+            "Brugerdefineret, slår korrektionen igennem her."
         )
+    krop += f'<div class="kob-note">{note}</div>'
+    return _kob_trin(
+        5, "φ-korrektion for materialerne", kilde, krop,
+        resultat=f"{_kob_tal(t_efter)} mm",
+        resultat_note=(
+            "ustabiliseret, korrigeret" if abs(phi_kor) >= 1e-9
+            else "ustabiliseret, ukorrigeret"
+        ),
+    )
 
-    # --- Boks 3: trin 2, tilbageberegning i diagrammet -------------------
-    if "eo_aekv" in t2:
-        kurve_linjer = "\n".join(
-            f"    klasse {eo_til_klasse(eo) or '–'}  ·  Eo {eo:>3}  →  "
-            f"{_dk_num(mm, '.0f'):>5} mm"
-            + ("   ←" if eo in (t2["eo_lav"], t2["eo_hoej"]) else "")
-            for eo, mm in sorted(t2["kurver"])
-        )
-        kl_lav = eo_til_klasse(t2["eo_lav"])
-        kl_hoej = eo_til_klasse(t2["eo_hoej"])
-        tips["driftspunkt"] = (
-            f"2 ÆKVIVALENT Eo\n\n"
-            f"Der bestemmes den Eo-kurve, hvis ustabiliserede lagtykkelse ved "
-            f"Eu = {eu_txt} MPa svarer til {ub_txt} mm. De ustabiliserede "
-            f"lagtykkelser ved denne E-værdi er:\n\n"
-            f"{kurve_linjer}\n\n"
-            f"Værdien ligger mellem kurverne for klasse {kl_lav} og "
-            f"{kl_hoej}, og der interpoleres lineært mellem disse:\n\n"
-            f"    f      = ({ub_txt} − {_dk_num(t2['t_lav'], '.0f')}) / "
-            f"({_dk_num(t2['t_hoej'], '.0f')} − {_dk_num(t2['t_lav'], '.0f')}) "
-            f"= {_dk_num(t2['frac'], '.3f')}\n"
-            f"    Eo_ækv = {t2['eo_lav']} + {_dk_num(t2['frac'], '.3f')} × "
-            f"({t2['eo_hoej']} − {t2['eo_lav']}) = "
-            f"{_dk_num(t2['eo_aekv'], '.1f')} MPa  →  {_dk_num(eo_aekv, '.0f')}\n\n"
-            f"Den ækvivalente Eo er en indeksværdi, der angiver opslagspunktet "
-            f"i diagrammet. Den udtrykker ikke et krav til underbunden, hvis "
-            f"E-værdi fortsat er {eu_txt} MPa. Ligger lagtykkelsen uden for "
-            f"rækkens yderste kurver, kan opslaget ikke foretages, og cellen "
-            f"angives som under eller over."
-        )
 
-    # --- Materiale-boksen: φ-korrektionen alene -------------------------
-    phi_kor_v = K_PHI * (phi - PHI_BASIS)
-    t_uarm_kor = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm")
-    if abs(phi_kor_v) > 1e-9 and t_uarm_kor and t_krav_mm:
-        tips["materiale"] = (
-            f"KORREKTION FOR FRIKTIONSVINKEL\n\n"
-            f"Afsnit 1 og 2 ovenfor angiver diagrammets basisværdier ved "
-            f"φ = {_dk_num(PHI_BASIS, '.1f')}°. Værdierne holdes ukorrigerede, "
-            f"idet den ækvivalente Eo skal være uafhængig af materialevalget. "
-            f"VejDims krav til trafikklassen afhænger ikke af de valgte "
-            f"ubundne materialer.\n\n"
-            f"Herefter regnes med de valgte materialer "
-            f"(φ = {_dk_num(phi, '.1f')}°):\n\n"
-            f"    k_φ = {_dk_num(K_PHI, '.2f')} × "
-            f"({_dk_num(phi, '.1f')} − {_dk_num(PHI_BASIS, '.1f')}) "
-            f"= {_dk_num(phi_kor_v, '.3f')}\n"
-            f"    T   = {_dk_num(t_krav_mm, '.0f')} × "
-            f"{_dk_num(1 + phi_kor_v, '.3f')} = {_dk_num(t_uarm_kor, '.0f')} mm\n\n"
-            f"Værdien svarer til designdiagrammets ustabiliserede kurve ved "
-            f"Eu = {eu_txt} MPa og udgør referencen for geonet-reduktionerne "
-            f"nedenfor."
-        )
-
-    # --- Boks 4/5: geonet-reduktionen -----------------------------------
-    t3 = tal["trin3"]
-    if t_krav_mm and t3 and "eo_aekv" in t2:
-        kl_lav = eo_til_klasse(t2["eo_lav"])
-        kl_hoej = eo_til_klasse(t2["eo_hoej"])
-        pct = _dk_num(t2["frac"] * 100, ".1f")
-        N, K = 14, 12          # bredde på navne- og talkolonner
-
-        def _linje(navn: str, a, b, c) -> str:
-            return (f"    {navn:<{N}}{a:>{K}}{b:>{K}}{c:>{K}}")
-
-        raekker = [
-            _linje("", f"klasse {kl_lav}", f"klasse {kl_hoej}", f"{pct} % inde"),
-            _linje("uarmeret", _dk_num(t2["t_lav"], ".0f"),
-                   _dk_num(t2["t_hoej"], ".0f"), _dk_num(t_krav_mm, ".0f")),
-        ]
-        for lag, navn in (("1_lag", "1 lag geonet"), ("2_lag", "2 lag geonet")):
-            if lag in t3:
-                raekker.append(_linje(
-                    navn, _dk_num(t3[lag]["lav"], ".0f"),
-                    _dk_num(t3[lag]["hoej"], ".0f"),
-                    _dk_num(t3[lag]["basis"], ".0f"),
-                ))
-
+def _kob_trin6(
+    t_krav: float,
+    t_uarm_kor: float | None,
+    t3: dict,
+    phi: float,
+    net_kor: float,
+    net_navn: str,
+    ref_1: dict | None,
+    ref_2: dict | None,
+) -> str:
+    """Reduktionen med geonet, led for led fra VejDims krav."""
+    phi_kor = K_PHI * (phi - PHI_BASIS)
+    # Nettets afvigelse angives ved effektindekset, hvor det er kendt —
+    # det er den størrelse, geonet-databasen ordner produkterne efter.
+    indeks = (find_geonet(net_navn) or {}).get("effektindeks")
+    net_maerkat = (
+        f"indeks {indeks}" if indeks else f"{_kob_tal(net_kor * 100, 0)} %"
+    )
+    kolonner: list[str] = []
+    resultater: list[str] = []
+    pct_krav: list[str] = []
+    for lag, navn, klasse, ref in (
+        ("1_lag", "1 LAG GEONET", "kob-1lag", ref_1),
+        ("2_lag", "2 LAG GEONET", "kob-2lag", ref_2),
+    ):
+        t_arm = (ref or {}).get("t_armeret_mm")
+        if lag not in t3 or t_arm is None:
+            continue
+        basis = t3[lag]["basis"]
         linjer = [
-            "3 GEONET-REDUKTION",
-            "",
-            f"Designdiagrammet indeholder tre feltbestemte kurver for hver "
-            f"Eo-værdi. Den ækvivalente Eo ligger {pct} % inde mellem "
-            f"klasse {kl_lav} og {kl_hoej}, og samme interpolationsfaktor "
-            f"anvendes på alle tre kurver (mm ved Eu = {eu_txt} MPa):",
-            "",
-            *raekker,
+            _kob_esc(_kob_regnelinje(
+                "ustabiliseret bærelagstykkelse", f"{_kob_tal(t_krav)} mm")),
+            _kob_esc(_kob_regnelinje(
+                "− basisreduktion, referencenet",
+                f"{_kob_tal(t_krav - basis)} mm")),
         ]
-
-        # φ- og net-korrektion: samme faktor på de armerede tal, så procenterne
-        # bliver ærlige. Kun den uarmerede reference bærer φ alene — nettet
-        # findes jo ikke i den opbygning.
-        phi_kor = K_PHI * (phi - PHI_BASIS)
-        t_uarm_ref = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm")
-        net_kor = (geonet or {}).get("korrektion") or 0.0
-        if abs(phi_kor) > 1e-9 and t_uarm_ref:
-            linjer += [
-                "",
-                f"Herefter korrigeres for friktionsvinklen "
-                f"(φ = {_dk_num(phi, '.1f')}° mod diagrammets "
-                f"{_dk_num(PHI_BASIS, '.1f')}°):",
-                f"    k_φ = {_dk_num(K_PHI, '.2f')} × "
-                f"({_dk_num(phi, '.1f')} − {_dk_num(PHI_BASIS, '.1f')}) "
-                f"= {_dk_num(phi_kor, '.3f')}",
-            ]
         if abs(net_kor) >= 0.005:
-            navn = (geonet or {}).get("navn") or "det valgte net"
-            linjer += [
-                "",
-                f"Der korrigeres tillige for geonettypen. {navn} ligger "
-                f"{_dk_num(net_kor * 100, '+.0f')} % i forhold til "
-                f"referencenettet. Den samlede faktor på de armerede "
-                f"lagtykkelser bliver:",
-                f"    1 + ({_dk_num(phi_kor, '.3f')}) + "
-                f"({_dk_num(net_kor, '.3f')}) "
-                f"= {_dk_num(1 + phi_kor + net_kor, '.3f')}",
-            ]
-        linjer.append("")
+            linjer.append(_kob_esc(_kob_regnelinje(
+                f"{'+' if net_kor > 0 else '−'} net-korrektion, {net_maerkat}",
+                f"{_kob_tal(abs(basis * net_kor))} mm")))
+        if abs(phi_kor) >= 1e-9:
+            linjer.append(_kob_esc(_kob_regnelinje(
+                f"{'+' if phi_kor > 0 else '−'} φ-korrektion, "
+                f"{_kob_tal(phi_kor * 100, 1)} %",
+                f"{_kob_tal(abs(basis * phi_kor))} mm")))
+        red_krav = (t_krav - t_arm) / t_krav * 100 if t_krav else None
+        red_kor = (ref or {}).get("reduktion_pct")
+        hale = ""
+        if red_krav is not None:
+            hale = f"   (−{_kob_tal(red_krav)} % af {_kob_tal(t_krav)}"
+            # Den anden reference nævnes kun, når φ-korrektionen flytter
+            # udgangspunktet — ellers er de to procenter det samme tal.
+            if red_kor is not None and t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
+                hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_tal(t_uarm_kor)}"
+            hale += ")"
         linjer.append(
-            f"    uarmeret:      {_dk_num(t_uarm_ref or t_krav_mm, '.0f'):>5} mm"
+            "= " + f"<b>{_kob_esc(_kob_tal(t_arm))} mm</b>" + _kob_esc(hale)
         )
-        for ref, navn in ((ref_1, "1 lag geonet"), (ref_2, "2 lag geonet")):
-            t_arm = ref.get("t_armeret_mm") if ref else None
-            if t_arm is None:
-                continue
-            red = ref.get("reduktion_pct")
-            red_txt = f"   (−{_dk_num(red * 100, '.0f')} %)" if red else ""
-            linjer.append(f"    {navn}:  {_dk_num(t_arm, '.0f'):>5} mm{red_txt}")
-        if t_uarm_ref:
-            linjer += [
-                "",
-                f"Reduktionen opgøres i forhold til de "
-                f"{_dk_num(t_uarm_ref, '.0f')} mm, som er den ustabiliserede "
-                f"opbygning i samme materiale. Begge lagtykkelser er dermed "
-                f"korrigeret på samme grundlag.",
-            ]
-        tips["geonet"] = "\n".join(linjer)
+        kolonner.append(
+            f'<div><div class="kob-lag-hoved {klasse}">{navn}</div>'
+            + _kob_formel(*linjer) + "</div>"
+        )
+        resultater.append(_kob_tal(t_arm))
+        if red_krav is not None:
+            pct_krav.append(f"−{_kob_tal(red_krav)} %")
 
-    return tips
+    if not kolonner:
+        return ""
+    krop = f'<div class="kob-lag">{"".join(kolonner)}</div>'
+    krop += (
+        '<div class="kob-note">Basisreduktionen gælder referencenettet i '
+        "punktet, og net-korrektionen er det valgte nets afvigelse herfra. "
+        "<b>To referencer for procenterne:</b> resultatkortet øverst regner "
+        f"fra VejDims {_kob_esc(_kob_tal(t_krav))} mm, mens diagrammets "
+        f"punkter ligger på de φ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor))} "
+        "mm. Begge er angivet, så de to sæt procenter ikke fremstår som en "
+        "uoverensstemmelse.</div>"
+        if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1 else
+        '<div class="kob-note">Basisreduktionen gælder referencenettet i '
+        "punktet, og net-korrektionen er det valgte nets afvigelse herfra."
+        "</div>"
+    )
+    return _kob_trin(
+        6, "Reduktion med geonet", f"geonet-databasen, {_kob_esc(net_navn)}",
+        krop,
+        resultat=f' <span class="kob-skraa">/</span> '.join(resultater) + " mm",
+        resultat_note=" / ".join(pct_krav) + f" af {_kob_tal(t_krav)}",
+        groent_resultat=True,
+        mono_note=True,
+    )
 
 
 def _render_trafik_kobling_forklaring(
@@ -1428,222 +2040,80 @@ def _render_trafik_kobling_forklaring(
     ref_2: dict | None,
     t_basis_table: dict,
     geonet: dict | None = None,
+    materialer: list[dict] | None = None,
 ) -> None:
-    """Trinvis forklaring af hvordan (trafikklasse, Eu) bliver til en
-    bærelagstykkelse — med brugerens egne tal. Tykkelses-først.
+    """Sporet fra trafikklasse til bærelagstykkelse, trin for trin.
 
-    Ligger i en expander, der er lukket som standard: forklaringen er
-    baggrundsstof, som man slår op i efter behov. Placeres lige efter
-    'Ustabiliseret bærelagstykkelse'-banneret, så bannerets tal hænger
-    direkte sammen med forklaringen.
+    Sektionen forklarer, hvordan de tal, resultatkortene viser, er fremkommet:
+    hvert trin står med sin kilde, sit regnestykke og sit resultat, og de to
+    figurer hører til hvert sit trin. Ekspanderen er lukket som udgangspunkt
+    — forklaringen er baggrundsstof, der slås op efter behov — og alle seks
+    trin står åbne, når den foldes ud.
     """
-    tal = _trafik_kobling_tal(eu, eo_aekv, t_basis_table)
-    t_krav = tal["t_krav_mm"]
-    kl_lav, kl_hoej = tal["kl_lav"], tal["kl_hoej"]
-    t_lav, t_hoej = tal["t_lav_mm"], tal["t_hoej_mm"]
-    naermeste = eo_til_naermeste_klasse(eo_aekv)
-    t_1lag = ref_1.get("t_armeret_mm") if ref_1 else None
-    t_2lag = ref_2.get("t_armeret_mm") if ref_2 else None
-    # Reduktionen måles mod den φ-korrigerede uarmerede tykkelse — samme
-    # korrektion som de armerede tal bærer. Bruges t_krav (diagrammets
-    # ukorrigerede værdi) som reference, overdrives besparelsen. Vi tager
-    # appens egne procenter, så forklaringen ikke kan divergere fra tabellen.
-    t_uarm_ref = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm") or t_krav
-    red_1 = ref_1.get("reduktion_pct") if ref_1 else None
-    red_2 = ref_2.get("reduktion_pct") if ref_2 else None
-    # Net-korrektionen indgår allerede i ref_1/ref_2, når kalderen har sendt
-    # det valgte produkts resultater. Navn/procent bruges kun til at sige
-    # hvilket net tallene gælder — ellers ligner de altid referencenettets.
-    net_kor = (geonet or {}).get("korrektion") or 0.0
-    net_navn = (geonet or {}).get("navn")
-    net_label = (
-        f"{net_navn} ({_dk_num(net_kor * 100, '+.0f')} %)"
-        if net_navn and abs(net_kor) >= 0.005 else (net_navn or "referencenet")
-    )
-
-    if t_krav is None:
-        with st.expander(
-        "Kobling imellem trafikklasse og designdiagram",
-        expanded=True,
-    ):
+    tal = _eo_aekv_trin_tal(t_klasse, eu, t_basis_table)
+    kobling = _trafik_kobling_tal(eu, eo_aekv, t_basis_table)
+    t_krav = kobling["t_krav_mm"]
+    if not tal or "eo_aekv" not in tal["trin2"] or t_krav is None:
+        with st.expander("Sådan er tallene fremkommet", expanded=False):
             st.caption(
                 "Designdiagrammet indeholder ingen ustabiliseret kurve i dette "
                 "punkt, og sammenkædningen kan derfor ikke vises trinvist."
             )
         return
 
-    # --- Principiel trinvis tekst (brugerens egne tal) ------------------
-    linje2_kurver = (
-        f"**belastningsklasse {kl_lav}-kurven ({ui.mm(t_lav)}) og "
-        f"klasse {kl_hoej}-kurven ({ui.mm(t_hoej)})**"
-        if (t_lav is not None and t_hoej is not None and kl_lav != kl_hoej)
-        else f"**belastningsklasse-kurverne**"
-    )
-    # Reduktionen holdes op mod den φ-korrigerede uarmerede tykkelse, ikke mod
-    # diagrammets rå værdi — ellers passer procenten ikke med produkttabellens.
-    uarm_note = (
-        f", opgjort i forhold til {ui.mm(t_uarm_ref)}, som er de "
-        f"{ui.mm(t_krav)} korrigeret for de valgte materialer "
-        f"(φ = {_dk_num(phi, '.1f')}°). Det er tillige den lagtykkelse, "
-        f"designdiagrammets ustabiliserede kurve angiver"
-        if t_uarm_ref is not None and abs(t_uarm_ref - t_krav) >= 1 else ""
-    )
-    linje3 = (
-        f"3. På samme kurve reduceres lagtykkelsen med **1 lag geonet** til "
-        f"**{ui.mm(t_1lag)}"
-        + (f" (−{ui.procent(red_1 * 100)})" if red_1 is not None else "")
-        + f"**{uarm_note}."
-        + (
-            f" Med 2 lag geonet fås **{ui.mm(t_2lag)}**"
-            + (f" (−{ui.procent(red_2 * 100)})" if red_2 is not None else "")
-            + "."
-            if t_2lag is not None else ""
-        )
-    ) if t_1lag is not None else (
-        "3. Geonet-reduktionen aflæses på samme kurve, jf. resultaterne ovenfor."
-    )
-    prosa = (
-        f"1. For **{t_klasse} ved Eu = {ui.mpa(eu)}** fastlægger VejDim en "
-        f"ubunden lagtykkelse på **{ui.mm(t_krav)}** (bundsikring og "
-        f"stabilgrus). Værdien er angivet i feltet *Ustabiliseret "
-        f"bærelagstykkelse* ovenfor.\n"
-        f"2. Ved Eu = {ui.mpa(eu)} ligger de {ui.mm(t_krav)} i "
-        f"designdiagrammet mellem {linje2_kurver}. Kurven benævnes "
-        f"**Eo_ækv = {ui.mpa(eo_aekv)}** (nærmeste hele belastningsklasse: "
-        f"{naermeste}).\n"
-        f"{linje3}"
-    )
+    t1, t2, t3 = tal["trin1"], tal["trin2"], tal["trin3"]
+    materialer = materialer or []
+    t_uarm_kor = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm")
+    t_1lag = (ref_1 or {}).get("t_armeret_mm")
+    t_2lag = (ref_2 or {}).get("t_armeret_mm")
+    net_kor = float((geonet or {}).get("korrektion") or 0.0)
+    net_navn = (geonet or {}).get("navn") or "referencenet"
 
-    # --- Kompakt lodret trin-flow (tykkelses-først) ---------------------
-    def _box(top: str, big: str, sub: str = "", tip: str = "") -> str:
-        """En grøn trin-boks. Med tip vises regnestykket bag trinnet som
-        browser-tooltip (title), markeret med en prik og hjælpe-markør."""
-        sub_html = (
-            f'<div style="font-size:0.8rem;color:#555">{sub}</div>' if sub else ""
-        )
-        # &#10; er linjeskift inde i en title-attribut.
-        tip_attr = (
-            f' title="{html.escape(tip, quote=True).replace(chr(10), "&#10;")}"'
-            if tip else ""
-        )
-        markør = (
-            f'<span style="font-size:0.72rem;color:{ui.FARVE["gron"]};'
-            f'margin-left:5px">&#9679;</span>'
-            if tip else ""
-        )
-        ekstra = "cursor:help;" if tip else ""
-        return (
-            f'<div{tip_attr} style="background:#F8FFF8;border:1px solid #C8E6C9;'
-            f'border-radius:6px;padding:6px 16px;text-align:center;{ekstra}'
-            f'display:inline-block;min-width:260px">'
-            f'<div style="font-size:0.68rem;color:#777;text-transform:uppercase;'
-            f'letter-spacing:.03em">{top}{markør}</div>'
-            f'<div style="font-size:1.05rem;font-weight:700;color:{GRØN}">{big}</div>'
-            f'{sub_html}</div>'
-        )
+    # Punkterne på Eu-linjen i trin 4's figur, med den signatur de hører til.
+    punkter: list[tuple[float, str, str]] = [(t_krav, "#15211A", "ring")]
+    sign = ['<div class="kob-prik-ring"></div>'
+            f"{_kob_tal(t_krav)} mm krav"]
+    if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
+        punkter.append((t_uarm_kor, "#15211A", "fyldt"))
+        sign.append('<div class="kob-prik"></div>'
+                    f"{_kob_tal(t_uarm_kor)} mm φ-korrigeret")
+    if t_1lag is not None:
+        punkter.append((t_1lag, _KOB_FARVE_1LAG, "fyldt"))
+        sign.append(f'<div class="kob-prik" style="background:{_KOB_FARVE_1LAG}">'
+                    f"</div>{_kob_tal(t_1lag)} mm · 1 lag")
+    if t_2lag is not None:
+        punkter.append((t_2lag, _KOB_FARVE_2LAG, "fyldt"))
+        sign.append(f'<div class="kob-prik" style="background:{_KOB_FARVE_2LAG}">'
+                    f"</div>{_kob_tal(t_2lag)} mm · 2 lag")
 
-    def _arrow(label: str) -> str:
-        return (
-            f'<div style="color:{GRÅ};font-size:0.76rem;margin:2px 0">▼'
-            f'<span style="margin-left:6px">{label}</span></div>'
-        )
-
-    # Regnestykket bag hvert trin — vises som tooltip på den enkelte boks.
-    tips = _eo_aekv_tooltips(
-        t_klasse, eu, eo_aekv, t_basis_table,
-        t_krav_mm=t_krav, ref_1=ref_1, ref_2=ref_2, phi=phi, geonet=geonet,
+    trin = [
+        _kob_trin1(t_klasse, eu),
+        _kob_trin2(t_klasse, eu, t1),
+        _kob_trin3(eu, eo_aekv, t1, t2),
+        _kob_trin4(eu, eo_aekv, t1, t2, t_basis_table, phi, net_kor,
+                   punkter, sign),
+        _kob_trin5(t_krav, t_uarm_kor, phi, materialer),
+        _kob_trin6(t_krav, t_uarm_kor, t3, phi, net_kor, net_navn,
+                   ref_1, ref_2),
+    ]
+    krop = '<div class="kob-skel"></div>'.join(t for t in trin if t)
+    fod = (
+        '<div class="kob-fod">VejDim omfatter ikke geonet. Kørslerne '
+        "fastlægger alene driftspunktet, mens reduktionen i trin 6 er "
+        "designdiagrammets egen, feltdokumenterede værdi. Kørslerne står "
+        "under Trafikklasse-korrelation, og metoden er beskrevet i Hjælp, "
+        "afsnit 1 og 2.</div>"
     )
-
-    def _geonet_sub(red: float | None) -> str:
-        red_s = f"−{ui.procent(red * 100)} · " if red is not None else ""
-        return f"{red_s}{net_label}"
-
-    et_lag_box = (
-        _box("Med 1 lag geonet", f"{ui.mm(t_1lag)}",
-             _geonet_sub(red_1), tips["geonet"])
-        if t_1lag is not None else _box("Med geonet", "se resultater", "")
+    # Titlen sættes fed og underrubrikken normal, som i sektionens hoved i
+    # designforslaget; ekspanderens etiket sættes af markdown.
+    resultat = t_1lag if t_1lag is not None else t_2lag
+    overskrift = (
+        f"**Sådan er tallene fremkommet** — fra trafikklasse {t_klasse}"
     )
-    # 2-lags-boksen kommer kun med, når diagrammet har en 2-lags-kurve i punktet.
-    to_lag_box = (
-        _arrow("endnu et lag i opbygningen")
-        + _box("Med 2 lag geonet", f"{ui.mm(t_2lag)}",
-               _geonet_sub(red_2), tips["geonet"])
-    ) if t_2lag is not None else ""
-
-    # Materiale-trinnet gør skiftet fra diagrammets basisværdier til den
-    # φ-korrigerede virkelighed synligt. Uden det springer flowet fra en
-    # ukorrigeret tykkelse (trin 1-2, som Eo_ækv tilbageberegnes fra) til
-    # korrigerede resultater — præcis som designdiagrammet tegner dem.
-    phi_afviger = abs(phi - PHI_BASIS) > 0.05
-    materiale_box = (
-        _arrow(f"Korrektion for friktionsvinkel (φ = {_dk_num(phi, '.1f')}°)")
-        + _box("Ustabiliseret, korrigeret", f"{ui.mm(t_uarm_ref)}",
-               "designdiagrammets ustabiliserede kurve", tips["materiale"])
-    ) if (phi_afviger and t_uarm_ref is not None
-          and abs(t_uarm_ref - t_krav) >= 1) else ""
-
-    flow = (
-        '<div style="display:flex;flex-direction:column;align-items:center;'
-        'gap:0;margin:0.5rem 0 0.9rem">'
-        + _box("Valgt grundlag", f"{t_klasse} · Eu {ui.mpa(eu)}", "",
-               tips["valg"])
-        + _arrow("VejDims krav til ubundet lag")
-        + _box("Krævet ubundet opbygning", f"{ui.mm(t_krav)}",
-               "bundsikring og stabilgrus", tips["krav"])
-        + _arrow("Tykkelsen findes på designdiagrammet ved valgt Eu")
-        + _box(f"Kurve for Eo_ækv ≈ {ui.mpa(eo_aekv)} bestemmes",
-               f"mellem klasse {kl_lav} og {kl_hoej}", "", tips["driftspunkt"])
-        + materiale_box
-        + _arrow("Geonet-reduktion aflæses i punktet")
-        + et_lag_box
-        + to_lag_box
-        + '</div>'
-    )
-    # --- Layout: forklaring til venstre, designdiagram til højre --------
-    with st.expander(
-        "Kobling imellem trafikklasse og designdiagram",
-        expanded=True,
-    ):
-        kol_forklaring, kol_figur = st.columns([1.05, 0.95], gap="large")
-        with kol_forklaring:
-            st.markdown(prosa)
-            st.markdown(flow, unsafe_allow_html=True)
-        with kol_figur:
-            from core import rapport as rapport_mod
-            try:
-                # Mere kvadratisk figsize + container-bredde: figuren fylder den
-                # højre (mindre) kolonne og bliver ca. samme højde som
-                # forklaringen.
-                png = rapport_mod.render_personligt_designdiagram_png(
-                    eu=float(eu),
-                    eo=float(eo_aekv),
-                    klasse=naermeste,
-                    grundlag_label=f"Trafikklasse {t_klasse}",
-                    phi=float(phi),
-                    geonet=geonet,
-                    t_indtastet_mm=None,
-                    t_basis_table=t_basis_table,
-                    t_1_lag_mm=t_1lag,
-                    t_2_lag_mm=t_2lag,
-                    dpi=120,
-                    figsize=(7.4, 6.6),
-                )
-                st.image(png, width="stretch")
-                # Kurverne er tegnet φ-korrigerede (rapport.py: f_uarm =
-                # 1 + phi_kor), så billedteksten skal nævne den korrigerede
-                # tykkelse — ikke diagrammets basisværdi.
-                st.caption(
-                    f"Kurven for Eo_ækv ≈ {ui.mpa(eo_aekv)} krydser "
-                    f"{ui.mm((t_uarm_ref or t_krav))} ved Eu = {ui.mpa(eu)}"
-                    + (
-                        f" (φ-korrigeret fra {ui.mm(t_krav)})"
-                        if t_uarm_ref is not None
-                        and abs(t_uarm_ref - t_krav) >= 1 else ""
-                    )
-                    + "; geonet-punkterne viser reduktionen."
-                )
-            except Exception as e:
-                st.caption(f"Kunne ikke tegne designdiagram: {e}")
+    if resultat is not None:
+        overskrift += f" til {ui.mm(resultat)} bærelag"
+    with st.expander(overskrift, expanded=False):
+        st.html(f'<div class="kob">{krop}{fod}</div>')
 
 
 # ===========================================================================
@@ -5210,7 +5680,7 @@ def render_brugerdefineret() -> None:
                         grundlag["t_klasse"], eu, grundlag["eo_aekv"], phi,
                         None if res_1.get("fejl") else res_1,
                         None if res_2.get("fejl") else res_2,
-                        t_basis_table, geonet,
+                        t_basis_table, geonet, materialer,
                     )
 
                 # Mellemregninger for det valgte net. Enkeltprodukt-listerne
