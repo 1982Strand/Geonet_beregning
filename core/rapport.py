@@ -18,7 +18,10 @@ Offentlig API:
 from __future__ import annotations
 
 import io
+import platform
 import re
+import shutil
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -731,6 +734,19 @@ def byg_rapport_docx(data: dict) -> bytes:
 # ---------------------------------------------------------------------------
 
 def konverter_docx_til_pdf(docx_bytes: bytes) -> bytes:
+    """Konverter Word-bytes til PDF-bytes.
+
+    Windows (lokal kørsel via start.bat) bruger den rigtige Microsoft Word
+    gennem docx2pdf, som giver den mest tro gengivelse. Andre platforme — i
+    praksis Streamlit Cloud, som kører Linux — har intet Word at style og
+    bruger i stedet LibreOffice headless, jf. packages.txt.
+    """
+    if platform.system() == "Windows":
+        return _konverter_med_word(docx_bytes)
+    return _konverter_med_libreoffice(docx_bytes)
+
+
+def _konverter_med_word(docx_bytes: bytes) -> bytes:
     """Konverter Word-bytes til PDF-bytes via Microsoft Word/docx2pdf.
 
     Streamlit kører i en baggrundstråd hvor Windows COM-systemet ikke er
@@ -788,6 +804,54 @@ def konverter_docx_til_pdf(docx_bytes: bytes) -> bytes:
                 pythoncom.CoUninitialize()
             except Exception:
                 pass
+
+
+def _konverter_med_libreoffice(docx_bytes: bytes) -> bytes:
+    """Konverter Word-bytes til PDF-bytes via LibreOffice headless.
+
+    packages.txt installerer libreoffice-writer, som leverer soffice-
+    kommandoen på Streamlit Cloud. Hver kørsel får sin egen profilmappe
+    (-env:UserInstallation) — ellers låser samtidige rapportgenereringer
+    hinandens LibreOffice-profil, hvilket er en kendt fejlkilde ved headless
+    kørsel under flerbrugerbelastning.
+    """
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        raise RuntimeError(
+            "PDF-konvertering kræver LibreOffice ('soffice'), som ikke blev "
+            "fundet på serveren. Tilføj 'libreoffice-writer' til "
+            "packages.txt og genstart appen."
+        )
+
+    with tempfile.TemporaryDirectory(prefix="geonet_rapport_") as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        docx_path = tmp_path / "rapport.docx"
+        docx_path.write_bytes(docx_bytes)
+        profil_dir = tmp_path / "lo_profil"
+
+        try:
+            resultat = subprocess.run(
+                [
+                    soffice, "--headless", "--norestore",
+                    f"-env:UserInstallation=file://{profil_dir}",
+                    "--convert-to", "pdf",
+                    "--outdir", str(tmp_path),
+                    str(docx_path),
+                ],
+                capture_output=True, text=True, timeout=90,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                "LibreOffice-konverteringen tog for lang tid (over 90 "
+                "sekunder)."
+            ) from exc
+
+        pdf_path = tmp_path / "rapport.pdf"
+        if resultat.returncode != 0 or not pdf_path.exists():
+            fejl = (resultat.stderr or resultat.stdout or "ukendt fejl").strip()
+            raise RuntimeError(f"LibreOffice-fejl: {fejl}")
+
+        return pdf_path.read_bytes()
 
 
 def byg_rapport_pdf(data: dict) -> bytes:
