@@ -421,10 +421,6 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   .bg-snit-rulle{ overflow-x:auto; scrollbar-width:thin; }
   .bg-snit{ min-width:640px; }
 
-  /* Resultattabellen er bredere end skærmen og rulles med. */
-  .rt-tabel{ overflow-x:auto; }
-  .rt-head, .rt-sum, .rt-detalje{ min-width:720px; }
-
   /* Alle klikbare elementer skal kunne rammes med en finger. */
   .stButton button, .stDownloadButton button, .stFormSubmitButton button,
   [data-testid="stButtonGroup"] button,
@@ -537,17 +533,9 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   margin-top:.25rem; color:var(--bg-ink-45); font-size:10.5px; line-height:1.45;
 }
 
-.rt-alle-tabel{ border-top:1px solid var(--bg-line); }
-.rt-alle-hoved, .rt-alle-raekke{
+.rt-alle-raekke{
   display:grid; grid-template-columns:2fr 1fr .7fr 1fr 1.25fr 1fr 1.25fr;
   gap:.65rem; align-items:center;
-}
-.rt-alle-hoved{
-  padding:.65rem .35rem .5rem; border-bottom:1px solid var(--bg-line);
-  font:600 9.5px/1.2 'IBM Plex Mono',monospace; letter-spacing:.08em;
-  text-transform:uppercase; color:var(--bg-ink-45);
-}
-.rt-alle-raekke{
   padding:.7rem .35rem; border-bottom:1px solid var(--bg-line-soft);
   font-size:12px; color:var(--bg-ink-70);
 }
@@ -565,161 +553,71 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .rt-alle-sparet{ color:var(--bg-ink-45); font-size:11px; }
 .rt-alle-valgt .rt-alle-num, .rt-alle-valgt .rt-alle-sparet{ color:var(--bg-green-900); }
 
-.rt-tabel{ margin:.2rem 0 .3rem; }
-.rt-head, .rt-sum, .rt-detalje{
-  display:grid;
-  grid-template-columns:1.5fr .8fr 1.1fr 1.2fr 1.1fr 1.2fr;
-  gap:.5rem;
-}
-/* Standardtilstanden viser tillige produktets effektindeks. Kolonnen
-   indskydes efter produktnavnet, og de øvrige rykker én plads til højre. */
-.rt-head-indeks, .rt-med-indeks > .rt-sum, .rt-med-indeks > .rt-detalje{
-  grid-template-columns:1.5fr .5fr .8fr 1.1fr 1.2fr 1.1fr 1.2fr;
-}
+/* Sorteringshovedet — samtlige syv kolonneoverskrifter er knapper, jf.
+   _render_produkttabel_hoved() i app.py. De skal fremstå som selve
+   tabellens hoved, ikke som knapper: samme skrift og farve som før,
+   uden ramme eller baggrund.
 
-/* Med mellemregningerne slået til indskydes reduktionens tre led efter
-   klassekolonnen, jf. afsnit 6b. */
-.rt-head.rt-med-kor, .rt-med-kor > .rt-sum{
-  grid-template-columns:1.5fr .8fr .85fr .8fr .8fr 1.1fr 1.2fr 1.1fr 1.2fr;
+   Knapperne står i st.columns, som Streamlit lægger ud med flexbox — det
+   følger ikke nødvendigvis de samme kolonnebredder som rækkernes CSS-grid
+   nedenunder, og hovedet stod derfor forskudt i forhold til cellerne. Den
+   underliggende stHorizontalBlock tvinges i stedet over på præcis samme
+   grid-template-columns og gap som .rt-alle-raekke, så de to flugter. */
+[class*="st-key-rt_alle_hoved_"]{ border-bottom:1px solid var(--bg-line); margin-bottom:0; }
+[class*="st-key-rt_alle_hoved_"] [data-testid="stHorizontalBlock"]{
+  display:grid !important;
+  grid-template-columns:2fr 1fr .7fr 1fr 1.25fr 1fr 1.25fr !important;
+  gap:.65rem !important;
+  padding:0 .35rem;
 }
-.rt-head.rt-head-indeks.rt-med-kor,
-.rt-med-indeks.rt-med-kor > .rt-sum{
-  grid-template-columns:1.5fr .5fr .8fr .85fr .8fr .8fr 1.1fr 1.2fr 1.1fr 1.2fr;
+[class*="st-key-rt_alle_hoved_"] [data-testid="stColumn"]{
+  width:auto !important; min-width:0 !important; flex:none !important;
 }
-/* Fold-ud-indholdet følger ikke summary-rækkens kolonner, når de tre led er
-   indskudt; det stilles i stedet frit i tre lige brede felter. */
-.rt-med-kor > .rt-detalje{
-  grid-template-columns:1.4fr 1fr 1fr;
-}
-.rt-med-kor > .rt-detalje > .rt-d-krav{ grid-column:1 / 2; }
-.rt-med-kor > .rt-detalje > .rt-d-bt1{ grid-column:2 / 3; }
-.rt-med-kor > .rt-detalje > .rt-d-bd1{ grid-column:3 / 4; }
-.rt-med-kor > .rt-detalje > .rt-d-bt2{ grid-column:2 / 3; }
-.rt-med-kor > .rt-detalje > .rt-d-bd2{ grid-column:3 / 4; }
-.rt-indeks{ font-family:'IBM Plex Mono',monospace; color:var(--bg-ink-70); }
-.rt-med-indeks > .rt-detalje > .rt-d-krav{ grid-column:1 / 4; }
-.rt-med-indeks > .rt-detalje > .rt-d-bt1{ grid-column:4 / 5; }
-.rt-med-indeks > .rt-detalje > .rt-d-bd1{ grid-column:5 / 6; }
-.rt-med-indeks > .rt-detalje > .rt-d-bt2{ grid-column:6 / 7; }
-.rt-med-indeks > .rt-detalje > .rt-d-bd2{ grid-column:7 / 8; }
-
-/* Gruppeoverskrift pr. produktserie. */
-.rt-gruppe{
-  font:600 9.5px/1 'IBM Plex Mono',monospace;
+[class*="st-key-rt_alle_hoved_"] .stButton{ margin:0; }
+[class*="st-key-rt_alle_hoved_"] .stButton > button{
+  font:600 9.5px/1.2 'IBM Plex Mono',monospace !important;
   letter-spacing:.08em; text-transform:uppercase;
-  color:var(--bg-ink-25); background:#FDFDFD;
-  padding:.85rem .6rem .35rem;
+  color:var(--bg-ink-45) !important;
+  width:100% !important; min-height:unset;
+  border:none !important; background:transparent !important;
+  box-shadow:none !important; padding:.5rem 0 !important;
 }
-.rt-head, .rt-sum{ align-items:center; }
-.rt-head{
-  font:600 9.5px/1.3 'IBM Plex Mono',monospace;
-  letter-spacing:.08em; text-transform:uppercase;
-  color:var(--bg-ink-45);
-  padding:0 .6rem .45rem;
-  border-bottom:1px solid var(--bg-line);
+[class*="st-key-rt_alle_hoved_"] .stButton > button:hover{
+  color:var(--bg-ink) !important; background:transparent !important;
 }
-.rt-head .num{ text-align:right; }
-.rt-raekke{
-  border-bottom:1px solid #F0F2F0;
-  border-left:3px solid transparent;
+/* Knappens label ligger i en indre flex-div og en stMarkdownContainer, som
+   begge centrerer. Skal overskriften flugte med cellen under sig, må alle
+   tre niveauer stilles — som menupunkterne i sidebaren, jf. afsnit 17. */
+[class*="st-key-rt_alle_hoved_"] .stButton > button,
+[class*="st-key-rt_alle_hoved_"] .stButton > button > div,
+[class*="st-key-rt_alle_hoved_"] .stButton > button [data-testid="stMarkdownContainer"]{
+  text-align:left !important; justify-content:flex-start !important;
+  width:100% !important;
 }
-.rt-sum{
-  cursor:pointer; padding:.55rem .6rem; font-size:12.5px;
-  list-style:none; min-height:44px;
-}
-.rt-sum::-webkit-details-marker{ display:none; }
-.rt-sum::marker{ content:""; }
-.rt-sum .num{
-  text-align:right;
-  font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;
-}
-.rt-tom{ color:var(--bg-ink-25); }
-
-/* Optimal-tooltip for interval-produkter (NX750/NX850). */
-.rt-tip{ position:relative; cursor:help; border-bottom:1px dotted var(--bg-green-700); }
-.rt-tip-mark{
-  font-size:.6rem; color:var(--bg-green-700); vertical-align:super;
-  margin-left:2px; font-weight:500; letter-spacing:.02em;
-}
-.rt-tip-box{
-  display:none; position:absolute; right:0; top:1.6em;
-  width:300px; background:var(--bg-surface);
-  border:1px solid var(--bg-line); border-radius:4px;
-  box-shadow:0 4px 14px rgba(21,33,26,.13);
-  padding:.5rem .7rem; z-index:60; text-align:left;
-  font-weight:400; white-space:normal;
-}
-.rt-tip:hover .rt-tip-box{ display:block; }
-.rt-tip-box .rt-dlinje{ font-size:11px; }
-.rt-tip-titel{
-  display:block; font:600 9.5px/1 'IBM Plex Mono',monospace;
-  letter-spacing:.08em; text-transform:uppercase;
-  color:var(--bg-green-700); margin-bottom:.25rem;
-}
-.rt-tip-resultat{
-  border-top:1px solid var(--bg-line-soft); margin-top:.15rem;
-  padding-top:.2rem; font-weight:500; color:var(--bg-green-900);
+/* Talkolonnerne højrestilles som cellerne under dem. Kolonnerne vælges på
+   knappens egen nøgle, der bærer 'num' for de fem talkolonner, jf.
+   _render_produkttabel_hoved() — ikke på deres plads i rækken. */
+[class*="st-key-rt_alle_hoved_"] [class*="_num_"] button,
+[class*="st-key-rt_alle_hoved_"] [class*="_num_"] button > div,
+[class*="st-key-rt_alle_hoved_"] [class*="_num_"] button [data-testid="stMarkdownContainer"]{
+  text-align:right !important; justify-content:flex-end !important;
 }
 
-.rt-chev{
-  display:inline-block; width:.9em; color:var(--bg-ink-25);
-  transition:transform .12s;
+/* Produkttabellens expander bærer en note om sorteringen i højre side af
+   overskriften. Teksten er statisk chrome, ikke fagligt indhold, og sættes
+   derfor som ::after på summary i stedet for i label — st.expander()
+   understøtter ingen ramt-til-højre-tekst i selve overskriften. */
+[class*="st-key-rt_alle_expander_"] summary{ position:relative; }
+[class*="st-key-rt_alle_expander_"] summary::after{
+  content:"Vælg sortering ved at klikke på kolonneoverskrifterne";
+  position:absolute; top:50%; right:2.75rem; transform:translateY(-50%);
+  font:400 11px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
+  white-space:nowrap; pointer-events:none;
 }
-details[open] > .rt-sum .rt-chev{ transform:rotate(90deg); }
-.rt-navn{ font-weight:500; }
-.rt-ref{ background:#FBFCFB; }
-.rt-ref .rt-navn{ font-style:italic; color:var(--bg-ink-70); font-weight:400; }
-/* Grøn markering følger den udfoldede række (ikke det tyndeste produkt). */
-.rt-raekke[open]{ background:var(--bg-green-050); border-left-color:var(--bg-green-700); }
-.rt-raekke[open] .rt-navn{ color:var(--bg-green-900); }
+@media (max-width:1180px){
+  [class*="st-key-rt_alle_expander_"] summary::after{ display:none; }
+}
 
-.rt-badge{
-  font-size:11px; padding:2px 9px; border-radius:12px; white-space:nowrap;
-}
-.rt-badge-ok{ background:var(--bg-green-050); color:var(--bg-green-900); }
-.rt-badge-advarsel{ background:var(--bg-warn-bg); color:var(--bg-warn); }
-
-.rt-detalje{ align-items:start; padding:.3rem .6rem .7rem; }
-.rt-d-krav{ grid-column:1 / 3; min-width:0; }
-.rt-d-krav .rt-dlinje{ grid-template-columns:230px auto; }
-.rt-d-krav .rt-dlinje .val{ text-align:left; padding-left:0; }
-.rt-d-bd, .rt-d-bt{
-  min-width:0; display:flex; flex-direction:column; align-self:stretch;
-}
-.rt-d-bd1{ grid-column:4 / 5; }
-.rt-d-bd2{ grid-column:6 / 7; }
-.rt-d-bt1{ grid-column:3 / 4; }
-.rt-d-bt2{ grid-column:5 / 6; }
-.rt-d-bd .rt-dlinje, .rt-d-bt .rt-dlinje{ font-size:11px; }
-/* 'Samlet reduktion' og 'Stabiliseret bærelagstykkelse' skubbes til bunds i
-   hver boks, så skillelinjerne flugter på tværs af kolonnerne, uanset at
-   antallet af linjer ovenover varierer (φ-korrektionen vises fx kun ved
-   brugerdefineret φ, og net-korrektionsteksten kan ombrydes). */
-.rt-d-bd .rt-samlet, .rt-d-bt .rt-samlet{ margin-top:auto; }
-.rt-bd-tom{ color:var(--bg-ink-25); font-size:11px; text-align:right; }
-.rt-detalje-tom{ color:var(--bg-ink-45); font-size:11px; padding:.3rem .6rem .7rem; }
-
-.rt-dlinje{
-  display:grid; grid-template-columns:1fr auto;
-  font-size:11.5px; padding:.12rem 0;
-}
-.rt-dlinje .val{
-  text-align:right;
-  font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;
-  padding-left:.75rem;
-}
-.rt-graa{ color:var(--bg-ink-45); }
-.rt-spar{ color:var(--bg-green-700); }
-.rt-pen{ color:var(--bg-crit); }
-.rt-samlet{
-  border-top:1px solid var(--bg-line-soft); margin-top:.15rem;
-  padding-top:.2rem; font-weight:500;
-}
-.rt-krav-titel{
-  font:600 9.5px/1 'IBM Plex Mono',monospace;
-  letter-spacing:.08em; text-transform:uppercase;
-  color:var(--bg-ink-45); margin-bottom:.2rem;
-}
 .rt-caption{ font-size:11px; color:var(--bg-ink-45); margin-top:.5rem; }
 
 /* --- 14.2 Cv → Eu-opslagstabellen --------------------------------------- */
