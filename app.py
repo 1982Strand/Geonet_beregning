@@ -5974,11 +5974,12 @@ def render_hjaelp() -> None:
 
     Kapitlerne indlæses fra markdown ved hver visning og vises som foldbare
     kort. Resuméet står i kortets hoved, også når kapitlet er lukket, så det
-    rette kapitel kan findes uden at åbne dem alle.
+    rette kapitel kan findes uden at åbne dem alle. Hovedet er selv knappen,
+    og en chevron under afsnitsnummeret angiver, om kapitlet er foldet ud.
     """
     ui.sidehoved(
         "Hjælp og dokumentation",
-        "Beregningsmetoden, datagrundlaget og forbeholdene bag værktøjet.",
+        "Beregningsmetoden, datagrundlaget og forbeholdene bag værktøjet. Klik på overskrifterne ved de 8 punkter nedenfor for at læse indholdet.",
     )
 
     kapitler = hjaelp_mod.laes_kapitler()
@@ -6022,22 +6023,17 @@ def render_hjaelp() -> None:
     for kapitel in kapitler:
         aaben = kapitel.noegle in aabne
         with st.container(key=f"hj_kap_{kapitel.noegle}"):
-            kol_hoved, kol_toggle = st.columns([1, 0.17], gap="small")
-            with kol_hoved:
-                st.html(
-                    f'<div class="hj-kap-hoved{" hj-kap-aaben" if aaben else ""}">'
-                    f'<div class="hj-kap-nr">{kapitel.nummer}</div>'
-                    f'<div class="hj-kap-titel">{html.escape(kapitel.titel)}</div>'
-                    f'<div class="hj-kap-antal">{kapitel.afsnit_tal}</div>'
-                    f'<div class="hj-kap-resume">{html.escape(kapitel.resume)}</div>'
-                    '</div>'
-                )
-            with kol_toggle:
+            # Hovedet er selv knappen: den ligger som en gennemsigtig flade i
+            # samme grid-celle som hovedet og får derved dets højde, uanset hvor
+            # langt resuméet er, jf. st-key-hj_hoved_ i stylesheetet. Knappen
+            # skal stå først, så hovedet tegnes oven på den. Knapteksten er
+            # gennemsigtig og står alene for skærmlæsere.
+            with st.container(key=f"hj_hoved_{kapitel.noegle}"):
                 if st.button(
-                    "Luk" if aaben else "Læs",
+                    f"{'Luk' if aaben else 'Læs'} kapitel "
+                    f"{kapitel.nummer}: {kapitel.titel}",
                     key=f"hj_toggle_{kapitel.noegle}",
                     width="stretch",
-                    type="primary" if aaben else "secondary",
                 ):
                     if aaben:
                         aabne.discard(kapitel.noegle)
@@ -6045,8 +6041,20 @@ def render_hjaelp() -> None:
                         aabne.add(kapitel.noegle)
                     st.session_state["hjaelp_aabne"] = aabne
                     st.rerun()
+                st.html(
+                    f'<div class="hj-kap-hoved{" hj-kap-aaben" if aaben else ""}">'
+                    f'<div class="hj-kap-nr">{kapitel.nummer}</div>'
+                    f'<div class="hj-kap-titel">{html.escape(kapitel.titel)}</div>'
+                    f'<div class="hj-kap-antal">{kapitel.afsnit_tal}</div>'
+                    f'<div class="hj-kap-chevron">▸</div>'
+                    f'<div class="hj-kap-resume">{html.escape(kapitel.resume)}</div>'
+                    '</div>'
+                )
             if aaben:
-                _render_hjaelp_kapitel(kapitel)
+                # Kapitelteksten bærer selv sidemargenen, da kortet ingen har,
+                # jf. st-key-hj_indhold_ i stylesheetet.
+                with st.container(key=f"hj_indhold_{kapitel.noegle}"):
+                    _render_hjaelp_kapitel(kapitel)
 
 
 # ===========================================================================

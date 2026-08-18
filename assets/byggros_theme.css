@@ -103,9 +103,12 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   font:600 19px/1.2 'IBM Plex Sans',sans-serif;
   letter-spacing:-.015em; color:var(--bg-ink); margin:0;
 }
+/* Sidens beskrivelse er en enkelt underrubrik, ikke brødtekst, og bindes
+   derfor ikke af linjelængden på 78 tegn; den står på én linje, så længe
+   vinduet har plads. */
 .bg-sidehoved p{
   font:400 12px/1.5 'IBM Plex Sans',sans-serif;
-  color:var(--bg-ink-45); margin:4px 0 0; max-width:78ch;
+  color:var(--bg-ink-45); margin:4px 0 0;
 }
 
 /* ---- 3e. Materialelagenes tabel (trin 2) --------------------------------
@@ -970,14 +973,14 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 [class*="st-key-hj_kap_"]{
   border:1px solid var(--bg-line); border-radius:5px;
   background:var(--bg-surface); overflow:hidden;
-  padding:0 20px 4px; margin-bottom:.7rem;
+  padding:0 0 4px; margin-bottom:.7rem;
 }
 [class*="st-key-hj_kap_"]:has(.hj-kap-aaben){
   border:1.5px solid var(--bg-green-700); padding-bottom:20px;
 }
 .hj-kap-hoved{
   display:grid; grid-template-columns:auto 1fr auto; gap:4px 12px;
-  align-items:baseline; padding:14px 0 12px;
+  align-items:baseline; padding:14px 0 12px; width:100%;
 }
 /* Afsnitsnummeret sættes som trin-numrene på beregningssiderne, jf.
    .bg-trin-nr, så nummereringen er den samme overalt i appen. */
@@ -992,14 +995,63 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .hj-kap-aaben .hj-kap-titel{ color:var(--bg-green-900); }
 .hj-kap-antal{ font:400 11px/1 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45); }
 .hj-kap-resume{
-  grid-column:2 / -1;
+  grid-row:2; grid-column:2 / -1;
   font:400 11.5px/1.6 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
   max-width:92ch;
 }
-/* Det åbne kapitel adskilles fra hovedet med samme linje som kortene. */
-[class*="st-key-hj_kap_"]:has(.hj-kap-aaben) .hj-kap-hoved{
-  border-bottom:1px solid var(--bg-line-soft); margin:0 -20px 6px;
-  padding-left:20px; padding-right:20px; background:var(--bg-green-lys);
+/* Chevronen står i hovedets tomme felt under afsnitsnummeret og dermed på
+   linje med resuméet. Den drejes ved åbning frem for at skifte tegn. */
+.hj-kap-chevron{
+  grid-row:2; grid-column:1;
+  width:20px; text-align:center;
+  font:400 11px/1.6 'IBM Plex Sans',sans-serif; color:var(--bg-ink-25);
+  transition:transform .12s ease, color .12s ease;
+}
+.hj-kap-aaben .hj-kap-chevron{
+  transform:rotate(90deg); color:var(--bg-green-700);
+}
+/* Kapitlets hoved er selv knappen, jf. render_hjaelp(). Knappen og hovedet
+   lægges i samme grid-celle: knappen strækkes da til hovedets højde, uanset
+   hvor langt resuméet er, og hovedet tegnes oven på den. Klik føres igennem
+   til knappen, som ved diagramkortene, jf. st-key-dd_kort_. */
+[class*="st-key-hj_hoved_"]{
+  display:grid; grid-template-columns:minmax(0,1fr); gap:0 !important;
+  align-self:stretch; box-sizing:border-box; width:100%;
+  padding:0 20px;
+}
+/* Kapitelteksten bærer samme sidemargen som hovedet, jf. render_hjaelp(). */
+[class*="st-key-hj_indhold_"]{
+  box-sizing:border-box; width:100%; padding:0 20px;
+}
+[class*="st-key-hj_hoved_"] > [data-testid="stElementContainer"]{
+  grid-area:1 / 1; margin:0; min-width:0; width:100%;
+}
+/* Streamlits egen wrapper om st.html og st.button skal også fylde cellen,
+   så afsnitstallet står yderst og den grønne markering når ud til kanten. */
+[class*="st-key-hj_hoved_"] > [data-testid="stElementContainer"] > *{
+  width:100%;
+}
+[class*="st-key-hj_hoved_"] > *{ pointer-events:none; }
+[class*="st-key-hj_hoved_"] .stButton{ pointer-events:auto; height:100%; }
+[class*="st-key-hj_hoved_"] .stButton button{
+  width:100% !important; height:100% !important; min-height:0;
+  padding:0 !important; border:none !important; border-radius:0 !important;
+  background:transparent !important; color:transparent !important;
+  box-shadow:none !important; cursor:pointer;
+}
+[class*="st-key-hj_hoved_"] .stButton button:hover{
+  background:transparent !important; border:none !important;
+  color:transparent !important;
+}
+/* Hele hovedet er klikbart og svarer derfor ved markøren. */
+[class*="st-key-hj_hoved_"]:hover .hj-kap-titel,
+[class*="st-key-hj_hoved_"]:hover .hj-kap-chevron{ color:var(--bg-green-700); }
+
+/* Det åbne kapitel adskilles fra hovedet med samme linje som kortene.
+   Markeringen sættes på containeren, så den dækker knappen med. */
+[class*="st-key-hj_hoved_"]:has(.hj-kap-aaben){
+  border-bottom:1px solid var(--bg-line-soft); margin-bottom:6px;
+  background:var(--bg-green-lys);
 }
 
 .hj-afsnit-titel{
