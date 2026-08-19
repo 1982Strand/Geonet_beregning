@@ -41,14 +41,25 @@ Følgende forbehold gælder:
    frostsikker underbund. En geonet-reduceret opbygning bør ikke bringe
    totalhøjden under koblingshøjden for frostfarlig underbund, jf. håndbogens
    afsnit 5.3. Forholdet bør kontrolleres særskilt.
-4. **Manglende armerede kurver i kernezonen.** I enkelte celler mangler
-   diagrammet data for 1 lag geonet ved den ækvivalente Eₒ, idet kurven er tom
-   ved høj Eₒ og tynd opbygning. Reduktionen kan da ikke bestemmes, selv om
-   cellen ligger inden for kernezonen.
-5. **Følsomhed over for asfaltpakken.** Den ækvivalente Eₒ afhænger af den
+4. **Manglende armerede kurver.** I 8 af de 48 celler mangler diagrammet data
+   for 1 lag geonet i opslagspunktet, idet de armerede kurver ophører ved
+   lavere Eᵤ end de ustabiliserede, jf. kapitel 3, afsnit 3. Reduktionen kan da
+   ikke bestemmes. Fire af cellerne ligger inden for kernezonen, og forholdet
+   afhjælpes ikke af at dimensionere på VejDims tal.
+5. **Ekstrapoleret reduktion uden for diagrammernes område.** Dimensioneres der
+   på VejDims tal, jf. kapitel 2, afsnit 3, er reduktionen aflæst på
+   randkurven og ikke i driftspunktet. Reduktionen er den robuste størrelse i
+   diagrammerne — den ligger i båndet 24–37 % ved ét lag hen over hele
+   Eₒ-spændet — men den er ikke målt i punktet. Mod den tykkeste kurve er
+   reduktionen praktisk talt uændret, hvorved en fastholdt værdi er
+   velbegrundet i zonen over. Mod den tyndeste kurve tiltager den med 2 til 19
+   procentpoint, hvorved en fastholdt værdi i zonen under er konservativ, hvis
+   tendensen fortsætter. Afvigelsen mellem VejDims krav og randkurven angives
+   sammen med resultatet og bør indgå i vurderingen.
+6. **Følsomhed over for asfaltpakken.** Den ækvivalente Eₒ afhænger af den
    faste asfaltpakke pr. trafikklasse. De anvendte pakker er VejDims egne
    værdier.
-6. **Trafikklasse T7 er ikke medtaget**, idet klassen er åben. Der henvises til
+7. **Trafikklasse T7 er ikke medtaget**, idet klassen er åben. Der henvises til
    en konkret VejDim-beregning.
 
 ## 3 Hvornår en ny kørsel bør foretages
@@ -60,7 +71,8 @@ gør sig gældende:
 - Levetidsmålet afviger fra 20 år.
 - Underbunden er ikke frostsikker.
 - Trafikkens sammensætning afviger væsentligt fra Æ10-forudsætningen.
-- Opslagspunktet falder i zonen under eller over, jf. kapitel 2, afsnit 2.
+- Opslagspunktet falder i zonen under eller over, jf. kapitel 2, afsnit 2, og
+  den ekstrapolerede reduktion ikke findes tilstrækkelig for opgaven.
 
 Foreligger en konkret kørsel, kan den indtastes i kørselstabellen på
 korrelationssiden, hvorefter Eₒ,ækv-matricen og dimensioneringen følger med.

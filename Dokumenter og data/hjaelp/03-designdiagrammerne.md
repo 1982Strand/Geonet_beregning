@@ -52,9 +52,26 @@ opbygning er ikke dimensioneret under Eᵤ = 3 MN/m², og de armerede kurver
 ophører ved hver sin øvre grænse; 2 lag geonet forekommer slet ikke i
 diagram 1.
 
-Ligger opslagspunktet uden for det aflæste spænd, angives værdien med en
-tankestreg i tabellen, og beregningen kan ikke gennemføres for den
-kombination. Forholdet svarer til zonerne under og over, jf. kapitel 2.
+:::figur Højeste Eᵤ med aflæste værdier for 1 lag geonet, pr. kurve.
+| Kurve | 1 lag findes til og med |
+| --- | --- |
+| Eₒ = 30 MPa | Eᵤ = 15 |
+| Eₒ = 45 MPa | Eᵤ = 20 |
+| Eₒ = 60 MPa | Eᵤ = 27 |
+| Eₒ = 80 MPa | Eᵤ = 33 |
+| Eₒ = 120 MPa | Eᵤ = 33 |
+| Eₒ = 150 MPa | Eᵤ = 32 |
+:::
+
+Mangler en værdi, angives den med en tankestreg i tabellen, og beregningen kan
+ikke gennemføres for den kombination. Ved Eᵤ = 40 MN/m² foreligger ingen
+armeret kurve ved nogen Eₒ.
+
+Forholdet bør ikke forveksles med zonerne under og over, jf. kapitel 2,
+afsnit 2. En tankestreg betyder, at kurven ikke er optegnet i punktet, og
+beregningen er da udelukket. En zonebetegnelse betyder, at kurverne foreligger,
+men at VejDims krav ligger uden for deres spænd; her kan der dimensioneres på
+VejDims tal.
 
 De aflæste værdier kan redigeres på siden Designdiagrammer. Ændres en værdi,
 dannes opslagstabellen på ny, og både dimensioneringen og
