@@ -577,7 +577,17 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   width:auto !important; min-width:0 !important; flex:none !important;
 }
 [class*="st-key-rt_alle_hoved_"] .stButton{ margin:0; }
-[class*="st-key-rt_alle_hoved_"] .stButton > button{
+/* Kolonner med tooltip (help=) — Klasse-knappen i trafikklasse-tilstand —
+   får af Streamlit knappen pakket ind i stTooltipIcon > stTooltipHoverTarget.
+   Indpakningen fylder ikke kolonnen af sig selv, og knappen er da ikke
+   længere direkte barn af .stButton. Wrapperne stilles derfor gennemsigtige
+   i layoutet, og knapreglerne nedenfor matcher på efterkommer frem for
+   direkte barn, så hovedet er identisk med og uden tooltip. */
+[class*="st-key-rt_alle_hoved_"] .stButton [data-testid="stTooltipIcon"],
+[class*="st-key-rt_alle_hoved_"] .stButton [data-testid="stTooltipHoverTarget"]{
+  display:block !important; width:100% !important; margin:0 !important;
+}
+[class*="st-key-rt_alle_hoved_"] .stButton button{
   font:600 9.5px/1.2 'IBM Plex Mono',monospace !important;
   letter-spacing:.08em; text-transform:uppercase;
   color:var(--bg-ink-45) !important;
@@ -585,15 +595,15 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   border:none !important; background:transparent !important;
   box-shadow:none !important; padding:.5rem 0 !important;
 }
-[class*="st-key-rt_alle_hoved_"] .stButton > button:hover{
+[class*="st-key-rt_alle_hoved_"] .stButton button:hover{
   color:var(--bg-ink) !important; background:transparent !important;
 }
 /* Knappens label ligger i en indre flex-div og en stMarkdownContainer, som
    begge centrerer. Skal overskriften flugte med cellen under sig, må alle
    tre niveauer stilles — som menupunkterne i sidebaren, jf. afsnit 17. */
-[class*="st-key-rt_alle_hoved_"] .stButton > button,
-[class*="st-key-rt_alle_hoved_"] .stButton > button > div,
-[class*="st-key-rt_alle_hoved_"] .stButton > button [data-testid="stMarkdownContainer"]{
+[class*="st-key-rt_alle_hoved_"] .stButton button,
+[class*="st-key-rt_alle_hoved_"] .stButton button > div,
+[class*="st-key-rt_alle_hoved_"] .stButton button [data-testid="stMarkdownContainer"]{
   text-align:left !important; justify-content:flex-start !important;
   width:100% !important;
 }
