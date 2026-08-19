@@ -6,7 +6,7 @@ resume: De to dimensioneringsgrundlag og vejen fra hver af dem til den færdige 
 ## 1 De to dimensioneringsgrundlag
 
 Værktøjet dimensionerer med basis i BG Byggros' designmanualer, som er
-udarbejdet på baggrund af en række danske feltforsøg siden 1997.
+udarbejdet på baggrund af en række feltforsøg siden 1997.
 Den primære empiriske kilde er designdiagrammerne.
 Der findes seks diagrammer, ét pr. belastningsklasse, og hvert diagram viser
 bærelagstykkelsen som funktion af underbundens E-modul for tre opbygninger:
@@ -176,9 +176,8 @@ eller ud fra Eₒ-værdien. Den ækvivalente Eₒ kan derfor betragtes som en
 angivelse af interpolationsfaktoren.
 
 Der gøres opmærksom på, at designdiagrammerne ikke indeholder armerede kurver i
-alle punkter. Ved Eᵤ = 10 MPa findes eksempelvis ingen kurve for 2 lag geonet
-ved Eₒ = 30, 45, 60 og 80 MPa. Falder opslagspunktet i dette område, kan
-reduktionen for 2 lag ikke bestemmes, og resultatet udelades.
+alle punkter. Falder opslagspunktet i et sådant område, kan reduktionen ikke
+bestemmes, og resultatet udelades, jf. kapitel 3, afsnit 3.
 
 ## 6 Korrektion for materialer og geonettype
 

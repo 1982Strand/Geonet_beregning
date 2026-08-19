@@ -15,12 +15,12 @@ scanning og som en optegning af de aflæste værdier. Optegningen anvender
 gennemgående de samme farver som værktøjets øvrige diagrammer: sort for
 ustabiliseret, blåt for 1 lag og lilla for 2 lag.
 
-:::figur Uddrag af diagram 4, belastningsklasse 4. Værdien ved 95 MPa er interpoleret.
-| Eₒ [MPa] | Ustab. [cm] | 1 lag [cm] |
+:::figur Uddrag af diagram 1, belastningsklasse 1, som værdierne er aflæst.
+| Eᵤ [MN/m²] | Ustab. [cm] | 1 lag [cm] |
 | --- | --- | --- |
-| 90 | 95,9 | 64,7 |
-| 95 | 92,9 | 62,3 |
-| 100 | 90,0 | 60,0 |
+| 3 | 110,0 | 70,0 |
+| 4 | 95,9 | 64,7 |
+| 5 | 90,0 | 60,0 |
 :::
 
 ## 2 Aflæsning og interpolation

@@ -22,7 +22,7 @@ designdiagram. Ændres et af de to grundlag, kan celler skifte værdi eller zone
 | --- | --- | --- |
 | 5 MPa | 1.184 | 90 |
 | 8 MPa | 1.038 | 95 |
-| 10 MPa | 969 | 99 |
+| 10 MPa | 969 | 108 |
 :::
 
 ## 2 Zonerne under og over
@@ -37,8 +37,6 @@ zonebetegnelse frem for et tal:
 - **over** — kravet er tykkere end den tykkeste kurve (Diagram 6,
   Eₒ = 150 MPa). T6 ved Eᵤ = 10 MPa kræver 1.146 mm, hvor kurven slutter ved
   1.100 mm. Zonen omfatter 13 celler: de høje trafikklasser på stiv underbund.
-- **mangler** — cellen har ingen kørselsdata, idet den ubundne tykkelse er
-  angivet til nul.
 
 De øvrige 30 celler udgør kernezonen, hvor reduktionen aflæses i selve
 driftspunktet. Her ligger den ved ét lag geonet på 25–47 % med en middelværdi

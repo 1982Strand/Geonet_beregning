@@ -10,6 +10,8 @@ GS-GRID SX160 og E'GRID T6 — som alle har effektindeks 100. Øvrige produkter 
 geonet-databasen er indekseret i forhold til disse.
 
 Vælges et referencenet, anvendes diagrammernes værdier uændret, og k_net er 0.
+Enkelte øvrige produkter er tilkendt samme effektindeks og giver dermed samme
+lagtykkelse, uden at de indgår i diagrammernes optegning.
 
 ## 2 Effektindekset
 
@@ -41,9 +43,9 @@ konservative.
 :::figur Bærelagstykkelse i mm ved Eᵤ = 8 MPa, T4, 1 lag geonet.
 | Produkt | Indeks | 1 lag |
 | --- | --- | --- |
-| TX160 (ref.) | 100 | 762 |
-| TX150 | 90 | 838 |
-| NX850 | 115 | 648 |
+| TX160 (ref.) | 100 | 738 |
+| TX150 | 90 | 812 |
+| NX850 | 115 | 627 |
 :::
 
 ## 3 To lag geonet
