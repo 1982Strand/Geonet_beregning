@@ -6353,7 +6353,9 @@ def render_designdiagrammer() -> None:
                     )
 
         with kol_tabel:
-            kol_titel, kol_knap = st.columns([1, 0.32], gap="small")
+            kol_titel, kol_knap, kol_nulstil = st.columns(
+                [1, 0.32, 0.32], gap="small"
+            )
             with kol_titel:
                 st.html(
                     '<div class="dd-tabel-titel">Aflæste diagramdata · '
@@ -6365,9 +6367,35 @@ def render_designdiagrammer() -> None:
                                  width="stretch", type="primary"):
                         st.session_state.pop("dd_redigerer", None)
                         st.rerun()
-                elif st.button("Redigér", key=f"dd_rediger_{valgt_nr}",
-                               width="stretch"):
+                elif st.button(
+                    "Redigér", key=f"dd_rediger_{valgt_nr}",
+                    width="stretch",
+                    help="Værdierne kan redigeres direkte i tabellen. "
+                         "Ændringerne gemmes, når der trykkes Færdig.",
+                ):
                     st.session_state["dd_redigerer"] = valgt_nr
+                    st.rerun()
+            with kol_nulstil:
+                if st.button(
+                    "Nulstil", key=f"dd_nulstil_diagram_{valgt_nr}",
+                    width="stretch",
+                    help="Nulstiller kun dette diagram til designmanualens "
+                         "aflæste værdier. Øvrige diagrammer berøres ikke.",
+                ):
+                    standard = next(
+                        d for d in _standard_designdiagrammer()
+                        if d["diagram_nr"] == valgt_nr
+                    )
+                    opdaterede = [
+                        standard if d["diagram_nr"] == valgt_nr else d
+                        for d in st.session_state["designdiagrammer"]
+                    ]
+                    st.session_state["designdiagrammer"] = opdaterede
+                    gem_designdiagrammer(opdaterede)
+                    st.session_state.pop(f"diagram_editor_{valgt_nr}", None)
+                    if redigerer:
+                        st.session_state.pop("dd_redigerer", None)
+                    _opdater_aktiv_t_basis_table()
                     st.rerun()
 
             if redigerer:
