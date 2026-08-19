@@ -25,14 +25,14 @@ svarer til VejDims krav** — derefter er reduktionen diagrammets egen,
 feltdokumenterede værdi. Der indgår ingen teoretisk omregning mellem de to
 metoder.
 
-**Broen holder i en veldefineret kernezone.** Med det oprindelige datagrundlag
-(juli 2026) var det 21 af 36 celler — typisk trafikklasse T2–T4 ved middel
-underbund og de lave klasser ved stiv underbund — med reduktioner på
-**26–47 % (middel 31 %)**, altså samme niveau som appens
-belastningsklasse-beregning. Uden for kernezonen falder driftspunktet uden for
-diagrammernes gyldighedsområde, og appen afviser med besked frem for at
-ekstrapolere. Det præcise antal celler afhænger af det aktuelle datagrundlag og
-ses i appen.
+**Broen holder i en veldefineret kernezone.** Med det aktuelle datagrundlag er
+det 30 af 48 celler — typisk trafikklasse T2–T4 ved middel underbund og de lave
+klasser ved stiv underbund — med reduktioner på **25–47 % (middel 30 %)** ved
+ét lag geonet, altså samme niveau som appens belastningsklasse-beregning. Uden
+for kernezonen falder driftspunktet uden for diagrammernes gyldighedsområde.
+Appen afviser her med besked, medmindre dimensionering på VejDims tal er
+tilvalgt, jf. §5. Det præcise antal celler afhænger af det aktuelle
+datagrundlag og ses i appen.
 
 ## 2. Datagrundlag
 
@@ -93,12 +93,67 @@ kriterier blandes aldrig.
   Eo_ækv. Det kommercielt relevante område (middel-tung trafik på blød–middel
   bund).
 - **Zone "under" (blød bund × lave klasser):** VejDim kræver mindre end
-  diagrammets mest konservative kurve (Eo=30). Appen henviser til
-  belastningsklasse-flowet. (I praksis vil frost-gulvet ofte styre disse celler.)
+  diagrammets mest konservative kurve (Eo=30). (I praksis vil frost-gulvet ofte
+  styre disse celler.)
 - **Zone "over" (stiv bund × høje klasser):** VejDims ubundne krav overstiger
-  diagrammernes tykkelsesområde (Eo=150). Appen afviser med besked frem for at
-  ekstrapolere; reduktionspotentialet er her lavest, og en konkret
-  VejDim-beregning er nødvendig.
+  diagrammernes tykkelsesområde (Eo=150). Reduktionspotentialet er her lavest.
+
+Som udgangspunkt afviser appen begge zoner med besked og henviser til
+belastningsklasse-flowet henholdsvis til en konkret VejDim-beregning.
+
+### 5a. Dimensionering på VejDims tal uden for området
+
+Zonerne kan dimensioneres med tilvalget **Anvend VejDims tal uden for
+diagrammet**, som står i dimensioneringens trin 1 og på korrelationssiden. Det
+er fravalgt ved opstart og holdes alene i sessionen.
+
+Fremgangsmåden er den samme bro som i kernezonen, blot henlagt til randkurven:
+den ubundne tykkelse er VejDims krav, og reduktionen aflæses på diagrammets
+nærmeste randkurve ved samme Eu. Teknisk sker det som en fælles skalering af
+randkurvens armerede og ustabiliserede tykkelse:
+
+```
+skala     = t_VejDim / t_rand
+t_armeret = t_rand_armeret × skala × (1 + k_φ + k_net)
+```
+
+hvor:
+
+- `t_VejDim` er VejDims krævede ubundne tykkelse (SG + BL)
+- `t_rand` er randkurvens ustabiliserede tykkelse ved samme Eu
+- `skala` ligger mellem 0,562 og 1,262 for standardkørslerne
+
+Da skaleringen rammer begge tykkelser ens, er reduktionsprocenten randkurvens
+egen og upåvirket af tilvalget. I kernezonen er skalaen per konstruktion 1,0,
+og tilvalget ændrer derfor intet dér — verificeret til 0,000 mm afvigelse i
+samtlige 30 celler.
+
+**Metoden er kontinuert ved zonegrænsen.** Ved randen er skalaen 1,0, og
+udtrykket falder sammen med kernezonens. En voksende ubunden tykkelse hen over
+grænsen giver derfor ingen spring i hverken tykkelse eller reduktion.
+
+**Tilvalget udvider dækningen** fra 26 til 40 af de 48 celler ved ét lag og fra
+11 til 15 ved to lag. Den derved fremkomne matrix er monoton i både
+trafikklasse og Eu på nær ét spring på 0,4 % (T5 > T6 ved Eu = 5), som ligger i
+kernezonen og forekommer uafhængigt af tilvalget.
+
+**De resterende celler kan ikke beregnes.** Årsagen er ikke zonen, men at
+diagrammets armerede kurver ophører ved lavere Eu end de ustabiliserede:
+Eo=30 ved Eu=15, Eo=45 ved Eu=20, Eo=60 ved Eu=27, Eo=80 og Eo=120 ved Eu=33,
+Eo=150 ved Eu=32. Ved Eu = 40 MPa findes ingen armeret kurve ved nogen Eo.
+Cellerne T1/20, T1/30, T1/40 og T2/40 ligger i kernezonen og afvises allerede
+uden tilvalget; T3/40, T4/40, T5/40 og T6/40 ligger i zonen over. Der
+ekstrapoleres ikke i Eu-retningen.
+
+**Forbeholdet.** Reduktionen i disse celler er aflæst på randkurven og dermed
+ekstrapoleret; den er ikke bestemt i driftspunktet. Ekstrapolationsafstanden —
+afvigelsen mellem VejDims krav og randkurven — varierer fra 0,7 % (T3 ved
+Eu=40) til 44 % (T1 ved Eu=3) og angives sammen med resultatet, både på
+skærmen og i rapporten. Grundlaget for at metoden alligevel er anvendelig, er,
+at reduktionen er den robuste størrelse: den ligger i båndet 24–37 % for ét lag
+hen over hele Eo-spændet og er praktisk talt flad mod Eo=150-randen (27–32 %).
+Mod Eo=30-randen stiger den, hvorved en fastholdt randreduktion dér er
+konservativ.
 
 ## 6. Forbehold
 
@@ -127,15 +182,18 @@ kriterier blandes aldrig.
 
 ## 7. Hvor funktionen bor i appen
 
-- `core/data.py` — indeholder de 36 standardkørsler
+- `core/data.py` — indeholder de 48 standardkørsler
   (`VEJDIM_KOERSLER_STANDARD_RAEKKER`), tilbageberegner Eo_ækv
   (`back_beregn_eo_aekv` / `korrelation_fra_koersler`) og slår op med
   Eu-interpolation (`trafik_eo_aekv`).
 - `core/calculator.py` — `_slaa_op_interp` interpolerer mellem Eo-kolonnerne
-  (identisk med eksakt opslag ved en præcis kolonne).
-- `app.py` — valg af dimensioneringsgrundlag i begge tilstande samt sektionen
-  **🚦 Trafikklasse-korrelation** med metode, forudsætninger, zoner, redigerbare
-  kørsler og den afledte Eo_ækv-tabel.
+  (identisk med eksakt opslag ved en præcis kolonne). `beregn()` tager
+  parameteren `skala`, som gennemfører randkurve-skaleringen i §5a; den er 1,0
+  ved alt opslag inden for diagrammets område.
+- `app.py` — valg af dimensioneringsgrundlag i begge tilstande, tilvalget
+  **Anvend VejDims tal uden for diagrammet** (`_brug_vejdim_yder()`) samt
+  sektionen **🚦 Trafikklasse-korrelation** med metode, forudsætninger, zoner,
+  redigerbare kørsler og den afledte Eo_ækv-tabel.
 - `korrelation_final.py` — reproducerer analysen uden for appen ud fra
   standardkørslerne (dine egne redigeringer i appen indgår ikke).
 
@@ -216,6 +274,6 @@ Responsmodellen er valideret mod lærebogens gennemregnede eksempel
 *Kilder: VejDim (Vejdirektoratet); Håndbog "Dimensionering af befæstelser og
 forstærkningsbelægninger" (jan. 2022/rev. aug. 2025); MMOPP Brugervejledning
 (2007); Bolet & Busch: "Vejbefæstelsers dimensionering" (AAU 2016) kap. 7;
-appens designdiagrammer i `core/data.py`. Datagrundlag: de 36 standardkørsler i
+appens designdiagrammer i `core/data.py`. Datagrundlag: de 48 standardkørsler i
 `core/data.py`, redigerbare i appen. Reproducerbart script:
 `korrelation_final.py`.*

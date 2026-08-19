@@ -714,21 +714,33 @@ VEJDIM_KOERSLER = koersler_fra_raekker(VEJDIM_KOERSLER_RAEKKER)
 
 def back_beregn_eo_aekv(
     eu: float, ubundet_mm: float, t_basis_table: dict | None = None
-) -> tuple[float | None, str]:
+) -> tuple[float | None, str, float]:
     """Tilbageberegn den ækvivalente Eo for en ubundet tykkelse ved given Eu.
 
     Finder den Eo, hvis ustabiliserede diagram-tykkelse (uarmeret) ved eu netop
     svarer til ``ubundet_mm``, ved lineær interpolation mellem Eo-kolonnerne.
-    Returnerer (eo_aekv, zone):
-        "ok":   eo_aekv er et tal.
-        "under": ubundet < diagrammets Eo=30-kurve (blød bund × lav klasse).
-        "over":  ubundet > Eo=150-kurven (stiv bund × høj klasse).
+    Returnerer (eo_aekv, zone, skala):
+        "ok":      eo_aekv er et tal, og skala er 1,0.
+        "under":   ubundet < diagrammets tyndeste kurve (blød bund × lav klasse).
+        "over":    ubundet > den tykkeste kurve (stiv bund × høj klasse).
         "udenfor": Eu-rækken findes ikke / ingen uarmeret-data.
+
+    Uden for diagrammets område er eo_aekv den nærmeste randkurve, og skala er
+    forholdet mellem VejDims krævede tykkelse og randkurvens egen tykkelse.
+    Aflæses randkurven og ganges den med skala, fås en opbygning, hvis
+    ustabiliserede tykkelse er VejDims — mens reduktionen forbliver
+    diagrammets egen, jf. afsnittet om yderområderne i
+    "Korrelation_trafikklasse_Eo.md". I zonen ok er skala per konstruktion
+    1,0, og opslaget er dermed uændret.
+
+    Randkurverne findes som de yderste Eo-kolonner **med data** — ikke som
+    faste 30/150 — så en redigeret diagramtabel ikke kan give et opslag i en
+    tom kolonne.
     """
     table = t_basis_table or T_BASIS_TABLE
     row = table.get(eu)
     if not row:
-        return None, "udenfor"
+        return None, "udenfor", 1.0
     pts = sorted(
         [(eo, row[eo]["uarmeret"] * 10.0)
          for eo in EO_KOLONNER
@@ -736,19 +748,23 @@ def back_beregn_eo_aekv(
         key=lambda p: p[1],
     )
     if not pts:
-        return None, "udenfor"
+        return None, "udenfor", 1.0
     if ubundet_mm < pts[0][1]:
-        return None, TRAFIK_UNDER
+        eo_rand, t_rand = pts[0]
+        return float(eo_rand), TRAFIK_UNDER, ubundet_mm / t_rand
     if ubundet_mm > pts[-1][1]:
-        return None, TRAFIK_OVER
+        eo_rand, t_rand = pts[-1]
+        return float(eo_rand), TRAFIK_OVER, ubundet_mm / t_rand
     for (e1, t1), (e2, t2) in zip(pts, pts[1:]):
         if t1 <= ubundet_mm <= t2:
-            return (e1 + (ubundet_mm - t1) / (t2 - t1) * (e2 - e1)) if t2 > t1 else float(e1), "ok"
-    return None, "udenfor"
+            eo = (e1 + (ubundet_mm - t1) / (t2 - t1) * (e2 - e1)) if t2 > t1 else float(e1)
+            return eo, "ok", 1.0
+    return None, "udenfor", 1.0
 
 
 def korrelation_fra_koersler(
-    koersler: dict, t_basis_table: dict | None = None
+    koersler: dict, t_basis_table: dict | None = None,
+    brug_vejdim: bool = False,
 ) -> dict:
     """Byg korrelationstabellen (T → Eu → Eo_ækv/'under'/'over') fra de rå
     VejDim-kørsler ved tilbageberegning mod designdiagrammet.
@@ -756,6 +772,10 @@ def korrelation_fra_koersler(
     Celleværdien kan være enten den ubundne total i mm (tal) eller en dict med
     "sg"/"bl" (som VEJDIM_KOERSLER). Kun summen SG+BL indgår i broen —
     fordelingen mellem lagene har ingen betydning for Eo_ækv.
+
+    brug_vejdim=True lader cellerne uden for diagrammets område bære
+    randkurvens Eo frem for zonestrengen, jf. back_beregn_eo_aekv. Zonerne
+    kan da udledes ved at sammenholde med et opslag uden tilvalget.
     """
     korr: dict = {}
     for t_klasse, raekker in koersler.items():
@@ -769,8 +789,13 @@ def korrelation_fra_koersler(
                 # Ingen kørsel endnu — cellen indgår ikke i broen.
                 korr[t_klasse][int(eu)] = TRAFIK_MANGLER
                 continue
-            eo, zone = back_beregn_eo_aekv(float(eu), float(ub), t_basis_table)
-            korr[t_klasse][int(eu)] = eo if zone == "ok" else zone
+            eo, zone, _skala = back_beregn_eo_aekv(
+                float(eu), float(ub), t_basis_table
+            )
+            if zone == "ok" or (brug_vejdim and eo is not None):
+                korr[t_klasse][int(eu)] = eo
+            else:
+                korr[t_klasse][int(eu)] = zone
     return korr
 
 
@@ -882,7 +907,8 @@ def trafik_eo_aekv(
     eu: float,
     koersler: dict | None = None,
     t_basis_table: dict | None = None,
-) -> tuple[float | None, str]:
+    brug_vejdim: bool = False,
+) -> tuple[float | None, str, float]:
     """Ækvivalent Eo (MPa) for en trafikklasse ved given Eu.
 
     Fremgangsmåde: find VejDims krævede ubundne tykkelse ved netop dette Eu
@@ -891,17 +917,28 @@ def trafik_eo_aekv(
     dermed også ved brugerens eget Eu i stedet for at blive arvet fra et
     nabopunkt.
 
-    Returnerer (eo_aekv, zone):
+    Returnerer (eo_aekv, zone, skala):
         "ok"      — eo_aekv er et tal; dimensionér via diagrammet.
         "under"   — VejDim kræver mindre end diagrammets tyndeste kurve.
         "over"    — VejDim kræver mere end diagrammets tykkeste kurve.
         "udenfor" — Eu uden for de kørte punkter, eller ukendt trafikklasse.
-    Ved zone != "ok" er eo_aekv None.
+
+    brug_vejdim=False (standard) svarer til dimensionering alene inden for
+    diagrammets område: uden for det er eo_aekv None, og der er intet
+    driftspunkt at dimensionere efter. brug_vejdim=True lader opslaget ske på
+    randkurven, skaleret med skala, så VejDims krævede ubundne tykkelse ligger
+    til grund. I zonen ok er skala altid 1,0, og de to tilvalg giver samme
+    resultat.
     """
     tykkelse = trafik_ubundet_tykkelse(t_klasse, eu, koersler)
     if tykkelse is None:
-        return None, "udenfor"
-    return back_beregn_eo_aekv(float(eu), tykkelse, t_basis_table)
+        return None, "udenfor", 1.0
+    eo, zone, skala = back_beregn_eo_aekv(float(eu), tykkelse, t_basis_table)
+    if zone == "ok":
+        return eo, zone, 1.0
+    if brug_vejdim and eo is not None:
+        return eo, zone, skala
+    return None, zone, 1.0
 
 
 def trafik_eu_interval(
@@ -940,6 +977,7 @@ def trafikklasser_for_belastningsklasser(
     eu: float,
     koersler: dict | None = None,
     t_basis_table: dict | None = None,
+    brug_vejdim: bool = False,
 ) -> list[str]:
     """Hvilke trafikklasser slår op i en af de angivne belastningsklasser?
 
@@ -958,7 +996,9 @@ def trafikklasser_for_belastningsklasser(
         return []
     fundet: list[str] = []
     for t_klasse in TRAFIKKLASSER:
-        eo, _zone = trafik_eo_aekv(t_klasse, eu, koersler, t_basis_table)
+        eo, _zone, _skala = trafik_eo_aekv(
+            t_klasse, eu, koersler, t_basis_table, brug_vejdim
+        )
         if eo is not None and eo_til_naermeste_klasse(eo) in ks:
             fundet.append(t_klasse)
     return fundet

@@ -139,6 +139,7 @@ def beregn(
     net_korrektion: float,
     lag_mode: str,
     t_basis_table: dict | None = None,
+    skala: float = 1.0,
 ) -> dict:
     """
     Beregn bærelagstykkelse med og uden armering.
@@ -150,6 +151,15 @@ def beregn(
     phi             Bærelagets friktionsvinkel i grader (typisk 35–50)
     net_korrektion  Korrektionsfaktor for armeringstype (0.0 = reference TX160/SX160)
     lag_mode        "1_lag" | "2_lag"
+    skala           Fælles faktor på den aflæste armerede og uarmerede
+                    tykkelse. 1,0 er det rene diagramopslag. Ved
+                    dimensionering efter trafikklasse uden for diagrammets
+                    område sættes den til forholdet mellem VejDims krævede
+                    ubundne tykkelse og randkurvens, jf.
+                    data.back_beregn_eo_aekv, så opbygningen hviler på VejDims
+                    tykkelse, mens reduktionen forbliver diagrammets egen.
+                    Faktoren rammer begge tykkelser ens og lader derfor
+                    reduktionsprocenten være uændret.
 
     Returnerer
     ----------
@@ -214,9 +224,11 @@ def beregn(
 
     uarmeret_mangler = t_low_uarm is None or t_high_uarm is None
 
-    # Direkte opslag i diagramtabellen
-    t_basis_arm_cm = t_low_arm
-    t_basis_uarm_cm = None if uarmeret_mangler else t_low_uarm
+    # Direkte opslag i diagramtabellen, skaleret. Skaleringen rammer den
+    # armerede og den uarmerede tykkelse ens, så reduktionen er uændret;
+    # t_low_*/t_high_* bevares som de rå aflæsninger til mellemregningerne.
+    t_basis_arm_cm = t_low_arm * skala
+    t_basis_uarm_cm = None if uarmeret_mangler else t_low_uarm * skala
 
     t_basis_arm_mm = t_basis_arm_cm * 10.0
     t_basis_uarm_mm = t_basis_uarm_cm * 10.0 if t_basis_uarm_cm is not None else None
@@ -269,6 +281,7 @@ def beregn(
         "t_basis_uarm_mm": round(t_basis_uarm_mm, 0) if t_basis_uarm_mm is not None else None,
         "phi_korrektion": round(phi_korrektion, 4),
         "samlet_faktor": round(samlet_faktor, 4),
+        "skala": skala,
         # Slutresultater
         "t_armeret_mm": round(t_armeret_mm, 0),
         "t_uarmeret_mm": round(t_uarmeret_mm, 0) if t_uarmeret_mm is not None else None,
@@ -301,6 +314,7 @@ def beregn_alle_produkter(
     phi: float = PHI_BASIS,
     t_basis_table: dict | None = None,
     klasse_for_anbefaling: int | None = None,
+    skala: float = 1.0,
 ) -> list[dict]:
     """
     Beregn T_armeret for alle geonet-produkter med en given friktionsvinkel.
@@ -313,6 +327,8 @@ def beregn_alle_produkter(
     er en ækvivalent (mellemliggende) værdi og eo_til_klasse() derfor ikke
     rammer en klasse — her sendes den nærmeste belastningsklasse ind. None =
     udled klassen af Eo som hidtil (belastningsklasse-tilstand, uændret).
+
+    skala føres uændret videre til beregn() — se dennes docstring.
 
     Returnerer liste af dicts med:
         navn, serie, korrektion, t_armeret_mm, reduktion_mm, reduktion_pct,
@@ -340,6 +356,7 @@ def beregn_alle_produkter(
             net_korrektion=geonet["korrektion"],
             lag_mode=lag_mode,
             t_basis_table=t_basis_table,
+            skala=skala,
         )
 
         klasse_ok = (
@@ -382,6 +399,7 @@ def beregn_alle_produkter(
                 net_korrektion=kor_best,
                 lag_mode=lag_mode,
                 t_basis_table=t_basis_table,
+                skala=skala,
             )
             if res_best.get("fejl") is None:
                 række["korrektion_min"] = kor_best

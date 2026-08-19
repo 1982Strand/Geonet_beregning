@@ -546,11 +546,36 @@ def _aktiv_koersler() -> dict:
     return koersler_fra_raekker(_aktiv_koersel_raekker())
 
 
-def _aktiv_korrelation() -> dict:
+# Nøglen til tilvalget om dimensionering uden for designdiagrammernes område.
+# Den er fælles for begge tilstande, så indstillingen ikke kan divergere
+# mellem Standard og Brugerdefineret, og den holdes alene i sessionen: valget
+# træffes pr. beregning og gendannes ikke ved næste opstart.
+_VEJDIM_YDER_KEY = "brug_vejdim_yderomraade"
+
+
+def _brug_vejdim_yder() -> bool:
+    """Er dimensionering uden for designdiagrammernes område tilvalgt?
+
+    Er tilvalget fravalgt (standard), afvises trafikklasser, hvis krav falder
+    uden for diagrammernes tykkelsesområde, jf. zonerne under og over. Er det
+    tilvalgt, hviler opbygningen dér på VejDims krævede ubundne tykkelse,
+    mens reduktionen aflæses på diagrammets randkurve.
+    """
+    return bool(st.session_state.get(_VEJDIM_YDER_KEY, False))
+
+
+def _aktiv_korrelation(brug_vejdim: bool | None = None) -> dict:
     """Den aktive korrelationstabel (T → Eu → Eo_ækv/zone), tilbageberegnet fra
-    de aktive kørsler mod det aktive designdiagram."""
+    de aktive kørsler mod det aktive designdiagram.
+
+    brug_vejdim=None følger sessionens tilvalg; en udtrykkelig værdi anvendes
+    uændret, så begge udgaver af tabellen kan stilles op ved siden af hinanden.
+    """
+    if brug_vejdim is None:
+        brug_vejdim = _brug_vejdim_yder()
     return korrelation_fra_koersler(
-        koersler_fra_raekker(_aktiv_koersel_raekker()), _aktiv_t_basis_table()
+        koersler_fra_raekker(_aktiv_koersel_raekker()), _aktiv_t_basis_table(),
+        brug_vejdim,
     )
 
 
@@ -899,10 +924,18 @@ def _vis_korrelationstabel(
     med_forklaring=False udelader overskrift og zoneforklaring. Anvendes på
     korrelationssiden, hvor trinnets hoved bærer overskriften, og hvor zonerne
     forklares samlet under tabellen.
+
+    Er dimensionering på VejDims tal tilvalgt, bærer cellerne uden for
+    diagrammernes område et tal frem for zonestrengen. De mærkes med * og
+    dæmpes, så det fremgår, at opslaget dér ligger på en randkurve.
     """
     import pandas as pd
 
-    df = pd.DataFrame(_korrelation_pivot_rows(korr)).set_index("Trafikklasse")
+    brug_vejdim = _brug_vejdim_yder()
+    zoner = _aktiv_korrelation(brug_vejdim=False) if brug_vejdim else None
+    df = pd.DataFrame(
+        _korrelation_pivot_rows(korr, zoner)
+    ).set_index("Trafikklasse")
 
     # Eu markeres kun, når det rammer et af de tabulerede punkter præcist.
     eu_kol = None
@@ -913,6 +946,12 @@ def _vis_korrelationstabel(
 
     def _markering(data: pd.DataFrame) -> pd.DataFrame:
         stil = pd.DataFrame("", index=data.index, columns=data.columns)
+        # Randkurve-cellerne dæmpes først, så rækkemarkeringen nedenfor
+        # fortsat træder tydeligst frem.
+        for t_navn in data.index:
+            for kol in data.columns:
+                if str(data.loc[t_navn, kol]).endswith("*"):
+                    stil.loc[t_navn, kol] = "font-style: italic; opacity: 0.75;"
         if valgt_t in data.index:
             stil.loc[valgt_t, :] = "background-color: #F5FAF1;"
             if eu_kol in data.columns:
@@ -933,10 +972,83 @@ def _vis_korrelationstabel(
         )
     else:
         note = "Den markerede celle er den, dimensioneringen slår op i."
+    if brug_vejdim:
+        zonetekst = (
+            "\\* = uden for diagrammets område; den ubundne tykkelse er "
+            "VejDims, og reduktionen er aflæst på nærmeste randkurve."
+        )
+    else:
+        zonetekst = (
+            "**under** = VejDim kræver en tyndere opbygning end "
+            "diagrammets område · **over** = tykkere end diagrammets område."
+        )
     st.caption(
-        f"{note} **under** = VejDim kræver en tyndere opbygning end "
-        f"diagrammets område · **over** = tykkere end diagrammets område. "
+        f"{note} {zonetekst} "
         f"Se *Trafikklasse-korrelation* i menuen for metode og datagrundlag."
+    )
+
+
+def _yder_randtal(t_klasse: str, eu: float, zone: str) -> tuple[float, float, float] | None:
+    """Tallene bag en celle uden for designdiagrammernes område.
+
+    Returnerer (t_vejdim_mm, eo_rand, t_rand_mm): VejDims krævede ubundne
+    tykkelse, den randkurve opslaget henlægges til, og randkurvens egen
+    ustabiliserede tykkelse. Randkurven bestemmes som den yderste Eₒ-kolonne
+    med data, jf. data.back_beregn_eo_aekv. Returnerer None, hvis grundlaget
+    ikke kan opgøres.
+    """
+    t_basis_table = _aktiv_t_basis_table()
+    ub = trafik_ubundet_tykkelse(t_klasse, eu, _aktiv_koersler())
+    row = t_basis_table.get(int(round(eu)))
+    if ub is None or not row:
+        return None
+    pts = sorted(
+        [(eo, row[eo]["uarmeret"] * 10.0)
+         for eo in EO_KOLONNER
+         if (row.get(eo) or {}).get("uarmeret") is not None],
+        key=lambda p: p[1],
+    )
+    if not pts:
+        return None
+    eo_rand, t_rand = pts[0] if zone == TRAFIK_UNDER else pts[-1]
+    return ub, float(eo_rand), t_rand
+
+
+def _yder_tykkelsestekst(t_klasse: str, eu: float, zone: str) -> str:
+    """Sætningen, der stiller VejDims krav op mod randkurvens tykkelse."""
+    tal = _yder_randtal(t_klasse, eu, zone)
+    if tal is None:
+        return ""
+    ub, eo_rand, t_rand = tal
+    retning = "tyndeste" if zone == TRAFIK_UNDER else "tykkeste"
+    return (
+        f"VejDim kræver {ui.mm(ub)} ubundet, hvor diagrammets {retning} kurve "
+        f"(Eₒ = {ui.mpa(eo_rand)}) ligger på {ui.mm(t_rand)}."
+    )
+
+
+def _besked_yderomraade(
+    t_klasse: str, eu: float, zone: str, eo_rand: float, skala: float
+) -> None:
+    """Forudsætningen bag et resultat uden for designdiagrammernes område.
+
+    Beskeden træder i stedet for afvisningen, når tilvalget er sat. Den
+    angiver skaleringen af randkurven og gør opmærksom på, at reduktionen
+    er ekstrapoleret, jf. hjælpens kapitel 2.
+    """
+    tal = _yder_randtal(t_klasse, eu, zone)
+    if tal is None:
+        return
+    ub, _eo, t_rand = tal
+    afvigelse = abs(skala - 1.0) * 100
+    ui.besked(
+        f"<b>{t_klasse} · Eᵤ = {ui.mpa(eu)} dimensioneres på VejDims tal "
+        f"({zone}).</b> VejDim kræver {ui.mm(ub)} ubundet mod randkurvens "
+        f"{ui.mm(t_rand)} ved Eₒ = {ui.mpa(eo_rand)} — opslaget skaleres med "
+        f"faktor {_dk_num(skala, '.3f')} ({_dk_num(afvigelse, '.1f')} %). "
+        f"Der gøres opmærksom på, at reduktionen aflæses på randkurven og "
+        f"dermed er ekstrapoleret; den er ikke bestemt i driftspunktet.",
+        "info",
     )
 
 
@@ -977,10 +1089,25 @@ def input_trafikklasse(
         st.session_state[state_key] = valgt_t
     st.session_state[f"{key_prefix}_sidste_tklasse"] = valgt_t
 
-    eo_aekv, zone = trafik_eo_aekv(
+    brug_vejdim = st.checkbox(
+        "Anvend VejDims tal uden for diagrammet",
+        key=_VEJDIM_YDER_KEY,
+        help=(
+            "Uden for designdiagrammernes tykkelsesområde — zonerne "
+            "**under** og **over** — afvises dimensioneringen som "
+            "udgangspunkt. Tilvælges dette, fastlægges den ubundne tykkelse "
+            "i stedet af VejDims krav, mens reduktionen aflæses på "
+            "diagrammets nærmeste randkurve og dermed er ekstrapoleret. "
+            "Inden for diagrammets område er de to udfald identiske; "
+            "tilvalget har alene betydning i zonerne under og over."
+        ),
+    )
+
+    eo_aekv, zone, skala = trafik_eo_aekv(
         valgt_t, eu,
         koersler=_aktiv_koersler(),
         t_basis_table=_aktiv_t_basis_table(),
+        brug_vejdim=brug_vejdim,
     )
     naermeste = eo_til_naermeste_klasse(eo_aekv)
 
@@ -991,22 +1118,30 @@ def input_trafikklasse(
             )
 
     # Nøgletallene står i trin 1's tredje kolonne og gentages ikke her.
-    # Falder driftspunktet uden for kernezonen, oplyses det derimod, da
-    # der da ikke er noget grundlag at dimensionere efter.
-    if zone == "under":
+    # Falder driftspunktet uden for diagrammernes område, oplyses det
+    # derimod: enten som en afvisning, eller — er tilvalget sat — som den
+    # forudsætning, resultatet hviler på.
+    if zone in (TRAFIK_UNDER, TRAFIK_OVER) and eo_aekv is not None:
+        _besked_yderomraade(valgt_t, eu, zone, eo_aekv, skala)
+    elif zone == TRAFIK_UNDER:
         ui.besked(
-            f"<b>{valgt_t} · Eᵤ = {ui.mpa(eu)} er uden for kernezonen "
-            f"(under).</b> VejDim kræver en tyndere ubunden opbygning end "
-            f"designdiagrammernes område. Dimensionér i stedet via "
-            f"<b>Belastningsklasse</b>-grundlaget. "
-            f"(Frost/koblingshøjde styrer ofte disse tilfælde.)",
+            f"<b>{valgt_t} · Eᵤ = {ui.mpa(eu)} ligger uden for "
+            f"designdiagrammernes område (under).</b> "
+            f"{_yder_tykkelsestekst(valgt_t, eu, zone)} "
+            f"Dimensioneringen kan gennemføres på VejDims tal ved at "
+            f"tilvælge <b>Anvend VejDims tal uden for diagrammet</b> ovenfor, "
+            f"eller der kan dimensioneres efter "
+            f"<b>Belastningsklasse</b>-grundlaget.",
             "advarsel",
         )
-    elif zone == "over":
+    elif zone == TRAFIK_OVER:
         ui.besked(
-            f"<b>{valgt_t} · Eᵤ = {ui.mpa(eu)} er uden for kernezonen "
-            f"(over).</b> VejDims krav overstiger designdiagrammernes "
-            f"tykkelsesområde. En konkret VejDim-beregning er nødvendig.",
+            f"<b>{valgt_t} · Eᵤ = {ui.mpa(eu)} ligger uden for "
+            f"designdiagrammernes område (over).</b> "
+            f"{_yder_tykkelsestekst(valgt_t, eu, zone)} "
+            f"Dimensioneringen kan gennemføres på VejDims tal ved at "
+            f"tilvælge <b>Anvend VejDims tal uden for diagrammet</b> ovenfor. "
+            f"Alternativt er en konkret VejDim-beregning nødvendig.",
             "advarsel",
         )
     elif zone != "ok":  # udenfor de kørte punkter
@@ -1036,6 +1171,8 @@ def input_trafikklasse(
         "t_klasse": valgt_t,
         "eo_aekv": eo_aekv,
         "zone": zone,
+        "skala": skala,
+        "brug_vejdim": brug_vejdim,
         "info": TRAFIKKLASSER[valgt_t],
     }
 
@@ -2296,11 +2433,30 @@ def _render_kobling_sektion(
         er_trafik and (not tal or "eo_aekv" not in tal["trin2"])
     )
     if mangler:
+        # Uden for diagrammernes område findes kurven, men driftspunktet gør
+        # ikke: tykkelsen ligger uden for kurvernes spænd, og trinnene om
+        # tilbageberegning mellem to kurver gælder derfor ikke. Noten skelner
+        # mellem de to tilfælde, så den ikke tillægger diagrammet en mangel,
+        # det ikke har.
+        paa_rand = er_trafik and grundlag.get("zone") in (
+            TRAFIK_UNDER, TRAFIK_OVER
+        )
         with st.expander("Beregningsdetaljer", expanded=False):
-            st.caption(
-                "Designdiagrammet indeholder ingen ustabiliseret kurve i dette "
-                "punkt, og beregningen kan derfor ikke vises trinvist."
-            )
+            if paa_rand:
+                st.caption(
+                    "Driftspunktet ligger uden for designdiagrammernes "
+                    "tykkelsesområde. Den ubundne tykkelse er VejDims, og "
+                    "reduktionen er aflæst på nærmeste randkurve; der er "
+                    "derfor ingen tilbageberegning mellem to kurver at vise "
+                    "trinvist. Fremgangsmåden er beskrevet i Hjælp, "
+                    "kapitel 2, afsnit 3."
+                )
+            else:
+                st.caption(
+                    "Designdiagrammet indeholder ingen ustabiliseret kurve i "
+                    "dette punkt, og beregningen kan derfor ikke vises "
+                    "trinvist."
+                )
         return
 
     t_uarm_kor = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm")
@@ -2421,7 +2577,8 @@ def _trafik_badge_tekst(klasser: list[int], eu: float) -> str:
         return "—"
     return format_trafikklasse_interval(
         trafikklasser_for_belastningsklasser(
-            klasser, eu, _aktiv_koersler(), _aktiv_t_basis_table()
+            klasser, eu, _aktiv_koersler(), _aktiv_t_basis_table(),
+            _brug_vejdim_yder(),
         )
     )
 
@@ -2433,7 +2590,8 @@ def _trafik_klasse_min(klasser: list[int], eu: float) -> int | None:
     oversættelse som _trafik_badge_tekst(), men som tal frem for tekst.
     """
     fundet = trafikklasser_for_belastningsklasser(
-        klasser, eu, _aktiv_koersler(), _aktiv_t_basis_table()
+        klasser, eu, _aktiv_koersler(), _aktiv_t_basis_table(),
+        _brug_vejdim_yder(),
     )
     numre = [int(t[1:]) for t in fundet if str(t).startswith("T")]
     return min(numre) if numre else None
@@ -2606,14 +2764,15 @@ def _beregn_referencegrupper(
     phi: float,
     valgt_klasse: int,
     t_basis_table: dict | None,
+    skala: float = 1.0,
 ) -> tuple[dict | None, dict | None, str | None, str | None]:
     res_1 = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=0.0,
-        lag_mode="1_lag", t_basis_table=t_basis_table,
+        lag_mode="1_lag", t_basis_table=t_basis_table, skala=skala,
     )
     res_2 = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=0.0,
-        lag_mode="2_lag", t_basis_table=t_basis_table,
+        lag_mode="2_lag", t_basis_table=t_basis_table, skala=skala,
     )
     return (
         _reference_resultat_til_gruppe(res_1, valgt_klasse),
@@ -3570,6 +3729,7 @@ def _tegn_designdiagram(
     t_indtastet_mm: float | None,
     produkt_1: dict | None,
     produkt_2: dict | None,
+    skala: float = 1.0,
 ) -> None:
     """Tegner designdiagrammet.
 
@@ -3589,6 +3749,7 @@ def _tegn_designdiagram(
             t_2_lag_mm=(produkt_2 or {}).get("t_armeret_mm"),
             t_1_lag_best_mm=(produkt_1 or {}).get("t_armeret_mm_min"),
             t_2_lag_best_mm=(produkt_2 or {}).get("t_armeret_mm_min"),
+            skala=skala,
         )
     except Exception as exc:
         st.warning(f"Kunne ikke generere designdiagram: {exc}")
@@ -4281,6 +4442,7 @@ def _render_breakdown_best_case(
     t_konservativ: float | None,
     t_uarm: float | None,
     t_basis_table: dict | None,
+    skala: float = 1.0,
 ) -> None:
     """
     Vis en best-case-linje under breakdown-tabellen for interval-produkter
@@ -4289,7 +4451,7 @@ def _render_breakdown_best_case(
     """
     res = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=kor_best,
-        lag_mode=lag_mode, t_basis_table=t_basis_table,
+        lag_mode=lag_mode, t_basis_table=t_basis_table, skala=skala,
     )
     if res.get("fejl") is not None:
         return
@@ -4328,10 +4490,14 @@ def _vis_beregnings_breakdown(
     geonet: dict | None = None,
     geonet_navn: str | None = None,
     t_basis_table: dict | None = None,
+    skala: float = 1.0,
 ) -> None:
     """
     Beregnings-breakdown boks under resultat (kun i Brugerdefineret).
     Viser trin-for-trin: uarmeret, 1 lag og 2 lag med korrektioner i mm.
+
+    skala føres videre til beregn(); den er 1,0, medmindre dimensionering på
+    VejDims tal er tilvalgt uden for diagrammernes område.
     """
     phi_kor = K_PHI * (phi - PHI_BASIS)
 
@@ -4367,15 +4533,15 @@ def _vis_beregnings_breakdown(
     # Kald beregn() med de relevante net-korrektioner
     ref_uarm = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=0.0,
-        lag_mode="1_lag", t_basis_table=t_basis_table,
+        lag_mode="1_lag", t_basis_table=t_basis_table, skala=skala,
     )
     ref_1 = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=net_kor_1,
-        lag_mode="1_lag", t_basis_table=t_basis_table,
+        lag_mode="1_lag", t_basis_table=t_basis_table, skala=skala,
     )
     ref_2 = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=net_kor_2,
-        lag_mode="2_lag", t_basis_table=t_basis_table,
+        lag_mode="2_lag", t_basis_table=t_basis_table, skala=skala,
     )
 
     # Reduktion sammenlignes mod φ-korrigeret uarmeret reference, så net-effekten
@@ -4437,7 +4603,7 @@ def _vis_beregnings_breakdown(
                 if interval is not None:
                     _render_breakdown_best_case(
                         eu, eo, phi, "1_lag", interval[0],
-                        t_1_final, t_uarm_final, t_basis_table,
+                        t_1_final, t_uarm_final, t_basis_table, skala,
                     )
             else:
                 st.caption("Ingen gyldigt 1-lag resultat for denne kombination.")
@@ -4470,7 +4636,7 @@ def _vis_beregnings_breakdown(
                 if interval is not None:
                     _render_breakdown_best_case(
                         eu, eo, phi, "2_lag", interval[0],
-                        t_2_final, t_uarm_final, t_basis_table,
+                        t_2_final, t_uarm_final, t_basis_table, skala,
                     )
             else:
                 st.caption("Ingen gyldigt 2-lag resultat for denne kombination.")
@@ -4491,20 +4657,25 @@ def _beregn_produkter_cachet(
     phi: float,
     valgt_klasse: int | None,
     t_basis_table: dict,
+    skala: float = 1.0,
 ) -> list[dict]:
     """Cachet indpakning af beregn_alle_produkter.
 
     Streamlit gentegner hele siden ved hver ændring. Uden cache genberegnes
     samtlige produkter, hver gang en skyder flyttes, og resultatpanelet
-    blinker. Nøglen er de seks argumenter alene; funktionen læser ikke
+    blinker. Nøglen er de syv argumenter alene; funktionen læser ikke
     st.session_state, jf. afsnit 5.
+
+    Opmærksomheden henledes på, at skala indgår i nøglen. Uden den ville
+    tilvalget om dimensionering uden for diagrammernes område ikke slå
+    igennem, idet det foregående opslag ville blive genbrugt.
 
     Der returneres en kopi ved hvert opslag, så kalderen frit kan berige
     produkterne med placeringsdata uden at forurene cachen.
     """
     return beregn_alle_produkter(
         eu, eo, lag_mode, phi=phi, t_basis_table=t_basis_table,
-        klasse_for_anbefaling=valgt_klasse,
+        klasse_for_anbefaling=valgt_klasse, skala=skala,
     )
 
 
@@ -4616,12 +4787,23 @@ def _trin1_noegletal(grundlag: dict, eu: float) -> None:
 
 
 def _trin1_opsummering(eu: float, grundlag: dict) -> str:
-    """Trin 1's opsummering: de valgte forudsætninger på én linje."""
+    """Trin 1's opsummering: de valgte forudsætninger på én linje.
+
+    Er dimensioneringen henlagt til en randkurve, anføres det med skalaen, så
+    forudsætningen kan aflæses uden at folde trinnet ud.
+    """
     dele = [f"Eᵤ {eu:.0f} MPa"]
     if grundlag["type"] == "trafikklasse":
         dele.append(str(grundlag["t_klasse"]))
         if grundlag.get("eo_aekv") is not None:
             dele.append(f"Eₒ,ækv {grundlag['eo_aekv']:.0f} MPa")
+        if grundlag.get("zone") in (TRAFIK_UNDER, TRAFIK_OVER) and (
+            grundlag.get("eo") is not None
+        ):
+            dele.append(
+                f"VejDims tal ({grundlag['zone']}, "
+                f"×{_dk_num(grundlag.get('skala', 1.0), '.3f')})"
+            )
     else:
         dele.append(f"Klasse {grundlag['valgt_klasse']}")
         dele.append(f"Eₒ {grundlag['eo']:.0f} MPa")
@@ -4780,21 +4962,25 @@ def render_standard() -> None:
     valgt_klasse = grundlag["valgt_klasse"]
     eo_interpoleret = grundlag["type"] == "trafikklasse"
 
-    # Trafikklasse uden for kernezonen: zone-beskeden er allerede vist i
-    # trin 1 — der er intet driftspunkt at dimensionere efter.
-    if grundlag["type"] == "trafikklasse" and grundlag["zone"] != "ok":
+    # Trafikklasse uden driftspunkt: beskeden er allerede vist i trin 1.
+    # Er dimensionering på VejDims tal tilvalgt, er eo sat også uden for
+    # diagrammernes område, og beregningen fortsætter.
+    if grundlag["type"] == "trafikklasse" and grundlag["eo"] is None:
         return
 
     # --- Beregn alt -----------------------------------------------------
+    # skala er 1,0 inden for diagrammernes område og afviger alene, når
+    # dimensionering på VejDims tal er tilvalgt uden for det.
+    skala = grundlag.get("skala", 1.0)
     t_basis_table = _aktiv_t_basis_table()
     ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
-        eu, eo, PHI_BASIS, valgt_klasse, t_basis_table
+        eu, eo, PHI_BASIS, valgt_klasse, t_basis_table, skala
     )
     prod_1lag = _beregn_produkter_cachet(
-        eu, eo, "1_lag", PHI_BASIS, valgt_klasse, t_basis_table
+        eu, eo, "1_lag", PHI_BASIS, valgt_klasse, t_basis_table, skala
     )
     prod_2lag = _beregn_produkter_cachet(
-        eu, eo, "2_lag", PHI_BASIS, valgt_klasse, t_basis_table
+        eu, eo, "2_lag", PHI_BASIS, valgt_klasse, t_basis_table, skala
     )
 
     alle_fejler_1 = all(p["fejl"] for p in prod_1lag)
@@ -4918,7 +5104,7 @@ def render_standard() -> None:
                 )
                 _tegn_designdiagram(
                     eu, eo, PHI_BASIS, valgt_geonet, t_basis_table,
-                    None, valgt_1, valgt_2,
+                    None, valgt_1, valgt_2, skala,
                 )
 
             # Beregningsdetaljerne vises for begge grundlag; kæden tilpasser
@@ -5444,8 +5630,11 @@ def render_brugerdefineret() -> None:
         eu, grundlag = _input_trin1("bd")
         trin1.opsummering = _trin1_opsummering(eu, grundlag)
 
+    # Blokeringen følger nu, om der findes et driftspunkt at slå op i:
+    # uden for diagrammernes område er eo None, medmindre dimensionering på
+    # VejDims tal er tilvalgt, jf. _brug_vejdim_yder().
     zone_blokerer = (
-        grundlag["type"] == "trafikklasse" and grundlag["zone"] != "ok"
+        grundlag["type"] == "trafikklasse" and grundlag["eo"] is None
     )
 
     materialer: list[dict] = []
@@ -5473,6 +5662,8 @@ def render_brugerdefineret() -> None:
     eo = grundlag["eo"]
     valgt_klasse = grundlag["valgt_klasse"]
     eo_interpoleret = grundlag["type"] == "trafikklasse"
+    # skala er 1,0 inden for diagrammernes område, jf. render_standard.
+    skala = grundlag.get("skala", 1.0)
 
     bedste_1: dict | None = None
     bedste_2: dict | None = None
@@ -5483,13 +5674,13 @@ def render_brugerdefineret() -> None:
     # Reference- og produktberegninger bruges i begge modes — både til
     # at vise reference-banneret og til opbygnings-expanderens dropdown.
     ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
-        eu, eo, phi, valgt_klasse, t_basis_table
+        eu, eo, phi, valgt_klasse, t_basis_table, skala
     )
     prod_1lag = _beregn_produkter_cachet(
-        eu, eo, "1_lag", phi, valgt_klasse, t_basis_table
+        eu, eo, "1_lag", phi, valgt_klasse, t_basis_table, skala
     )
     prod_2lag = _beregn_produkter_cachet(
-        eu, eo, "2_lag", phi, valgt_klasse, t_basis_table
+        eu, eo, "2_lag", phi, valgt_klasse, t_basis_table, skala
     )
     prod_1lag = _berig_produkter_med_placering(prod_1lag, "1_lag", materialer)
     prod_2lag = _berig_produkter_med_placering(prod_2lag, "2_lag", materialer)
@@ -5536,11 +5727,11 @@ def render_brugerdefineret() -> None:
         net_kor = geonet["korrektion"] if geonet else 0.0
         res_1 = beregn(
             eu=eu, eo=eo, phi=phi, net_korrektion=net_kor,
-            lag_mode="1_lag", t_basis_table=t_basis_table,
+            lag_mode="1_lag", t_basis_table=t_basis_table, skala=skala,
         )
         res_2 = beregn(
             eu=eu, eo=eo, phi=phi, net_korrektion=net_kor,
-            lag_mode="2_lag", t_basis_table=t_basis_table,
+            lag_mode="2_lag", t_basis_table=t_basis_table, skala=skala,
         )
         res_1 = _berig_resultat_med_placering(res_1, geonet, materialer)
         res_2 = _berig_resultat_med_placering(res_2, geonet, materialer)
@@ -5563,6 +5754,7 @@ def render_brugerdefineret() -> None:
                 res_best = beregn(
                     eu=eu, eo=eo, phi=phi, net_korrektion=kor_best,
                     lag_mode=lag_mode, t_basis_table=t_basis_table,
+                    skala=skala,
                 )
                 res_best = _berig_resultat_med_placering(
                     res_best, geonet, materialer
@@ -5618,6 +5810,8 @@ def render_brugerdefineret() -> None:
                 "t_klasse": grundlag.get("t_klasse"),
                 "eo_aekv": grundlag.get("eo_aekv"),
                 "zone": grundlag.get("zone"),
+                "skala": grundlag.get("skala", 1.0),
+                "brug_vejdim": grundlag.get("brug_vejdim", False),
                 "phi": phi, "materialer": materialer,
                 "geonet": geonet, "geonet_navn": geonet_navn,
                 "res_1": res_1, "res_2": res_2,
@@ -5710,6 +5904,7 @@ def render_brugerdefineret() -> None:
                     t_indtastet_total if vis_din_prik else None,
                     prod_1[0] if vis_lag_prikker and prod_1 else None,
                     prod_2[0] if vis_lag_prikker and prod_2 else None,
+                    skala,
                 )
 
             antal_produkter = len(
@@ -6468,16 +6663,29 @@ def _rediger_diagramdata(diagram: dict, pd) -> None:
         st.rerun()
 
 
-def _korrelation_pivot_rows(korr: dict) -> list[dict]:
-    """Eo_ækv-tabellen som rækker til st.dataframe (T × Eu → tekst)."""
+def _korrelation_pivot_rows(korr: dict, zoner: dict | None = None) -> list[dict]:
+    """Eo_ækv-tabellen som rækker til st.dataframe (T × Eu → tekst).
+
+    zoner er den samme tabel opgjort uden tilvalget om dimensionering på
+    VejDims tal. Bærer en celle dér en zonestreng, mens den her har fået et
+    tal, ligger opslaget på en randkurve, og tallet mærkes med *.
+    """
     rows = []
     for t in TRAFIKKLASSER:
         row = {"Trafikklasse": t}
         for eu in TRAFIK_EU_PUNKTER:
             v = korr.get(t, {}).get(eu)
-            row[f"Eᵤ {eu}"] = v if isinstance(v, str) else (
-                f"{v:.0f}" if v is not None else "—"
-            )
+            if isinstance(v, str):
+                row[f"Eᵤ {eu}"] = v
+            elif v is None:
+                row[f"Eᵤ {eu}"] = "—"
+            else:
+                paa_rand = isinstance(
+                    (zoner or {}).get(t, {}).get(eu), str
+                ) and (zoner or {}).get(t, {}).get(eu) in (
+                    TRAFIK_UNDER, TRAFIK_OVER
+                )
+                row[f"Eᵤ {eu}"] = f"{v:.0f}*" if paa_rand else f"{v:.0f}"
         rows.append(row)
     return rows
 
@@ -6832,22 +7040,51 @@ def render_trafikklasse_korrelation() -> None:
             "Det er denne tabel, dimensioneringen slår op i ved valg af "
             "trafikklasse."
         )
+        # Tilvalget er det samme, som står i dimensioneringens trin 1 — de to
+        # afkrydsningsfelter deler nøgle og dermed tilstand. Her kan
+        # virkningen aflæses direkte: cellerne uden for diagrammernes område
+        # skifter fra zonestreng til en mærket Eₒ-værdi.
+        brug_vejdim = st.checkbox(
+            "Anvend VejDims tal uden for diagrammet",
+            key=_VEJDIM_YDER_KEY,
+            help=(
+                "Samme tilvalg som i dimensioneringens trin 1. Uden for "
+                "designdiagrammernes tykkelsesområde fastlægges den ubundne "
+                "tykkelse af VejDims krav, mens reduktionen aflæses på "
+                "diagrammets nærmeste randkurve."
+            ),
+        )
         t_basis = _aktiv_t_basis_table()
-        korr = korrelation_fra_koersler(koersler_fra_raekker(raekker), t_basis)
+        koersler_akt = koersler_fra_raekker(raekker)
+        korr = korrelation_fra_koersler(koersler_akt, t_basis, brug_vejdim)
+        # Regneeksemplet skal vise en gennemført tilbageberegning og hviler
+        # derfor altid på tabellen uden tilvalget, hvor zonerne står som
+        # strenge og en kernezonecelle kan udvælges.
+        korr_kerne = korrelation_fra_koersler(koersler_akt, t_basis, False)
         # Regneeksemplet står ved siden af tabellen, så en enkelt celle kan
         # følges fra kørsel til opslagspunkt uden at forlade siden.
         kol_tabel, kol_eksempel = st.columns([1.15, 1], gap="large")
         with kol_tabel:
             _vis_korrelationstabel(korr, med_forklaring=False)
         with kol_eksempel:
-            _render_korr_eksempel(korr, t_basis)
+            _render_korr_eksempel(korr_kerne, t_basis)
 
-        st.html(
-            '<div class="korr-zoneforklaring"><b>under</b> / <b>over</b> — '
-            'trafikklassen kræver en tyndere henholdsvis tykkere opbygning '
-            'end designdiagrammernes område, og reduktionen kan ikke '
-            'bestemmes</div>'
-        )
+        if brug_vejdim:
+            st.html(
+                '<div class="korr-zoneforklaring"><b>*</b> — cellen ligger '
+                'uden for designdiagrammernes område. Den ubundne tykkelse '
+                'er VejDims, og reduktionen er aflæst på nærmeste randkurve '
+                'og dermed ekstrapoleret. <b>—</b> — diagrammet har ingen '
+                'armeret kurve ved dette Eᵤ, og reduktionen kan ikke '
+                'bestemmes</div>'
+            )
+        else:
+            st.html(
+                '<div class="korr-zoneforklaring"><b>under</b> / <b>over</b> — '
+                'trafikklassen kræver en tyndere henholdsvis tykkere opbygning '
+                'end designdiagrammernes område, og reduktionen kan ikke '
+                'bestemmes</div>'
+            )
         st.caption("Se Hjælp afsnit 2 for yderligere detaljer om trafikklasse korrelationen.")
 
     kol_metode, kol_data = st.columns([1, 1], gap="medium")
@@ -7506,6 +7743,7 @@ def render_rapport() -> None:
                     t_2_lag_best_mm=(
                         sd.get("t_2_lag_best_mm") if vis_dd_lag_prikker else None
                     ),
+                    skala=float(sd.get("skala", 1.0)),
                 )
                 diagram_p1 = {
                     **res_1,
@@ -7533,6 +7771,7 @@ def render_rapport() -> None:
                         ),
                         diagram_p1 if vis_dd_lag_prikker else None,
                         diagram_p2 if vis_dd_lag_prikker else None,
+                        float(sd.get("skala", 1.0)),
                     )
             except Exception as e:
                 st.warning(f"Kunne ikke generere designdiagram: {e}")

@@ -303,6 +303,7 @@ def render_personligt_designdiagram_png(
     t_2_lag_mm: float | None = None,
     t_1_lag_best_mm: float | None = None,
     t_2_lag_best_mm: float | None = None,
+    skala: float = 1.0,
     dpi: int = 300,
     figsize: tuple[float, float] = (9.0, 5.5),
 ) -> bytes:
@@ -331,6 +332,7 @@ def render_personligt_designdiagram_png(
         t_2_lag_mm=t_2_lag_mm,
         t_1_lag_best_mm=t_1_lag_best_mm,
         t_2_lag_best_mm=t_2_lag_best_mm,
+        skala=skala,
     )
 
     if grundlag_label:
@@ -414,6 +416,23 @@ def formatér_dimensioneringsgrundlag(
         rows.append(("Dimensioneringsgrundlag", f"Trafikklasse {t_klasse} (VejDim)"))
         if isinstance(eo_aekv, (int, float)):
             rows.append(("Ækvivalent Eₒ (Eₒ,ækv)", f"{eo_aekv:.0f} MPa"))
+        # Ligger opslaget uden for designdiagrammernes tykkelsesområde, hviler
+        # den ubundne tykkelse på VejDims krav, mens reduktionen er aflæst på
+        # randkurven. Forudsætningen anføres, da den ikke kan udledes af de
+        # øvrige rækker.
+        zone = dim.get("zone")
+        skala = dim.get("skala", 1.0)
+        if zone in ("under", "over") and isinstance(skala, (int, float)):
+            afvigelse = abs(skala - 1.0) * 100
+            skala_txt = f"{skala:.3f}".replace(".", ",")
+            afv_txt = f"{afvigelse:.1f}".replace(".", ",")
+            rows.append((
+                "Uden for diagrammets område",
+                f"Zone {zone} — dimensioneret på VejDims ubundne tykkelse; "
+                f"randkurven Eₒ = {eo_aekv:.0f} MPa skaleret med "
+                f"{skala_txt} ({afv_txt} %). Reduktionen er aflæst på "
+                f"randkurven og dermed ekstrapoleret."
+            ))
     else:
         rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
     rows.append(("Materialeopbygning", _materiale_resume(materialer)))

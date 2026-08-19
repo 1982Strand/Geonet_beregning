@@ -36,6 +36,7 @@ def byg_designdiagram(
     t_2_lag_mm: float | None = None,
     t_1_lag_best_mm: float | None = None,
     t_2_lag_best_mm: float | None = None,
+    skala: float = 1.0,
 ):
     """Designdiagrammet som Plotly-figur.
 
@@ -43,6 +44,13 @@ def byg_designdiagram(
     med φ og nettets korrektion, jf. afsnittet "Sådan dannes diagrammet".
     Produkter med korrektionsinterval tegnes med et tonet bånd mellem den
     optimale og den konservative kurve.
+
+    skala er den fælles faktor på begge kurver, jf. calculator.beregn(). Ved
+    dimensionering uden for designdiagrammernes område er den forskellig fra
+    1,0, og kurverne er da randkurven skaleret til VejDims ubundne tykkelse.
+    Kurverne skaleres derfor på samme måde som resultatet, så figuren og
+    tallene ikke kan divergere. Er skalaen forskellig fra 1,0, anføres det i
+    kurvenavnene.
 
     Figuren bruges både af skærmen og af rapporten: app.py viser den med
     st.plotly_chart, og rapport.designdiagram_png() eksporterer den samme
@@ -59,13 +67,18 @@ def byg_designdiagram(
 
     eu_vals = sorted(t_basis_table.keys())
 
+    # Kurvenavnene bærer forudsætningen, når opslaget er henlagt til en
+    # randkurve; ellers er de uændrede.
+    paa_rand = abs(skala - 1.0) > 1e-9
+    _rand = " · VejDims tal" if paa_rand else ""
+
     def _kurve(lag_mode: str, faktor: float) -> tuple[list[float], list[float]]:
         xs: list[float] = []
         ys: list[float] = []
         for eu_v in eu_vals:
             v = _slaa_op_interp(eu_v, eo, lag_mode, t_basis_table=t_basis_table)
             if v is not None:
-                xs.append(v * faktor)      # cm
+                xs.append(v * faktor * skala)      # cm
                 ys.append(eu_v)
         return xs, ys
 
@@ -76,7 +89,7 @@ def byg_designdiagram(
     xs_u, ys_u = _kurve("uarmeret", 1.0 + phi_kor)
     if xs_u:
         fig.add_trace(go.Scatter(
-            x=xs_u, y=ys_u, mode="lines", name="Ustabiliseret",
+            x=xs_u, y=ys_u, mode="lines", name=f"Ustabiliseret{_rand}",
             line=dict(color=FARVE_UARM, width=2),
             hovertemplate=HOVER,
         ))
