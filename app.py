@@ -1022,8 +1022,10 @@ def _vis_korrelationstabel(
         # rækken. Uden en forklaring læses gentagelsen som en fejl.
         zonetekst = (
             "Celler med \\* ligger uden for diagrammernes område og er "
-            "henlagt til nærmeste kurve — derfor står der 30 eller 150 flere "
-            "gange i træk i disse rækker."
+            "henlagt til nærmeste kurve baseret på designdiagrammerne for "
+            "belastningsklasserne. Derfor står der 30 (belastningsklasse 1) "
+            "eller 150 (belastningsklasse 6) flere gange i træk i disse "
+            "rækker."
         )
     else:
         zonetekst = (
