@@ -47,15 +47,14 @@ Følgende forbehold gælder:
    ikke bestemmes. Fire af cellerne ligger inden for kernezonen, og forholdet
    afhjælpes ikke af at dimensionere på VejDims tal.
 5. **Ekstrapoleret reduktion uden for diagrammernes område.** Dimensioneres der
-   på VejDims tal, jf. kapitel 2, afsnit 3, er reduktionen aflæst på
-   randkurven og ikke i driftspunktet. Reduktionen er den robuste størrelse i
-   diagrammerne — den ligger i båndet 24–37 % ved ét lag hen over hele
-   Eₒ-spændet — men den er ikke målt i punktet. Mod den tykkeste kurve er
-   reduktionen praktisk talt uændret, hvorved en fastholdt værdi er
-   velbegrundet i zonen over. Mod den tyndeste kurve tiltager den med 2 til 19
-   procentpoint, hvorved en fastholdt værdi i zonen under er konservativ, hvis
-   tendensen fortsætter. Afvigelsen mellem VejDims krav og randkurven angives
-   sammen med resultatet og bør indgå i vurderingen.
+   på VejDims tal, jf. kapitel 2, afsnit 3, er reduktionsprocenten hentet ved
+   diagrammernes rand og ikke i selve driftspunktet. Reduktionen tiltager, jo
+   tyndere opbygningen er — fra 24–32 % på de tykkeste kurver til 33–48 % på
+   den tyndeste. I zonen over er forskellen mellem de tykke kurver lille, og
+   den overførte værdi rammer tæt. I zonen under er den sandsynligvis sat for
+   lavt, hvorved opbygningen bliver for tyk, og resultatet ligger til den
+   sikre side. Afvigelsen mellem VejDims krav og randkurven angives sammen med
+   resultatet og bør indgå i vurderingen.
 6. **Følsomhed over for asfaltpakken.** Den ækvivalente Eₒ afhænger af den
    faste asfaltpakke pr. trafikklasse. De anvendte pakker er VejDims egne
    værdier.

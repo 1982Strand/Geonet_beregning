@@ -48,14 +48,37 @@ resultater. Dimensioneringen kan dog gennemføres på VejDims tal, jf. afsnit 3.
 
 ## 3 Dimensionering på VejDims tal
 
-Uden for diagrammernes område kan dimensioneringen henlægges til den nærmeste
-randkurve med afkrydsningsfeltet **Anvend VejDims tal uden for diagrammet**,
-som står både i dimensioneringens trin 1 og på korrelationssiden. De to felter
-er ét og samme tilvalg. Feltet er fravalgt ved opstart og gendannes ikke ved
-næste opstart.
+Opslaget i designdiagrammerne sker i de ustabiliserede tykkelser: ved
+underbundens E-modul giver de seks diagrammer hver sin tykkelse, og VejDims
+krav henføres til det sted, hvor tykkelsen passer, jf. kapitel 1, afsnit 4.
+Reduktionen aflæses derefter samme sted. Eₒ er alene betegnelsen for
+opslagsstedet og indgår ikke som en fysisk størrelse.
 
-Fremgangsmåden er, at den ubundne tykkelse fastholdes som VejDims krav, mens
-reduktionsprocenten aflæses på randkurven ved samme Eᵤ:
+:::figur De seks diagrammer ved Eᵤ = 8 MPa. T1 kræver 489 mm og falder uden for.
+| Diagram | Uden geonet | 1 lag | Reduktion |
+| --- | --- | --- | --- |
+| 1 | 700 mm | 437 mm | 37,6 % |
+| 2 | 800 mm | 530 mm | 33,8 % |
+| 3 | 877 mm | 638 mm | 27,3 % |
+| 4 | 1.000 mm | 700 mm | 30,0 % |
+| 5 | 1.100 mm | 800 mm | 27,3 % |
+| 6 | 1.200 mm | 817 mm | 31,9 % |
+:::
+
+Falder VejDims krav uden for de seks tykkelser, findes der intet opslagssted.
+Diagrammerne dækker ikke en så tynd henholdsvis tyk opbygning ved den
+pågældende underbund. Med tilvalget **Anvend VejDims tal uden for diagrammet**
+hentes reduktionsprocenten da ved den nærmeste af de seks kurver og anvendes
+på VejDims krav. Feltet står både i dimensioneringens trin 1 og på
+korrelationssiden; de to felter er ét og samme tilvalg, og det er fravalgt ved
+opstart.
+
+Fremgangsmåden hviler på én forudsætning. Lagtykkelsen fastlægges uændret af
+VejDim og er dermed lige så veldokumenteret som i de øvrige celler, og
+reduktionsprocenten er ligeledes en aflæst værdi fra feltforsøgene — blot
+aflæst ved randkurven og ikke i driftspunktet. Det forudsættes alene, at
+reduktionsprocenten holder, når opbygningen bliver tyndere henholdsvis tykkere
+end den, diagrammet dækker.
 
 :::formel
 t_armeret = t_VejDim × (1 − r_rand) × (1 + k_φ + k_net)
@@ -65,12 +88,6 @@ r_rand    er reduktionen aflæst på randkurven ved samme Eᵤ
 k_φ       er korrektionen for friktionsvinklen
 k_net     er korrektionen for det valgte geonet
 :::
-
-Aflæsningen sker altså på randkurven, skaleret med forholdet
-`t_VejDim / t_rand`. Skaleringen rammer den armerede og den ustabiliserede
-tykkelse ens, hvorved reduktionsprocenten forbliver randkurvens egen.
-Arbejdsdelingen fra kapitel 1 er dermed uændret: VejDim fastlægger alene
-lagtykkelsen, og reduktionen er designdiagrammets feltdokumenterede værdi.
 
 :::figur Trafikklasse T1 ved Eᵤ = 8 MPa, ét lag geonet. Cellen ligger i zonen under.
 | Trin | Værdi |
@@ -83,18 +100,13 @@ lagtykkelsen, og reduktionen er designdiagrammets feltdokumenterede værdi.
 | Resultat 489 × (1 − 0,376) | 306 mm |
 :::
 
-Figuren viser regnegangen for en celle i zonen under. VejDims krav ligger her
-under diagrammernes tyndeste kurve, og reduktionen hentes derfor på Diagram 1
-og anvendes på VejDims tykkelse.
+Inden for diagrammernes område er randkurven og opslagsstedet det samme, og
+tilvalget ændrer derfor intet i kernezonens 30 celler. Uden for området
+angives forholdet mellem VejDims krav og randkurvens tykkelse sammen med
+resultatet. For de celler, der kan beregnes, ligger det mellem 0,562 og 1,262.
+I matricen mærkes cellerne med `*`.
 
-Inden for diagrammernes område er skalaen 1,0, idet Eₒ,ækv per definition er
-den kurve, hvis ustabiliserede tykkelse svarer til VejDims krav. Tilvalget har
-derfor ingen virkning i kernezonen. Uden for området ligger skalaen mellem
-0,562 og 1,262 for standardkørslerne og angives sammen med resultatet.
-
-Opmærksomheden henledes på, at reduktionen i disse celler er aflæst uden for
-driftspunktet og dermed er ekstrapoleret, jf. kapitel 7, afsnit 2. I matricen
-mærkes cellerne med `*`, når tilvalget er sat.
+Forbeholdet ved fremgangsmåden er beskrevet i kapitel 7, afsnit 2.
 
 ## 4 Redigering af kørslerne
 
