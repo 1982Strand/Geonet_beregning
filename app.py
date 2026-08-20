@@ -647,26 +647,41 @@ REFERENCENET = (STANDARD_GEONET, "GS-GRID SX160", "E'GRID T6")
 # ---------------------------------------------------------------------------
 
 def _noegletal_tabel_html(
-    raekker: list[tuple[str, str]], *, dæmpet: bool = False
+    raekker: list[tuple[str, ...]], *, dæmpet: bool = False
 ) -> str:
     """Tostrenget opstilling, hvor værdierne står lodret på linje.
 
     border:none og background:none sættes på alle elementer — ellers tegner
     Streamlits tabel-CSS rammer og stribede rækker. dæmpet=True giver mindre
     skrift og grå betegnelser, til brug uden for en farvet boks.
+
+    En række angives som (navn, værdi) eller (navn, værdi, forklaring). Med en
+    forklaring får betegnelsen en stiplet understregning og viser teksten ved
+    markøren. Anvendes, hvor en værdi kan forveksles med en fysisk størrelse.
     """
     lille = "font-size:0.82rem;" if dæmpet else ""
     navn_farve = "color:#555;" if dæmpet else ""
     nul = "border:none;background:none;"
+
+    def _navn_html(raekke: tuple[str, ...]) -> str:
+        navn = raekke[0]
+        forklaring = raekke[2] if len(raekke) > 2 else None
+        if not forklaring:
+            return navn
+        return (
+            f'<span title="{html.escape(forklaring)}" style="cursor:help;'
+            f'border-bottom:1px dotted #A8A79E">{navn}</span>'
+        )
+
     return (
         f'<table style="border-collapse:collapse;width:100%;{nul}{lille}">'
         + "".join(
             f'<tr style="{nul}">'
             f'<td style="padding:2px 16px 2px 0;vertical-align:top;'
-            f'{nul}{navn_farve}">{navn}:</td>'
+            f'{nul}{navn_farve}">{_navn_html(r)}:</td>'
             f'<td style="padding:2px 0;font-weight:700;vertical-align:top;'
-            f'{nul}">{vaerdi}</td></tr>'
-            for navn, vaerdi in raekker
+            f'{nul}">{r[1]}</td></tr>'
+            for r in raekker
         )
         + "</table>"
     )
@@ -961,21 +976,54 @@ def _vis_korrelationstabel(
         return stil
 
     if med_forklaring:
-        st.markdown("**Ækvivalent Eₒ (MPa) — hele korrelationstabellen**")
+        # Overskriften siger, hvad tabellen svarer på. Uden den anden sætning
+        # læses tallene som et forventet E-modul for opbygningen.
+        st.markdown(
+            "**Hvilken diagramkurve slås der op i?**\n\n"
+            "Trafikklassen har intet eget designdiagram. Tallet er den kurve "
+            "— Eₒ i MPa — hvis lagtykkelse uden geonet svarer til VejDims "
+            "krav. Det er et opslagspunkt, ikke et forventet E-modul for "
+            "opbygningen."
+        )
     st.dataframe(df.style.apply(_markering, axis=None), width="content")
     if not med_forklaring:
         return
-    if eu_kol is None and eu is not None:
-        note = (
-            f"Eᵤ = {ui.mpa(eu)} ligger mellem tabellens punkter — Eₒ,ækv "
-            f"interpoleres mellem nabokolonnerne."
+    # Noten oversætter den markerede celle til millimeter. Eₒ,ækv er en
+    # indeksværdi, og uden den oversættelse har tallet ingen fysisk betydning
+    # for læseren.
+    note = None
+    if valgt_t and eu is not None:
+        ub = trafik_ubundet_tykkelse(valgt_t, eu, _aktiv_koersler())
+        eo_celle, _zone, _skala = trafik_eo_aekv(
+            valgt_t, eu, _aktiv_koersler(), _aktiv_t_basis_table(),
+            brug_vejdim=brug_vejdim,
         )
-    else:
+        if ub is not None and eo_celle is not None:
+            note = (
+                f"**{valgt_t} ved Eᵤ = {ui.mpa(eu)}:** VejDim kræver "
+                f"{ui.mm(ub)} ubundet, hvilket svarer til kurven "
+                f"Eₒ = {ui.mpa(eo_celle)}."
+            )
+        elif ub is not None:
+            note = (
+                f"**{valgt_t} ved Eᵤ = {ui.mpa(eu)}:** VejDim kræver "
+                f"{ui.mm(ub)} ubundet, hvilket falder uden for "
+                f"diagrammernes område."
+            )
+    if note is None:
         note = "Den markerede celle er den, dimensioneringen slår op i."
+    if eu_kol is None and eu is not None:
+        note += (
+            " Eᵤ ligger mellem tabellens punkter, og værdien interpoleres "
+            "mellem nabokolonnerne."
+        )
     if brug_vejdim:
+        # Randkurve-cellerne deler kurve, og 30 og 150 gentages derfor hen ad
+        # rækken. Uden en forklaring læses gentagelsen som en fejl.
         zonetekst = (
-            "\\* = uden for diagrammets område; den ubundne tykkelse er "
-            "VejDims, og reduktionen er aflæst på nærmeste randkurve."
+            "Celler med \\* ligger uden for diagrammernes område og er "
+            "henlagt til nærmeste kurve — derfor står der 30 eller 150 flere "
+            "gange i træk i disse rækker."
         )
     else:
         zonetekst = (
@@ -1093,13 +1141,18 @@ def input_trafikklasse(
         "Anvend VejDims tal uden for diagrammet",
         key=_VEJDIM_YDER_KEY,
         help=(
-            "Uden for designdiagrammernes tykkelsesområde — zonerne "
-            "**under** og **over** — afvises dimensioneringen som "
-            "udgangspunkt. Tilvælges dette, fastlægges den ubundne tykkelse "
-            "i stedet af VejDims krav, mens reduktionen aflæses på "
-            "diagrammets nærmeste randkurve og dermed er ekstrapoleret. "
-            "Inden for diagrammets område er de to udfald identiske; "
-            "tilvalget har alene betydning i zonerne under og over."
+            "Dimensionering efter trafikklasse hviler på VejDim-kørsler, som "
+            "fastlægger den nødvendige bærelagstykkelse. For nogle "
+            "kombinationer af trafikklasse og Eᵤ ligger den tykkelse under "
+            "eller over det, designdiagrammerne dækker — typisk de lave "
+            "trafikklasser på blød underbund og de høje på stiv. "
+            "Dimensioneringen afvises som udgangspunkt her.\n\n"
+            "Med fluebenet anvendes VejDims tykkelse alligevel, mens "
+            "geonettets besparelse i procent hentes fra diagrammets nærmeste "
+            "kurve. Besparelsen er dermed ikke målt i netop dette punkt — se "
+            "Hjælp, kapitel 2.\n\n"
+            "Fluebenet ændrer intet i de kombinationer, der allerede kan "
+            "beregnes."
         ),
     )
 
@@ -4758,10 +4811,16 @@ def _trin1_noegletal(grundlag: dict, eu: float) -> None:
             ("Svarende til 20 år", tal.get("Svarende til 20 år", "—")),
         ]
         if grundlag.get("eo_aekv") is not None:
-            raekker.append(
-                (f"Ækvivalent Eₒ-kurve ved Eᵤ = {ui.mpa(eu)}",
-                 ui.mpa(grundlag["eo_aekv"]))
-            )
+            # Værdien kan forveksles med et forventet overflademodul for den
+            # færdige opbygning. Forklaringen ved markøren slår fast, at den
+            # alene angiver opslagspunktet, jf. Hjælp kapitel 1, afsnit 4.
+            raekker.append((
+                f"Ækvivalent Eₒ-kurve ved Eᵤ = {ui.mpa(eu)}",
+                ui.mpa(grundlag["eo_aekv"]),
+                "Den designdiagram-kurve, opslaget sker i: den kurve, hvis "
+                "lagtykkelse uden geonet svarer til VejDims krav. Et "
+                "opslagspunkt, ikke et forventet E-modul for opbygningen.",
+            ))
         titel = format_trafikklasse(t_klasse)
         # Den typiske anvendelse er vejledende og indgår ikke i håndbogen;
         # den står derfor dæmpet i hovedet frem for blandt nøgletallene.
