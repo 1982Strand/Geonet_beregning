@@ -2175,7 +2175,6 @@ def _kob_trin5(
             f"{m['navn']} {_kob_tal(m['phi'], 1)}°" for m in materialer
         )
         kilde = f"materialetabellen, {navne.lower()}"
-    t_efter = t_uarm_kor if t_uarm_kor else t_krav
     poster.append((
         "Korrektionsfaktor:",
         _kob_esc("k") + "<sub>φ</sub>" + _kob_esc(
@@ -2183,14 +2182,6 @@ def _kob_trin5(
             f"{_kob_tal(PHI_BASIS, 0)}) = {_kob_tal(phi_kor, 4)} = "
         ) + f"<b>{_kob_esc(_kob_tal(phi_kor * 100, 2))} %</b>",
     ))
-    if abs(phi_kor) >= 1e-9:
-        poster.append((
-            "φᵥ-korrigeret tykkelse:",
-            _kob_esc(
-                f"t = {_kob_tal(t_krav)} × (1 {'−' if phi_kor < 0 else '+'} "
-                f"{_kob_tal(abs(phi_kor), 4)}) = "
-            ) + f"<b>{_kob_esc(_kob_tal(t_efter))} mm</b>",
-        ))
     e_bred = max(len(e) for e, _ in poster) + 2
     krop = _kob_formel(*[
         _kob_esc(f"{etiket:<{e_bred}}") + beregning for etiket, beregning in poster
@@ -2213,11 +2204,8 @@ def _kob_trin5(
     krop += f'<div class="kob-note">{note}</div>'
     return _kob_trin(
         nr, "φᵥ-korrektion for materialerne", kilde, krop,
-        resultat=f"{_kob_tal(t_efter)} mm",
-        resultat_note=(
-            "ustabiliseret, korrigeret" if abs(phi_kor) >= 1e-9
-            else "ustabiliseret, ukorrigeret"
-        ),
+        resultat=f"{_kob_tal(phi_kor * 100, 2)} %",
+        resultat_note="φᵥ-korrektionsfaktor",
     )
 
 
@@ -2287,6 +2275,14 @@ def _kob_trin6(
                     f"{_kob_tal(abs(basis * phi_kor))} mm"))
                 + _kob_svag(f"{b_tal} × {_kob_tal(abs(phi_kor) * 100, 2)} %")
             )
+        linjer.append(
+            _kob_esc(_kob_regnelinje(
+                "− samlet reduktion",
+                f"{_kob_tal(t_krav - t_arm)} mm"))
+            + _kob_svag(
+                "basisreduktion + net-korrektion + φᵥ-korrektion"
+            )
+        )
         red_krav = (t_krav - t_arm) / t_krav * 100 if t_krav else None
         red_kor = (ref or {}).get("reduktion_pct")
         hale = ""
@@ -2296,13 +2292,16 @@ def _kob_trin6(
             # udgangspunktet — ellers er de to procenter det samme tal.
             if red_kor is not None and t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
                 hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_tal(t_uarm_kor)}"
-        # Resultatet stilles i samme talkolonne som leddene ovenfor, så
-        # procentangivelsen flugter med linjernes mellemregninger.
-        slut = f"= {_kob_tal(t_arm)} mm"
+        # Slutresultatet stilles i samme talkolonne som leddene ovenfor og
+        # adskilles visuelt fra mellemregningerne.
+        slut_etiket = _kob_esc(f"{'Stabiliseret bærelagstykkelse =':<33}")
+        slut_tal = _kob_esc(f"{_kob_tal(t_arm)} mm".rjust(10))
         linjer.append(
-            _kob_esc("= ") + f"<b>{_kob_esc(_kob_tal(t_arm))} mm</b>"
-            + _kob_esc(" " * max(0, 43 - len(slut)))
+            '<div class="kob-slutlinje">'
+            + slut_etiket
+            + f"<b>{slut_tal}</b>"
             + (_kob_svag(hale) if hale else "")
+            + "</div>"
         )
         kolonner.append(
             f'<div><div class="kob-lag-hoved {klasse}">{navn}</div>'

@@ -929,6 +929,10 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   white-space:pre; overflow-x:auto;
 }
 .kob-formel b{ font-weight:600; color:var(--bg-ink); }
+.kob-slutlinje{
+  display:block; border-top:1px solid var(--bg-line);
+  margin-top:4px; padding-top:4px; color:var(--bg-ink);
+}
 /* Mellemregningen bag et led står nedtonet efter talkolonnen, så linjens
    eget tal fortsat læses først. */
 .kob-svag{ color:var(--bg-ink-25); }
