@@ -6635,29 +6635,126 @@ def _diagram_daekning(diagram: dict) -> str:
     return " · ".join(dele)
 
 
-def _diagram_tabel_html(diagram: dict) -> str:
+_DIAGRAM_FELTER = ("t_uarmeret_cm", "t_1_lag_cm", "t_2_lag_cm")
+
+
+def _diagram_afvigelser(diagram: dict) -> dict:
+    """Afvigelserne fra designmanualens aflæste værdier.
+
+    Det aktive diagram holdes op mod standarddataen, jf.
+    _standard_designdiagrammer(). Der skelnes mellem tre slags afvigelser:
+    en ændret værdi i en række, som manualen også har, en række med et Eᵤ,
+    manualen ikke indeholder, og en række fra manualen, der er fjernet.
+
+    Returnerer en dict med:
+
+        celler    mængden af (eu, felt) med en anden værdi end manualens
+        nye       mængden af Eᵤ, der ikke findes i manualen
+        fjernede  antallet af manualens rækker, der ikke er tilbage
+    """
+    standard = next(
+        (
+            d for d in _standard_designdiagrammer()
+            if d["diagram_nr"] == diagram.get("diagram_nr")
+        ),
+        None,
+    )
+    tom = {"celler": set(), "nye": set(), "fjernede": 0}
+    if standard is None:
+        return tom
+
+    standard_rows = {r["eu"]: r for r in standard["rows"]}
+    celler: set[tuple[float, str]] = set()
+    nye: set[float] = set()
+
+    for row in diagram["rows"]:
+        kilde = standard_rows.get(row["eu"])
+        if kilde is None:
+            nye.add(row["eu"])
+            continue
+        for felt in _DIAGRAM_FELTER:
+            før, nu = kilde.get(felt), row.get(felt)
+            if før is None and nu is None:
+                continue
+            if før is None or nu is None or round(før, 6) != round(nu, 6):
+                celler.add((row["eu"], felt))
+
+    aktive = {r["eu"] for r in diagram["rows"]}
+    return {
+        "celler": celler,
+        "nye": nye,
+        "fjernede": len(set(standard_rows) - aktive),
+    }
+
+
+def _diagram_afvigelse_tekst(afvigelser: dict) -> str:
+    """Afvigelserne opgjort som én linje under tabellen.
+
+    Returnerer en tom streng, når diagrammet står som i designmanualen.
+    """
+    dele: list[str] = []
+    antal_celler = len(afvigelser["celler"])
+    if antal_celler:
+        dele.append(
+            f"{antal_celler} værdi er rettet" if antal_celler == 1
+            else f"{antal_celler} værdier er rettet"
+        )
+    antal_nye = len(afvigelser["nye"])
+    if antal_nye:
+        dele.append(
+            "1 række er tilføjet" if antal_nye == 1
+            else f"{antal_nye} rækker er tilføjet"
+        )
+    if afvigelser["fjernede"]:
+        dele.append(
+            "1 række er fjernet" if afvigelser["fjernede"] == 1
+            else f"{afvigelser['fjernede']} rækker er fjernet"
+        )
+    if not dele:
+        return ""
+    return " · ".join(dele)
+
+
+def _diagram_tabel_html(diagram: dict, afvigelser: dict | None = None) -> str:
     """De aflæste diagramdata som fast tabel.
 
     Tabellen er skrivebeskyttet i visningstilstanden; redigering foregår i
     st.data_editor, jf. Redigér-knappen. Manglende aflæsninger angives med
     tankestreg, jf. _diagram_daekning().
+
+    Værdier, der afviger fra designmanualens, mærkes, så det fremgår, hvad
+    der er rettet, og hvad der står som aflæst; det samme gør rækker, hvis
+    Eᵤ ikke findes i manualen, jf. _diagram_afvigelser().
     """
+    afvigelser = afvigelser or {"celler": set(), "nye": set(), "fjernede": 0}
+
     def _tal(v: float | None) -> str:
         return "—" if v is None else f"{v:.1f}".replace(".", ",")
+
+    def _celle(row: dict, felt: str) -> str:
+        rettet = (row["eu"], felt) in afvigelser["celler"]
+        klasse = ' class="dd-tabel-rettet"' if rettet else ""
+        return f"<div{klasse}>{_tal(row.get(felt))}</div>"
+
+    def _raekke(row: dict) -> str:
+        ny = row["eu"] in afvigelser["nye"]
+        klasse = "dd-tabel-raekke"
+        if ny:
+            klasse += " dd-tabel-raekke-ny"
+        eu_klasse = "dd-tabel-eu dd-tabel-rettet" if ny else "dd-tabel-eu"
+        return (
+            f'<div class="{klasse}">'
+            f'<div class="{eu_klasse}">{row["eu"]:.0f}</div>'
+            + "".join(_celle(row, felt) for felt in _DIAGRAM_FELTER)
+            + "</div>"
+        )
 
     hoved = (
         '<div class="dd-tabel-hoved">'
         '<div>E<sub>u</sub> MPA</div>'
         '<div>USTABILISERET</div><div>1 LAG</div><div>2 LAG</div></div>'
     )
-    raekker = "".join(
-        '<div class="dd-tabel-raekke">'
-        f'<div class="dd-tabel-eu">{r["eu"]:.0f}</div>'
-        f'<div>{_tal(r.get("t_uarmeret_cm"))}</div>'
-        f'<div>{_tal(r.get("t_1_lag_cm"))}</div>'
-        f'<div>{_tal(r.get("t_2_lag_cm"))}</div></div>'
-        for r in diagram["rows"]
-    )
+    raekker = "".join(_raekke(r) for r in diagram["rows"])
     return f'{hoved}<div class="dd-tabel-krop">{raekker}</div>'
 
 
@@ -6837,10 +6934,26 @@ def render_designdiagrammer() -> None:
                     _opdater_aktiv_t_basis_table()
                     st.rerun()
 
+            afvigelser = _diagram_afvigelser(diagram)
             if redigerer:
                 _rediger_diagramdata(diagram, pd)
             else:
-                st.html(_diagram_tabel_html(diagram))
+                st.html(_diagram_tabel_html(diagram, afvigelser))
+
+            afvigelse_tekst = _diagram_afvigelse_tekst(afvigelser)
+            if afvigelse_tekst:
+                # Afvigelserne fra designmanualen står først, da tabellen i
+                # så fald ikke længere gengiver manualens aflæsning alene.
+                markering = (
+                    " De mærkede værdier afviger fra manualens aflæsning."
+                    if not redigerer else ""
+                )
+                st.html(
+                    '<div class="dd-tabel-fod dd-tabel-fod-rettet">'
+                    '<b>Redigeret i forhold til designmanualen:</b> '
+                    f'{html.escape(afvigelse_tekst)}.{markering}'
+                    ' Manualens værdier genskabes med Nulstil.</div>'
+                )
 
             st.html(
                 '<div class="dd-tabel-fod">— Uden for diagrammets område. '

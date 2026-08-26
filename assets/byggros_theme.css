@@ -27,6 +27,9 @@
   --bg-surface:#FFFFFF;
   --bg-canvas:#F4F6F4;
   --bg-warn:#A8600B;   --bg-warn-bg:#FCF5E8;
+  /* Værdier, der er rettet i forhold til designmanualen. Blå, så
+     markeringen ikke læses som hverken resultat eller advarsel. */
+  --bg-edit:#1A56A8;   --bg-edit-bg:#EAF1FA;
   --bg-crit:#B42318;   --bg-crit-bg:#FBF0EF;
   --bg-soil:#8B7355;
   --bg-space:4px;
@@ -810,6 +813,25 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 }
 .dd-tabel-raekke:hover{ background:var(--bg-canvas); }
 .dd-tabel-eu{ font-weight:600; color:var(--bg-ink); }
+/* En værdi, der er rettet i forhold til designmanualen, jf.
+   _diagram_afvigelser(). Cellen får både farve og udfyldning, så
+   afvigelsen kan ses uden at tallene skal holdes op mod manualen. En
+   tilføjet række mærkes på sit Eᵤ og bærer desuden en streg i venstre
+   kant. */
+.dd-tabel-rettet{
+  font-weight:600; color:var(--bg-edit);
+  background:var(--bg-edit-bg); border-radius:3px;
+  margin:-.12rem -.28rem; padding:.12rem .28rem;
+}
+.dd-tabel-raekke-ny{
+  box-shadow:inset 2px 0 0 var(--bg-edit);
+}
+.dd-tabel-fod-rettet{
+  margin-top:.55rem; padding:.4rem .55rem;
+  border-left:2px solid var(--bg-edit); border-radius:0 3px 3px 0;
+  background:var(--bg-edit-bg); color:var(--bg-ink-70);
+}
+.dd-tabel-fod-rettet b{ font-weight:600; color:var(--bg-edit); }
 .dd-tabel-fod{
   margin-top:.6rem; font:400 10.5px/1.5 'IBM Plex Sans',sans-serif;
   color:var(--bg-ink-45);
