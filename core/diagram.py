@@ -319,6 +319,15 @@ _MARGIN_BUND = 96
 # Linjehøjde for materialeteksten inde i lagene, ved skriftstørrelse 10.
 _LINJE_PX = 13.5
 
+# Statusteksten under søjlerne. Annotationen har ingen egen bredde, og en lang
+# linje ville derfor strække sig ind over nabosøjlerne og blive klippet ved
+# figurens kant; teksten ombrydes derfor til _STATUS_TEGN pr. linje, jf.
+# ombryd_tekst(). Bundmarginen rummer _STATUS_BASIS_LINJER; er der flere,
+# udvides figuren nedad, jf. byg_snit().
+_STATUS_TEGN = 42
+_STATUS_LINJE_PX = 14
+_STATUS_BASIS_LINJER = 3
+
 # Forklaringen i en søjle uden opbygning. Annotationens bredde er fast, og
 # tekstlinjer, der er bredere, klippes; teksten ombrydes derfor til
 # _TOM_TEKST_TEGN pr. linje, jf. ombryd_tekst().
@@ -341,8 +350,10 @@ def byg_snit(
          "total_mm": float | None,
          "status": (tekst, "gron"|"advarsel"|"kritisk"|"neutral"),
          "tom_tekst": str,
-         "best_case_mm": float,
-         "advarsler": [str]}
+         "best_case_mm": float}
+
+    Under søjlen står alene statusteksten. Placeringsadvarslerne hører til
+    kontrolpunkterne under resultaterne og gentages ikke i tegningen.
 
     Alle søjler deler lodret skala, så de kan sammenlignes direkte.
     reference_mm tegnes som en fælles stiplet linje ved den indtastede
@@ -368,6 +379,16 @@ def byg_snit(
     # højde, jf. update_yaxes og update_layout nedenfor.
     plot_px = max(hoejde_px + _SIGNATUR_PX - _MARGIN_TOP - _MARGIN_BUND, 60)
     px_pr_mm = plot_px / (maks * 1.08 + jord * 1.15)
+
+    # Statusteksten ombrydes til søjlens bredde. Har en søjle flere linjer,
+    # end bundmarginen rummer, udvides figuren nedad med samme beløb som
+    # marginen, så søjlerne beholder deres plads, og signaturen flyttes
+    # tilsvarende ned.
+    status_linjer = [_status_linjer(k) for k in kolonner]
+    ekstra_bund = _STATUS_LINJE_PX * max(
+        0,
+        max((len(t) for t in status_linjer), default=0) - _STATUS_BASIS_LINJER,
+    )
 
     antal = len(kolonner)
     fig = make_subplots(
@@ -501,15 +522,14 @@ def byg_snit(
                 line=dict(color=FARVE_INK_25, width=1.5, dash="dash"),
             )
 
-        # Statusteksten står under jordbåndet.
-        status_tekst, status_slags = k.get("status", ("", "neutral"))
+        # Statusteksten står under jordbåndet, ombrudt til søjlens bredde.
+        status_slags = k.get("status", ("", "neutral"))[1]
         farve = {
             "gron": FARVE_GRON,
             "advarsel": FARVE_ADVARSEL,
             "kritisk": FARVE_KRITISK,
         }.get(status_slags, FARVE_INK_45)
-        linjer = [t for t in (status_tekst or "").split("\n") if t]
-        linjer += list(k.get("advarsler", []))
+        linjer = status_linjer[i - 1]
         if linjer:
             fig.add_annotation(
                 xref=f"x{i}" if i > 1 else "x", yref="paper",
@@ -544,17 +564,20 @@ def byg_snit(
         ann.xanchor = "center"
 
     fig.update_layout(
-        height=hoejde_px + _SIGNATUR_PX,
+        height=hoejde_px + _SIGNATUR_PX + ekstra_bund,
         barmode="overlay", bargap=0,
         # Bundmarginen rummer statusteksten under søjlerne og signaturen
-        # nederst; overkanten rummer søjletitlerne.
-        margin=dict(l=10, r=10, t=_MARGIN_TOP, b=_MARGIN_BUND),
+        # nederst; overkanten rummer søjletitlerne. Højde og bundmargin
+        # udvides med samme beløb, så plotfladen — og dermed søjlerne —
+        # bevarer sin højde.
+        margin=dict(l=10, r=10, t=_MARGIN_TOP, b=_MARGIN_BUND + ekstra_bund),
         paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
         font=dict(family=SKRIFT, size=11, color=FARVE_INK),
         showlegend=True,
         legend=dict(
             orientation="h",
-            x=0, xanchor="left", y=-0.19, yanchor="top",
+            x=0, xanchor="left",
+            y=-0.19 - ekstra_bund / plot_px, yanchor="top",
             font=dict(size=10.5, color=FARVE_INK_45, family=SKRIFT),
             bgcolor="rgba(0,0,0,0)", borderwidth=0,
             itemclick=False, itemdoubleclick=False,
@@ -638,6 +661,21 @@ def ombryd_tekst(tekst: str, maks_tegn: int) -> str:
     return "<br>".join(linjer) if linjer else tekst
 
 
+def _status_linjer(kolonne: dict) -> list[str]:
+    """Søjlens statustekst som færdigombrudte linjer.
+
+    Teksten kan selv rumme linjeskift — den optimale værdi sættes i egen
+    linje — og hver linje ombrydes desuden til søjlens bredde, jf.
+    _STATUS_TEGN.
+    """
+    tekst = kolonne.get("status", ("", "neutral"))[0] or ""
+    raa = [t for t in tekst.split("\n") if t]
+    linjer: list[str] = []
+    for t in raa:
+        linjer.extend(ombryd_tekst(t, _STATUS_TEGN).split("<br>"))
+    return linjer
+
+
 def ombryd_lagnavn(navn: str, maks_tegn: int = 13) -> str:
     """Materialenavnet ombrudt til søjlebredden.
 
@@ -695,6 +733,8 @@ def snit_til_kolonner(
       forventer koter over underbunden, altså total × (1 − frac).
     - En søjle uden materialefordeling tegnes som ét ubundet lag.
     - Statusfarverne følger stylesheetets tre statusfarver.
+    - Placeringsadvarslerne i s.placement føres ikke med; de står under
+      Kontrolpunkter og anbefalinger og hører ikke til i tegningen.
     """
     farve = {"danger": "kritisk", "warning": "advarsel", "success": "gron"}
     kolonner: list[dict] = []
@@ -716,8 +756,6 @@ def snit_til_kolonner(
         else:
             lag = []
 
-        advarsler = list((s.placement or {}).get("placeringsadvarsler") or [])
-
         kolonner.append({
             "titel": s.titel,
             "lag": lag,
@@ -728,7 +766,6 @@ def snit_til_kolonner(
             "tom_tekst": s.ikke_defineret_tekst or "Ikke defineret",
             "best_case_mm": s.best_case_mm,
             "best_case_note": s.best_case_note,
-            "advarsler": advarsler,
             "status": (
                 s.status_tekst or "",
                 farve.get(s.status_farve or "", "neutral"),
