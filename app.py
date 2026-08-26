@@ -6661,12 +6661,31 @@ def _diagram_tabel_html(diagram: dict) -> str:
     return f'{hoved}<div class="dd-tabel-krop">{raekker}</div>'
 
 
+def _diagram_kort_forklaring(klasse: int) -> str:
+    """Belastningsklassens forklaring til kortet i trin 1.
+
+    Teksten samler klassens belastning og anvendelse, som de er angivet i
+    BELASTNINGSKLASSER, så kortet og dimensioneringssiden følges ad.
+    """
+    info = BELASTNINGSKLASSER.get(klasse) or {}
+    belastning = info.get("belastning", "")
+    anvendelse = info.get("anvendelse", "")
+    if not belastning:
+        return ""
+    if not anvendelse:
+        return f"{belastning}."
+    anvendelse = anvendelse[0].lower() + anvendelse[1:]
+    return f"{belastning}. Anvendelsesområde: {anvendelse}."
+
+
 def _render_diagram_vaelger(diagrammer: list[dict], valgt_nr: int) -> None:
     """Diagrammerne som kort, der vælges ét ad gangen.
 
     Hvert kort angiver diagrammets nummer, dets overflademodul og den
-    belastningsklasse, det dækker. Kortet er selv knappen; den ligger som en
-    gennemsigtig flade oven på indholdet, jf. st-key-dd_kort_ i stylesheetet.
+    belastningsklasse, det dækker. Klassens belastning og anvendelse står
+    som forklaring på kortet, jf. _diagram_kort_forklaring(). Kortet er selv
+    knappen; den ligger som en gennemsigtig flade oven på indholdet, jf.
+    st-key-dd_kort_ i stylesheetet.
     """
     for kol, d in zip(st.columns(len(diagrammer), gap="small"), diagrammer):
         nr = d["diagram_nr"]
@@ -6676,11 +6695,13 @@ def _render_diagram_vaelger(diagrammer: list[dict], valgt_nr: int) -> None:
                 # Knappen står først og fylder kortets plads; kortets indhold
                 # trækkes op oven på den med negativ margin og lader klik gå
                 # igennem, jf. st-key-dd_kort_ i stylesheetet. Rækkefølgen er
-                # væsentlig — indholdet skal tegnes efter knappen.
+                # væsentlig — indholdet skal tegnes efter knappen. Forklaringen
+                # hænger på knappen, da den dækker hele kortets flade.
                 if st.button(
                     f"Vælg diagram {nr}",
                     key=f"dd_vaelg_{nr}",
                     width="stretch",
+                    help=_diagram_kort_forklaring(d["klasse"]),
                 ):
                     st.session_state["dd_valgt_nr"] = nr
                     st.rerun()
