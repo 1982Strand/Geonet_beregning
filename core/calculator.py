@@ -83,9 +83,7 @@ def _slaa_op(
     eo_data = eu_data.get(eo)
     if eo_data is None:
         return None
-    # Håndter tastefejl i nøgle ("2_dag" i stedet for "2_lag" for Eu=45, Eo=80)
-    val = eo_data.get(lag_type)
-    return val
+    return eo_data.get(lag_type)
 
 
 def _slaa_op_interp(
