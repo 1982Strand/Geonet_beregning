@@ -330,8 +330,12 @@ def resultatkort(kort: list[dict], badge_tekst: str = "ANBEFALET") -> None:
         kant = f"box-shadow:inset 3px 0 0 {FARVE['gron']};" if anbefalet else ""
         etiket_farve = FARVE["gron"] if anbefalet else FARVE["ink_45"]
         tal_farve = FARVE["gron_mork"] if anbefalet else FARVE["ink"]
+        badge_title = (
+            "Dette er det tyndeste gyldige alternativ blandt de viste opbygninger."
+            if badge_tekst == "TYNDEST" else ""
+        )
         badge = (
-            f'<div style="font:600 9px/1 {MONO};letter-spacing:.08em;color:#fff;'
+            f'<div title="{escape(badge_title)}" style="font:600 9px/1 {MONO};letter-spacing:.08em;color:#fff;'
             f'background:{FARVE["gron"]};padding:4px 7px;border-radius:3px">'
             f'{escape(badge_tekst)}</div>'
             if anbefalet else ""

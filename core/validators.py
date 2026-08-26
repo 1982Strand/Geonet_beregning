@@ -187,17 +187,17 @@ def valider_input(
     # BLØDE ADVARSLER — stopper ikke beregningen
     # -----------------------------------------------------------------------
 
-    # A1: φ under standard
+    # A1: φᵥ under standard
     if phi < PHI_MIN:
         advarsler.append(
-            f"Friktionsvinklen φ={phi}° er under standardværdien på {PHI_MIN:.0f}°. "
-            f"φ-korrektionen vil øge den beregnede tykkelse. "
+            f"Friktionsvinklen φᵥ={phi}° er under standardværdien på {PHI_MIN:.0f}°. "
+            f"φᵥ-korrektionen vil øge den beregnede tykkelse. "
         )
 
-    # A2: φ over realistisk grænse
+    # A2: φᵥ over realistisk grænse
     if phi > PHI_MAX:
         advarsler.append(
-            f"Friktionsvinklen φ={phi}° er over den anbefalede øvre grænse "
+            f"Friktionsvinklen φᵥ={phi}° er over den anbefalede øvre grænse "
             f"på {PHI_MAX:.0f}°."
         )
 

@@ -191,13 +191,13 @@ class Snit:
     best_case_note: str | None = None  # mellemregningen bag best_case_mm (hover)
     placement: dict | None = None
     # Koncept A: krav-søjle felter — når er_krav_soejle=True tegnes søjlen som
-    # neutral grå blok ("φ-vægtet bærelag") uden materialefordeling, og
+    # neutral grå blok ("φᵥ-vægtet bærelag") uden materialefordeling, og
     # status_tekst vises under søjlen til sammenligning med indtastet opbygning.
     er_krav_soejle: bool = False
     t_indtastet_mm: float | None = None  # til sammenligningslinje på tværs af søjler
     status_tekst: str | None = None      # fx "77 mm for lidt" eller "6 mm i overskud"
     status_farve: str | None = None      # "danger" | "warning" | "success" | None
-    phi_vaegtet: bool = True             # False → label er "Bærelag" i stedet for "φ-vægtet bærelag"
+    phi_vaegtet: bool = True             # False → label er "Bærelag" i stedet for "φᵥ-vægtet bærelag"
 
 
 def upper_geonet_frac_for_sub_lag(sub_lag: list[dict] | None) -> float:
@@ -348,7 +348,7 @@ def render_personligt_designdiagram_png(
     fig.update_layout(
         title=dict(
             text=(
-                f"Eₒ = {eo:.0f} MN/m² · {klasse_str} · φ = {phi_str}° · "
+                f"Eₒ = {eo:.0f} MN/m² · {klasse_str} · φᵥ = {phi_str}° · "
                 f"{net_navn}"
             ),
             x=0, xanchor="left", y=0.98, yanchor="top",
@@ -384,7 +384,7 @@ def _materiale_resume(materialer: list[dict]) -> str:
         pct = m.get("pct")
         dele = [f"Lag {i}: {navn}"]
         if phi is not None:
-            dele.append(f"φ = {phi}°")
+            dele.append(f"φᵢ = {phi}°")
         if tyk is not None:
             dele.append(f"{tyk:.0f} mm")
         elif pct is not None:
@@ -436,7 +436,7 @@ def formatér_dimensioneringsgrundlag(
     else:
         rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
     rows.append(("Materialeopbygning", _materiale_resume(materialer)))
-    rows.append(("Vægtet friktionsvinkel (φ)", f"{dim.get('phi', PHI_BASIS):.1f}°"))
+    rows.append(("Vægtet friktionsvinkel (φᵥ)", f"{dim.get('phi', PHI_BASIS):.1f}°"))
     return rows
 
 
@@ -450,7 +450,7 @@ def formatér_dimensioneringsresultat(dim: dict) -> list[tuple[str, str]]:
     def _mm(v):
         return f"{v:.0f} mm" if isinstance(v, (int, float)) else "—"
 
-    # Uarmeret reference vises som φ-korrigeret værdi (konsistent med
+    # Uarmeret reference vises som φᵥ-korrigeret værdi (konsistent med
     # resultat-bannerne og snittene i visualiseringen).
     t_uarm_ref = (
         res_1.get("t_uarmeret_phi_kor_mm")

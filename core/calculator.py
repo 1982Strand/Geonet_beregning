@@ -3,7 +3,7 @@ Beregningsmotor til Geonet Dimensioneringsværktøj.
 
 Implementerer opslaget i designdiagrammerne: basistykkelse fra (Eu, Eo) og
 lag-mode, korrigeret for friktionsvinkel og geonet-effektivitet
-(T = T_basis × (1 + φ-kor + net-kor)). Trinene er beskrevet for brugeren under
+(T = T_basis × (1 + φᵥ-kor + net-kor)). Trinene er beskrevet for brugeren under
 "Sådan beregnes det" i app.py.
 Ingen imports herfra må være UI-relaterede.
 
@@ -180,7 +180,7 @@ def beregn(
 
     # -- Trin 1 & 2: Eu og Eo er allerede fastlagt af kalderen --
 
-    # -- Trin 3: Fastlæg φ-korrektion --
+    # -- Trin 3: Fastlæg φᵥ-korrektion --
     phi_korrektion = K_PHI * (phi - PHI_BASIS)
 
     # -- Trin 4: Opslag i designdiagram --
@@ -233,16 +233,16 @@ def beregn(
     t_basis_arm_mm = t_basis_arm_cm * 10.0
     t_basis_uarm_mm = t_basis_uarm_cm * 10.0 if t_basis_uarm_cm is not None else None
 
-    # -- Trin 5: φ-korrektion --
+    # -- Trin 5: φᵥ-korrektion --
     # -- Trin 6: Net-korrektion --
     # -- Trin 7: Saml til endelig tykkelse --
     samlet_faktor = 1.0 + phi_korrektion + net_korrektion
 
     t_armeret_mm = t_basis_arm_mm * samlet_faktor
     # T_uarmeret_basis = ren tabelopslag uden korrektioner (referenceværdi).
-    # T_uarmeret_phi_kor = basis × (1 + φ-korrektion) — den uarmerede
+    # T_uarmeret_phi_kor = basis × (1 + φᵥ-korrektion) — den uarmerede
     # tykkelse korrigeret for materialevalg. Den er den korrekte reference
-    # for reduktion, fordi t_armeret også er φ-korrigeret. Reduktionen
+    # for reduktion, fordi t_armeret også er φᵥ-korrigeret. Reduktionen
     # afspejler så net-effekten alene (diagram-forskel + net_korrektion).
     t_uarmeret_mm = t_basis_uarm_mm
     t_uarmeret_phi_kor_mm = (
@@ -320,7 +320,7 @@ def beregn_alle_produkter(
     Beregn T_armeret for alle geonet-produkter med en given friktionsvinkel.
 
     phi defaulter til 37° (Standard-tilstand). Brugerdefineret-tilstand
-    kan sende en anden φ-værdi beregnet fra materialelagene.
+    kan sende en anden φᵥ-værdi beregnet fra materialelagene.
 
     klasse_for_anbefaling overstyrer hvilken belastningsklasse produkternes
     anbefalings-badge tjekkes mod. Bruges af trafikklasse-tilstanden, hvor Eo
@@ -456,7 +456,7 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         # og må ikke sammenblandes med produkter uden interval.
         if produkt.get("t_armeret_mm_min") is not None:
             t = produkt["t_armeret_mm"]
-            # Reduktion sammenlignes mod φ-korrigeret reference, så net-effekten
+            # Reduktion sammenlignes mod φᵥ-korrigeret reference, så net-effekten
             # alene afspejles i procentdelen (se beregn() for begrundelse).
             t_uarm = (
                 produkt.get("t_uarmeret_phi_kor_mm")
@@ -494,7 +494,7 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
         # Gennemsnitlig tykkelse for gruppen — eksakt beregnede værdi uden afrunding.
         t_repræsentativ = sum(p["t_armeret_mm"] for p in gruppe_produkter) / len(gruppe_produkter)
 
-        # Reduktion mod φ-korrigeret reference (se beregn()).
+        # Reduktion mod φᵥ-korrigeret reference (se beregn()).
         t_uarm = (
             produkt.get("t_uarmeret_phi_kor_mm")
             or produkt.get("t_uarmeret_mm")

@@ -41,7 +41,7 @@ def byg_designdiagram(
     """Designdiagrammet som Plotly-figur.
 
     Kurverne dannes af designdiagram-tabellen ved det viste Eo og korrigeres
-    med φ og nettets korrektion, jf. afsnittet "Sådan dannes diagrammet".
+    med φᵥ og nettets korrektion, jf. afsnittet "Sådan dannes diagrammet".
     Produkter med korrektionsinterval tegnes med et tonet bånd mellem den
     optimale og den konservative kurve.
 
@@ -377,35 +377,18 @@ def byg_snit(
     )
 
     for i, k in enumerate(kolonner, start=1):
-        # Underbunden som skraveret bånd under nulniveauet, i samme bredde som
-        # opbygningen ovenover. Baggrunden er den fulde jordfarve, så den hvide
-        # angivelse af underbundens E-modul kan læses; skraveringen tegnes
-        # ovenpå i en mørkere tone.
-        fig.add_trace(
-            go.Bar(
-                x=[""], y=[jord], base=[-jord],
-                marker=dict(
-                    color=FARVE_JORD,
-                    pattern=dict(
-                        shape="/", bgcolor=FARVE_JORD,
-                        fgcolor="#6E5A42", size=5, solidity=0.22,
-                    ),
-                    line=dict(width=0),
-                ),
-                width=0.62, hoverinfo="skip", showlegend=False,
-            ),
-            row=1, col=i,
-        )
-        if k.get("underbund_tekst"):
-            fig.add_annotation(
-                xref=f"x{i}" if i > 1 else "x", yref="y",
-                x=0, y=-jord / 2,
-                text=k["underbund_tekst"], showarrow=False,
-                font=dict(size=8, color="#FFFFFF"),
-            )
-
         total = k.get("total_mm")
         if not total:
+            # En ugyldig opbygning skal ikke ligne en delvist tegnet
+            # befæstelse. Vis derfor et hvidt felt med en stiplet ramme og
+            # beskeden alene; hverken underbund, materialelag eller
+            # geonetmarkering tegnes.
+            fig.add_shape(
+                type="rect", x0=-0.31, x1=0.31, y0=-jord, y1=maks,
+                fillcolor="#FFFFFF",
+                line=dict(color=FARVE_LINJE, width=1, dash="dot"),
+                layer="below", row=1, col=i,
+            )
             fig.add_annotation(
                 text=ombryd_tekst(
                     k.get("tom_tekst", "Ikke defineret"), _TOM_TEKST_TEGN,
@@ -416,6 +399,33 @@ def byg_snit(
                 align="center", width=_TOM_TEKST_PX,
             )
         else:
+            # Underbunden som skraveret bånd under nulniveauet, i samme bredde
+            # som opbygningen ovenover. Baggrunden er den fulde jordfarve, så
+            # den hvide angivelse af underbundens E-modul kan læses; skraveringen
+            # tegnes ovenpå i en mørkere tone.
+            fig.add_trace(
+                go.Bar(
+                    x=[""], y=[jord], base=[-jord],
+                    marker=dict(
+                        color=FARVE_JORD,
+                        pattern=dict(
+                            shape="/", bgcolor=FARVE_JORD,
+                            fgcolor="#6E5A42", size=5, solidity=0.22,
+                        ),
+                        line=dict(width=0),
+                    ),
+                    width=0.62, hoverinfo="skip", showlegend=False,
+                ),
+                row=1, col=i,
+            )
+            if k.get("underbund_tekst"):
+                fig.add_annotation(
+                    xref=f"x{i}" if i > 1 else "x", yref="y",
+                    x=0, y=-jord / 2,
+                    text=k["underbund_tekst"], showarrow=False,
+                    font=dict(size=8, color="#FFFFFF"),
+                )
+
             # Lagene stables nedefra, så rækkefølgen i "lag" læses oppefra.
             bund = 0.0
             for navn, tykkelse, slags in reversed(k.get("lag", [])):
@@ -539,7 +549,7 @@ def byg_snit(
         # Bundmarginen rummer statusteksten under søjlerne og signaturen
         # nederst; overkanten rummer søjletitlerne.
         margin=dict(l=10, r=10, t=_MARGIN_TOP, b=_MARGIN_BUND),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
         font=dict(family=SKRIFT, size=11, color=FARVE_INK),
         showlegend=True,
         legend=dict(

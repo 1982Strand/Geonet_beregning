@@ -2043,7 +2043,7 @@ GEONET_NOTER = [
 # Basis-friktionsvinkel for opslagstabellens referencegrundlag
 PHI_BASIS = 37.0
 
-# φ-korrektion pr. grad over 37° (negativ = tyndere bærelag ved højere φ)
+# φᵥ-korrektion pr. grad over 37° (negativ = tyndere bærelag ved højere φᵥ)
 K_PHI = -0.02
 
 # Gyldighedsgrænser

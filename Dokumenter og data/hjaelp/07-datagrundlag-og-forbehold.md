@@ -1,77 +1,134 @@
 ---
 titel: Datagrundlag og forbehold
-resume: Forudsætningerne bag de 48 VejDim-kørsler, korrelationens gyldighedsområde, de seks forbehold og de tilfælde, hvor en konkret kørsel bør foretages.
+resume: Forudsætningerne for de 48 standardkørsler, designmanualernes anvendelsesområde, korrelationens gyldighed og de forhold, der kræver særskilt kontrol eller beregning.
 ---
 
-## 1 Kørslernes forudsætninger
+## 1 VejDim-kørslernes forudsætninger
 
-De 48 VejDim-kørsler omfatter T1–T6 ved Eᵤ = 3, 4, 5, 10, 15, 20, 30 og
-40 MPa. Samtlige kørsler er udført med:
+Trafikklasse-korrelationen er baseret på 48 standardkørsler i VejDim.
+Kørslerne dækker trafikklasserne T1–T6 ved Eᵤ = 3, 4, 5, 10, 15, 20, 30 og
+40 MPa.
+
+Kørslerne er udført med følgende forudsætninger:
 
 - **Belastningsmodel:** Æ10 tvillingehjul, standard, ved 60–80 km/t.
-- **Afvanding:** nej.
-- **Underbund:** frostsikker, hvis E-modul er manuelt overskrevet til cellens
-  Eᵤ-værdi. Herved bortfalder koblingshøjdekravet, og kørslen bliver ren
-  bæreevne.
+- **Afvanding:** Nej.
+- **Underbund:** Frostsikker, med E-modulet manuelt overskrevet til den
+  aktuelle kørsels Eᵤ-værdi. Derved bortfalder kravet til koblingshøjde, og
+  kørslen beskriver alene bæreevnen.
 - **Levetidsmål:** 20 år for alle lag.
-- **Ubundne lag:** SG II med E = 300 over BL II U≤3 med E = 100, justeret af
-  VejDim.
-- **Asfalt-E:** standard, ikke overskrevet.
+- **Ubundne lag:** SG II med E = 300 MPa over BL II U≤3 med E = 100 MPa.
+- **Asfaltens E-modul:** VejDims standardværdier, uden manuel overskrivning.
 
-Asfaltpakken er fast pr. trafikklasse. Bundne bærelag er låst, hvor det er
-muligt; hvor VejDim selv beregner tykkelsen, er programmets egne værdier
-anvendt, og tykkelsen kan derfor variere med Eᵤ.
+Asfaltpakken er fastlagt pr. trafikklasse. Bundne bærelag er låst, hvor det er
+muligt. Hvor VejDim selv beregner tykkelsen, anvendes VejDims værdi, og
+tykkelsen kan derfor variere med Eᵤ.
 
-## 2 Gyldighedsområde
+Disse forudsætninger udgør datagrundlaget for korrelationen. Hvis de ændres
+væsentligt, kan den beregnede ubundne tykkelse og dermed også Eₒ,ækv ændre sig.
+Kørslerne er derfor ikke en generel erstatning for en projektspecifik
+VejDim-beregning.
 
-Korrelationen er vejledende og gælder for opbygninger, der ligner kørslernes
-forudsætninger. Afviger projektets underbund, trafikbelastning eller ønskede
-levetid væsentligt, bør en konkret VejDim-beregning foretages frem for at
-anvende korrelationstabellen.
+## 2 Anvendelsesområde og begrænsninger
 
-Følgende forbehold gælder:
+Korrelationen bygger på to forskellige datagrundlag. VejDim fastlægger den
+nødvendige samlede ubundne lagtykkelse, mens designmanualernes diagrammer
+fastlægger geonettets reduktion. VejDim indeholder ikke geonet, og reduktionen
+er derfor ikke en del af VejDims beregning.
 
-1. **VejDim omfatter ikke geonet.** Reduktionen hviler på feltforsøg fra
-   GS-GRID og Tensar, ikke på vejreglen.
-2. **MSL erstatter stabilgrus og bundsikring samlet.** Sammenligningen
-   foretages på den samlede ubundne lagtykkelse. Materialekravet til MSL
-   svarer til stabilgrus og er dermed strengere end kravet til bundsikring,
-   hvilket er konservativt.
-3. **Frostsikring og koblingshøjde er ikke omfattet.** Kørslerne er udført med
-   frostsikker underbund. En geonet-reduceret opbygning bør ikke bringe
-   totalhøjden under koblingshøjden for frostfarlig underbund, jf. håndbogens
-   afsnit 5.3. Forholdet bør kontrolleres særskilt.
-4. **Manglende armerede kurver.** I 8 af de 48 celler mangler diagrammet data
-   for 1 lag geonet i opslagspunktet, idet de armerede kurver ophører ved
-   lavere Eᵤ end de ustabiliserede, jf. kapitel 3, afsnit 3. Reduktionen kan da
-   ikke bestemmes. Fire af cellerne ligger inden for kernezonen, og forholdet
-   afhjælpes ikke af at dimensionere på VejDims tal.
-5. **Ekstrapoleret reduktion uden for diagrammernes område.** Dimensioneres der
-   på VejDims tal, jf. kapitel 2, afsnit 3, er reduktionsprocenten hentet ved
-   diagrammernes rand og ikke i selve driftspunktet. Reduktionen tiltager, jo
-   tyndere opbygningen er — fra 24–32 % på de tykkeste kurver til 33–48 % på
-   den tyndeste. I zonen over er forskellen mellem de tykke kurver lille, og
-   den overførte værdi rammer tæt. I zonen under er den sandsynligvis sat for
-   lavt, hvorved opbygningen bliver for tyk, og resultatet ligger til den
-   sikre side. Afvigelsen mellem VejDims krav og randkurven angives sammen med
-   resultatet og bør indgå i vurderingen.
-6. **Følsomhed over for asfaltpakken.** Den ækvivalente Eₒ afhænger af den
-   faste asfaltpakke pr. trafikklasse. De anvendte pakker er VejDims egne
-   værdier.
-7. **Trafikklasse T7 er ikke medtaget**, idet klassen er åben. Der henvises til
-   en konkret VejDim-beregning.
+**Designmanualernes anvendelsesområde.** Designmanualerne er udarbejdet til
+vej- og pladsstabilisering, herunder blandt andet modvirkning af
+differenssætninger og kompensationsopbygninger. De bør ikke anvendes direkte
+til statisk belastede konstruktioner som forbelastede vejdæmninger eller
+pæledæmninger. Sådanne konstruktioner kræver et særskilt design.
 
-## 3 Hvornår en ny kørsel bør foretages
+Diagrammerne og effektindeksene er knyttet til de produktfamilier og
+produkter, som manualerne beskriver. Anvendelse af andre geonetprodukter
+kræver særskilt dokumentation for en tilsvarende effekt under tilsvarende
+forhold.
 
-En konkret VejDim-beregning bør foretages, når mindst ét af følgende forhold
-gør sig gældende:
+**Materialer og friktionsvinkel.** Diagrammerne forudsætter velgraderede
+friktionsmaterialer som ubundne bærelag. I værktøjet behandles materialernes
+egenskaber gennem den vægtede friktionsvinkel φᵥ, med 37° som
+referenceværdi. Korrektionen for φᵥ ændrer beregningsresultatet, men den
+erstatter ikke kravene til materialernes kvalitet, gradering eller egnethed
+som ubundne bærelag.
 
-- Afvanding er til stede eller udelukket i det konkrete projekt.
-- Levetidsmålet afviger fra 20 år.
-- Underbunden er ikke frostsikker.
-- Trafikkens sammensætning afviger væsentligt fra Æ10-forudsætningen.
-- Opslagspunktet falder i zonen under eller over, jf. kapitel 2, afsnit 2, og
-  den ekstrapolerede reduktion ikke findes tilstrækkelig for opgaven.
+Materialernes maksimale kornstørrelse, geonettets maskestørrelse og eventuelle
+krav til materialetype skal derfor fortsat kontrolleres særskilt, jf. kapitel
+4.
 
-Foreligger en konkret kørsel, kan den indtastes i kørselstabellen på
-korrelationssiden, hvorefter Eₒ,ækv-matricen og dimensioneringen følger med.
+**Bestemmelse af underbundens E-modul.** Sammenhængen mellem Eᵤ og vingestyrke
+er vejledende og gælder primært for typiske danske jordarter med højt
+vandindhold. Vandindhold, jordtype og forsøgsmetode kan give afvigelser.
+Pladebelastning er derfor en mere direkte metode til at kontrollere den
+aktuelle bæreevne end en indirekte omregning fra vingestyrke.
+
+**Udførelse på blød og vandholdig underbund.** På vandholdig, blød underbund
+kan vibrationer under komprimering eller trafik på for tynde gruslag øge
+porevandtrykket og midlertidigt reducere bæreevnen. Beregningen beskriver ikke
+denne udførelsesfase og forudsætter, at komprimering, lagopbygning og
+byggetrafik håndteres efter de relevante udførelseskrav.
+
+**Geonetplacering og udførelse.** Den beregnede lagtykkelse forudsætter, at
+geonettet indbygges med korrekt dæklag, afstand mellem flere geonetlag og
+overlæg i samlingerne. Disse forhold er ikke fuldt ud kontrolleret af selve
+tykkelsesberegningen. Krav til placering, dæklag og afstand mellem geonetlag
+er beskrevet i kapitel 5 og skal kontrolleres særskilt ved udførelsen.
+
+**Frost og koblingshøjde.** Kørslerne er udført med frostsikker underbund, så
+frostforhold og koblingshøjde ikke indgår i korrelationen. Hvis underbunden er
+frosttvivlsom eller frostfarlig, skal det kontrolleres særskilt, at den
+samlede opbygning ikke bliver lavere end det relevante krav til koblingshøjde.
+
+**Opslag uden for diagramområdet.** Med det aktuelle standarddatagrundlag
+ligger 30 af 48 opslagspunkter inden for designdiagrammernes område. De øvrige
+punkter ligger under eller over diagramområdet. Fordelingen afhænger af de
+aktive VejDim-kørsler og designdiagrammer og kan derfor ændre sig.
+
+Som udgangspunkt afviser værktøjet opslagspunkter uden for diagramområdet. Hvis
+tilvalget **Anvend VejDims tal uden for diagrammet** aktiveres, anvendes
+VejDims ubundne tykkelse uændret, mens reduktionen hentes fra den nærmeste
+randkurve. Reduktionen er dermed ikke bestemt i det faktiske driftspunkt, men
+er baseret på en ekstrapolation og må forventes at være behæftet med større
+usikkerhed. Se også kapitel 2, afsnit 3.
+
+**Manglende armerede kurver.** Nogle kombinationer af Eᵤ og Eₒ kan ikke
+beregnes, fordi designdiagrammet ikke indeholder en armeret kurve i det
+pågældende punkt. Hvor en armeret kurve mangler, kan geonettets reduktion ikke
+bestemmes. Antallet af sådanne opslagspunkter afhænger af de aktive
+designdiagrammer.
+
+**Asfaltpakken og trafikklasse T7.** Eₒ,ækv afhænger af den asfaltpakke, der
+ligger til grund for VejDim-kørslen. De anvendte asfaltpakker er VejDims
+standardværdier pr. trafikklasse. T7 er ikke medtaget i korrelationen, fordi
+klassen er åben. Dimensionering for T7 bør derfor foretages direkte i VejDim.
+
+## 3 Hvornår en konkret beregning bør foretages
+
+En projektspecifik VejDim-beregning eller en særskilt geoteknisk vurdering bør
+foretages, når projektets forudsætninger afviger væsentligt fra
+datagrundlaget, eller når opslaget ikke kan bestemmes med tilstrækkelig
+sikkerhed. Det gælder blandt andet, når:
+
+- projektet ligger uden for designmanualernes anvendelsesområde,
+- der anvendes et produkt eller et materiale, som ikke er dækket af
+  manualernes dokumentation,
+- materialernes gradering, friktionsvinkel eller kornstørrelse afviger fra
+  forudsætningerne,
+- underbundens E-modul er usikkert eller bestemt ud fra en vejledende
+  omregning, der ikke passer til jordtypen,
+- afvandingsforholdene afviger fra kørslernes forudsætning,
+- levetidsmålet afviger fra 20 år,
+- underbunden ikke er frostsikker,
+- udførelsen foregår på vandholdig, blød underbund under forhold, hvor
+  porevandtryk eller byggetrafik kan blive dimensionsgivende,
+- opslagspunktet ligger under eller over diagramområdet, og den ekstrapolerede
+  reduktion ikke vurderes egnet,
+- der mangler en armeret kurve for den ønskede kombination af Eᵤ og Eₒ,
+- eller der dimensioneres for trafikklasse T7.
+
+En projektspecifik VejDim-kørsel kan indtastes i kørselstabellen på
+korrelationssiden. Herefter beregnes Eₒ,ækv-matricen og opslagene på ny. En ny
+VejDim-kørsel ændrer dog ikke grundlaget for geonettets reduktion; den del
+stammer fortsat fra designdiagrammernes empiriske dokumentation.

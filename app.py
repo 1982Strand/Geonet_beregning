@@ -1149,10 +1149,12 @@ def input_trafikklasse(
             "eller over det, designdiagrammerne dækker — typisk de lave "
             "trafikklasser på blød underbund og de høje på stiv. "
             "Dimensioneringen afvises som udgangspunkt her.\n\n"
-            "Med fluebenet anvendes VejDims tykkelse alligevel, mens "
-            "geonettets besparelse i procent hentes fra diagrammets nærmeste "
-            "kurve. Besparelsen er dermed ikke målt i netop dette punkt — se "
-            "Hjælp, kapitel 2.\n\n"
+            "Med fluebenet anvendes VejDims tykkelse alligevel. Hele "
+            "geonettets procentvise besparelse antages da at være den samme "
+            "som ved den nærmeste randkurve i designdiagrammet ved samme Eᵤ. "
+            "Resultatet er derfor baseret på en ekstrapolation og må forventes "
+            "at være behæftet med større usikkerhed end resultater inden for "
+            "diagramområdet — se Hjælp, kapitel 2.\n\n"
             "Fluebenet ændrer intet i de kombinationer, der allerede kan "
             "beregnes."
         ),
@@ -1441,7 +1443,7 @@ def _kob_esc(tekst) -> str:
 
 
 def _kob_formel(*linjer: str) -> str:
-    """Regnestykket i egen ramme, sat op som i φ-korrektionsboksen.
+    """Regnestykket i egen ramme, sat op som i φᵥ-korrektionsboksen.
 
     Linjerne sættes med white-space:pre, jf. stylesheettets .kob-formel, så
     mellemrummene i opstillingen bevares og tallene står lodret på linje.
@@ -1678,8 +1680,8 @@ def _kob_figur_diagram(
 ) -> str:
     """Designdiagrammets tre kurver i punktet, med nabokurverne stiplet.
 
-    Kurverne bærer samme korrektion som beregningen — φ på den ustabiliserede
-    og φ + net på de armerede — så de afsatte punkter ligger på deres egen
+    Kurverne bærer samme korrektion som beregningen — φᵥ på den ustabiliserede
+    og φᵥ + net på de armerede — så de afsatte punkter ligger på deres egen
     kurve. Nabokurverne er de belastningsklasser, punktet ligger imellem; ved
     dimensionering efter belastningsklasse er det klasserne over og under.
     """
@@ -1853,13 +1855,18 @@ def _kob_trin1(t_klasse: str, eu: float) -> str:
         ),
         _kob_esc(f"    {tk.get('anvendelse', '')}"),
         "",
-        _kob_esc(_kob_regnelinje("NÆ10 pr. år  (tabelværdi)", naae_aar)),
+        _kob_esc(_kob_regnelinje(
+            "NÆ10 pr. år pr. vognbane  (tabelværdi)", naae_aar,
+        )),
         _kob_slutlinje(f"NÆ10, 20 år = {naae_aar} × 20", _kob_tal(naae_20)),
     )
     krop += (
         '<div class="kob-note">Trafikklassen og '
         f"Eᵤ = {_kob_esc(ui.mpa(eu))} er indtastet i trin 1. "
-        "Alt herunder følger af dem.</div>"
+        "Alt herunder følger af dem. NÆ10 er trafikbelastningen omregnet "
+        "til ækvivalente 10-tons aksler pr. vognbane. Tallet dokumenterer "
+        "trafikklassens belastning over 20 år; det er ikke en lagtykkelse "
+        "og indgår ikke direkte i diagramopslaget.</div>"
     )
     return _kob_trin(
         1, "Dimensioneringstrafik", "trafikklassetabellen, "
@@ -2097,10 +2104,11 @@ def _kob_trin4(
         if basis_red else ""
     )
     venstre += (
-        '<div class="kob-note">Faktoren f angiver punktets plads på Eₒ-aksen '
-        "og er derfor den samme i alle tre rækker; den ganges ikke på "
-        "tykkelsen, men bestemmer, hvor mellem de to kolonner hver kurve "
-        f"aflæses. {red_saetning}Da Eₒ,ækv per konstruktion er valgt, så den "
+        '<div class="kob-note">Faktoren f angiver punktets placering mellem '
+        "de to Eₒ-kolonner og er derfor den samme i alle tre rækker. Den er "
+        "ikke en procentvis korrektion af tykkelsen; den bruges i differensleddet "
+        "f × (t_høj − t_lav) ved interpolation af hver kurve. "
+        f"{red_saetning}Da Eₒ,ækv per konstruktion er valgt, så den "
         "ustabiliserede kurve rammer VejDims krav, er reduktionen "
         "designdiagrammets egen, feltdokumenterede værdi. VejDim omfatter "
         "ikke geonet, og de to metoders kriterier sammenblandes ikke.</div>"
@@ -2110,7 +2118,9 @@ def _kob_trin4(
                            t_basis_table, phi, net_kor, punkter),
         sign,
         f"De stiplede kurver er belastningsklasse {kl_lav} og {kl_hoej}; den "
-        "fuldt optrukne er Eₒ,ækv. Punkterne på Eᵤ-linjen er trin 5 og 6.",
+        "fuldt optrukne er Eₒ,ækv. Ringen viser VejDims krav fra trin 2; et "
+        "eventuelt sort punkt viser φᵥ-korrektionen i trin 5, og farvede "
+        "punkter viser 1 og 2 lag geonet fra trin 6.",
     )
     return _kob_trin(
         4, "Hvor kurven ligger i designdiagrammet",
@@ -2149,7 +2159,7 @@ def _kob_trin5(
             (
                 "Vægtet friktionsvinkel:",
                 _kob_esc(
-                    f"φ = Σ({data['symbol']}ᵢ × φᵢ) / Σ{data['symbol']}ᵢ = "
+                    f"φᵥ = Σ({data['symbol']}ᵢ × φᵢ) / Σ{data['symbol']}ᵢ = "
                     f"({led}) / {_kob_tal(data['total_v'])}"
                 ),
             ),
@@ -2168,14 +2178,14 @@ def _kob_trin5(
     t_efter = t_uarm_kor if t_uarm_kor else t_krav
     poster.append((
         "Korrektionsfaktor:",
-        _kob_esc(
-            f"kᵩ = {_kob_tal(K_PHI, 2)} × ({_kob_tal(phi, 2)} − "
+        _kob_esc("k") + "<sub>φ</sub>" + _kob_esc(
+            f" = {_kob_tal(K_PHI, 2)} × ({_kob_tal(phi, 2)} − "
             f"{_kob_tal(PHI_BASIS, 0)}) = {_kob_tal(phi_kor, 4)} = "
         ) + f"<b>{_kob_esc(_kob_tal(phi_kor * 100, 2))} %</b>",
     ))
     if abs(phi_kor) >= 1e-9:
         poster.append((
-            "φ-korrigeret tykkelse:",
+            "φᵥ-korrigeret tykkelse:",
             _kob_esc(
                 f"t = {_kob_tal(t_krav)} × (1 {'−' if phi_kor < 0 else '+'} "
                 f"{_kob_tal(abs(phi_kor), 4)}) = "
@@ -2188,21 +2198,21 @@ def _kob_trin5(
     if abs(phi_kor) >= 1e-9:
         note = (
             "Diagrammerne er tegnet for et referencemateriale med "
-            f"φ = {_kob_esc(_kob_tal(PHI_BASIS, 0))}°. De valgte lag afviger "
+            f"φᵥ = {_kob_esc(_kob_tal(PHI_BASIS, 0))}°. De valgte lag afviger "
             "herfra, og kurven forskydes tilsvarende; den korrigerede "
             "tykkelse er det punkt, materialerne faktisk ligger på."
         )
     else:
         note = (
             "Diagrammerne er tegnet for et referencemateriale med "
-            f"φ = {_kob_esc(_kob_tal(PHI_BASIS, 0))}°, og beregningen føres "
+            f"φᵥ = {_kob_esc(_kob_tal(PHI_BASIS, 0))}°, og beregningen føres "
             "med samme værdi. Korrektionen er dermed nul, og diagrammets "
             "værdi anvendes uændret. Vælges andre materialer under "
             "Brugerdefineret, slår korrektionen igennem her."
         )
     krop += f'<div class="kob-note">{note}</div>'
     return _kob_trin(
-        nr, "φ-korrektion for materialerne", kilde, krop,
+        nr, "φᵥ-korrektion for materialerne", kilde, krop,
         resultat=f"{_kob_tal(t_efter)} mm",
         resultat_note=(
             "ustabiliseret, korrigeret" if abs(phi_kor) >= 1e-9
@@ -2273,7 +2283,7 @@ def _kob_trin6(
         if abs(phi_kor) >= 1e-9:
             linjer.append(
                 _kob_esc(_kob_regnelinje(
-                    f"{'+' if phi_kor > 0 else '−'} φ-korrektion",
+                    f"{'+' if phi_kor > 0 else '−'} φᵥ-korrektion",
                     f"{_kob_tal(abs(basis * phi_kor))} mm"))
                 + _kob_svag(f"{b_tal} × {_kob_tal(abs(phi_kor) * 100, 2)} %")
             )
@@ -2282,7 +2292,7 @@ def _kob_trin6(
         hale = ""
         if red_krav is not None:
             hale = f"−{_kob_tal(red_krav)} % af {_kob_tal(t_krav)}"
-            # Den anden reference nævnes kun, når φ-korrektionen flytter
+            # Den anden reference nævnes kun, når φᵥ-korrektionen flytter
             # udgangspunktet — ellers er de to procenter det samme tal.
             if red_kor is not None and t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
                 hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_tal(t_uarm_kor)}"
@@ -2311,7 +2321,7 @@ def _kob_trin6(
         "<b>To referencer for procenterne:</b> regnestykket her tager udgangspunkt i den ukorrigerede værdi på "
         f"{_kob_esc(krav_kilde)} {_kob_esc(_kob_tal(t_krav))} mm, så leddene "
         "summerer til resultatet, mens resultatkortet øverst måler "
-        f"reduktionen mod de φ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor))} "
+        f"reduktionen mod de φᵥ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor))} "
         "mm, hvor begge sider hviler på de valgte materialer. Begge er "
         "angivet, så de to sæt procenter ikke fremstår som en "
         "uoverensstemmelse.</div>"
@@ -2419,7 +2429,8 @@ def _kob_bk_trin2(
         sign,
         f"Den fuldt optrukne kurve er klasse {klasse}"
         + (f"; de stiplede er klasse {nabo_tekst}" if nabo_tekst else "")
-        + ". Punkterne på Eᵤ-linjen er trin 3 og 4.",
+        + ". Ringen viser den ustabiliserede aflæsning fra trin 2; udfyldte "
+        "punkter viser de efterfølgende værdier fra trin 3 og 4.",
     )
     return _kob_trin(
         2, "Aflæsning i designdiagrammet",
@@ -2442,7 +2453,7 @@ def _kob_punkter(
     if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
         punkter.append((t_uarm_kor, "#15211A", "fyldt"))
         sign.append('<div class="kob-prik"></div>'
-                    f"{_kob_tal(t_uarm_kor)} mm φ-korrigeret")
+                    f"{_kob_tal(t_uarm_kor)} mm φᵥ-korrigeret")
     for t, farve, mærkat in (
         (t_1lag, _KOB_FARVE_1LAG, "1 lag"), (t_2lag, _KOB_FARVE_2LAG, "2 lag"),
     ):
@@ -2496,7 +2507,7 @@ def _render_kobling_sektion(
         paa_rand = er_trafik and grundlag.get("zone") in (
             TRAFIK_UNDER, TRAFIK_OVER
         )
-        with st.expander("Beregningsdetaljer", expanded=False):
+        with st.expander("Sådan er resultatet beregnet", expanded=False):
             if paa_rand:
                 st.caption(
                     "Driftspunktet ligger uden for designdiagrammernes "
@@ -2537,8 +2548,8 @@ def _render_kobling_sektion(
             '<div class="kob-fod">VejDim omfatter ikke geonet. Kørslerne '
             "fastlægger alene driftspunktet, mens reduktionen i trin 6 er "
             "designdiagrammets egen, feltdokumenterede værdi. Kørslerne står "
-            "under Trafikklasse-korrelation, og metoden er beskrevet i Hjælp, "
-            "afsnit 1 og 2.</div>"
+            "under Trafikklasse-korrelation. Metoden er beskrevet i Hjælp, "
+            "kapitel 1, afsnit 3–6, og kapitel 2, afsnit 1–3.</div>"
         )
         grundlag_tekst = f"fra trafikklasse {t_klasse}"
     else:
@@ -2564,8 +2575,8 @@ def _render_kobling_sektion(
         fod = (
             '<div class="kob-fod">Designdiagrammerne hviler på feltforsøg fra '
             "GS-GRID og Tensar. Kurverne og deres gyldighedsområde er "
-            "beskrevet i Hjælp, afsnit 3, og produkternes effektindeks i "
-            "afsnit 5. Diagrammernes egne tabeller står under "
+            "beskrevet i Hjælp, kapitel 3, afsnit 1–3, kapitel 4, afsnit 2, "
+            "og kapitel 5, afsnit 1–3. Diagrammernes egne tabeller står under "
             "Designdiagrammer.</div>"
         )
         grundlag_tekst = f"fra belastningsklasse {klasse}"
@@ -2574,7 +2585,7 @@ def _render_kobling_sektion(
     # Titlen sættes fed og underrubrikken normal, som i sektionens hoved i
     # designforslaget; ekspanderens etiket sættes af markdown.
     resultat = t_1lag if t_1lag is not None else t_2lag
-    overskrift = f"**Beregningsdetaljer** -> {grundlag_tekst}"
+    overskrift = f"**Sådan er resultatet beregnet** · {grundlag_tekst}"
     if resultat is not None:
         overskrift += f" til {ui.mm(resultat)} bærelag"
     with st.expander(overskrift, expanded=False):
@@ -2657,7 +2668,8 @@ def _korrektion_label(g: dict) -> str | None:
 
     Fortegnskonvention som resten af appen: positiv = tykkere bærelag (mindre
     effektiv), negativ = tyndere (mere effektiv). Returnerer fx '−10 %',
-    '+20 %', '0 % (ref.)' eller '−10 … −20 %' for interval-produkter
+    '+20 %', '0 % (ref.)' eller 'konservativ −10 % · optimal −20 %' for
+    interval-produkter
     (NX750/NX850). None for det manuelle produkt (korrektion sættes af brugeren).
     """
     if g.get("navn") == "Anden armering (manuel)":
@@ -2665,7 +2677,7 @@ def _korrektion_label(g: dict) -> str | None:
     interval = g.get("korrektion_interval")
     if interval:
         best, kons = interval  # (best-case, konservativ)
-        return f"{kons * 100:+.0f} … {best * 100:+.0f} %"
+        return f"{_pct_fortegn(kons)} (opt. {_pct_fortegn(best)})"
     kor = g.get("korrektion")
     if kor is None:
         return None
@@ -2701,6 +2713,19 @@ def _produkt_label(navn: str) -> str:
     return f"{titel} ({' · '.join(dele)})" if dele else titel
 
 
+def _korrektion_interval_note(geonet: dict | None) -> str | None:
+    """Kort forklaring ved produktvælgeren for et korrektionsinterval."""
+    if not geonet:
+        return None
+    interval = geonet.get("korrektion_interval")
+    if not interval:
+        return None
+    return (
+        "Hovedresultatet bruger den konservative værdi; den optimale værdi "
+        "vises som supplement."
+    )
+
+
 def _resultat_til_gruppe(
     res: dict, geonet: dict, valgt_klasse: int
 ) -> dict | None:
@@ -2715,7 +2740,7 @@ def _resultat_til_gruppe(
 
     t_eks = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
-    # Reduktion sammenlignes mod den φ-korrigerede uarmerede reference,
+    # Reduktion sammenlignes mod den φᵥ-korrigerede uarmerede reference,
     # så begge sider af regnestykket er konsistent korrigeret for materiale.
     t_uarm_ref = res.get("t_uarmeret_phi_kor_mm") or t_uarm
     red_eks = (t_uarm_ref - t_eks) / t_uarm_ref if t_uarm_ref else None
@@ -2773,7 +2798,7 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
 
     t_ref = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
-    # Reduktion mod φ-korrigeret reference (se _resultat_til_gruppe).
+    # Reduktion mod φᵥ-korrigeret reference (se _resultat_til_gruppe).
     t_uarm_ref = res.get("t_uarmeret_phi_kor_mm") or t_uarm
     red_ref = (t_uarm_ref - t_ref) / t_uarm_ref if t_uarm_ref else None
     produkt = {
@@ -2948,7 +2973,7 @@ def _optimal_beregning(
     if abs(phi_kor) > 0.0005:
         linjer.append((
             "−" if phi_mm < 0 else "+",
-            f"φ-korrektion, {_pct_fortegn(phi_kor, 1)}",
+            f"φᵥ-korrektion, {_pct_fortegn(phi_kor, 1)}",
             abs(phi_mm),
         ))
     return {
@@ -3003,7 +3028,9 @@ def _render_valgt_net_detaljer(
             return (
                 f'<section class="rt-detaljer-lag">'
                 f'<div class="rt-detaljer-lag-titel">{html.escape(label)}</div>'
-                '<div class="rt-detaljer-tom">Ingen gyldig beregning.</div></section>'
+                '<div class="rt-detaljer-tom">'
+                'Ikke gyldigt for denne kombination.'
+                '</div></section>'
             )
 
         t_uarm = produkt.get("t_uarmeret_mm")
@@ -3041,16 +3068,20 @@ def _render_valgt_net_detaljer(
 
         phi_tekst = _pct_fortegn(phi_kor, 1)
         net_forklaring = (
-            f"Effektindeks {_effektindeks(net_navn)}. Beregningen tager "
-            f"udgangspunkt i den nedre, konservative ende, indeks {index}, "
+            f"Effektindeks {_effektindeks(net_navn)}. Hovedresultatet tager "
+            f"udgangspunkt i den konservative ende, indeks {index}, "
             f"svarende til net-korrektionen {_pct_fortegn(net_kor)}."
         ) if ender else None
+        net_titel = (
+            f"Net-korrektion, konservativ · indeks {index}"
+            if ender else f"Net-korrektion, indeks {index}"
+        )
         rows = [
             _raekke("", "Ustabiliseret bærelagstykkelse", ui.mm(t_uarm)),
             _raekke("−", "Basisreduktion, referencenet", ui.mm(abs(basis_mm or 0))),
             _raekke(
                 "−" if (net_mm or 0) < 0 else "+",
-                f"Net-korrektion, indeks {index}",
+                net_titel,
                 ui.mm(abs(net_mm or 0)),
                 forklaring=net_forklaring,
             ),
@@ -3059,7 +3090,7 @@ def _render_valgt_net_detaljer(
             rows.append(
                 _raekke(
                     "−" if (phi_mm or 0) < 0 else "+",
-                    f"φ-korrektion, {phi_tekst}",
+                    f"φᵥ-korrektion, {phi_tekst}",
                     ui.mm(abs(phi_mm or 0)),
                 )
             )
@@ -3078,20 +3109,21 @@ def _render_valgt_net_detaljer(
             )
             optimal_html = (
                 f'<div class="rt-detaljer-optimal" title="{tip}">'
-                '<span>Optimal korrektion, indeks '
-                f'{html.escape(str(optimal["indeks"]))}</span>'
+                '<span>Optimal ende · effektindeks '
+                f'{html.escape(str(optimal["indeks"]))} · net-korrektion '
+                f'{html.escape(_pct_fortegn(optimal["kor"]))}</span>'
                 '<span class="rt-detaljer-optimal-tal">'
                 f'{html.escape(ui.mm(optimal["t_mm"]))}</span>'
                 '</div>'
                 '<div class="rt-detaljer-optimal-note">'
-                'Der gøres opmærksom på, at regnestykket ovenfor er opgjort ved '
+                'Hovedresultatet ovenfor er opgjort ved den konservative ende, '
                 f'indeks {html.escape(str(index))}. Mellemregningen bag den '
                 'optimale værdi vises ved resultatet.</div>'
             )
 
         # Regnestykket dekomponerer den rå aflæsning, så leddene summerer til
         # resultatet. Resultatkortet og produkttabellen måler derimod mod den
-        # φ-korrigerede reference, hvor begge sider hviler på de valgte
+        # φᵥ-korrigerede reference, hvor begge sider hviler på de valgte
         # materialer. Forskellen anføres, så de to procenter ikke fremstår
         # som en uoverensstemmelse.
         t_uarm_kor = produkt.get("t_uarmeret_phi_kor_mm")
@@ -3102,7 +3134,7 @@ def _render_valgt_net_detaljer(
                 '<div class="rt-detaljer-optimal-note">'
                 "Regnestykket tager udgangspunkt i den ukorrigerede værdi på "
                 f"{html.escape(ui.mm(t_uarm))}. Resultatkortet øverst måler "
-                "reduktionen mod de φ-korrigerede "
+                "reduktionen mod de φᵥ-korrigerede "
                 f"{html.escape(ui.mm(t_uarm_kor))} og angiver derfor "
                 f"{html.escape(ui.procent((t_uarm_kor - t_arm) / t_uarm_kor * 100))}"
                 ".</div>"
@@ -3961,7 +3993,7 @@ def _render_opbygningsvisualisering(
             t_indtastet_mm=t_indtastet_for_linje,
         ))
 
-    # Søjle 2: Uarmeret basistykkelse (φ-korrigeret)
+    # Søjle 2: Uarmeret basistykkelse (φᵥ-korrigeret)
     if t_uarm_krav is not None:
         status_tekst_uarm, status_farve_uarm = _status_for_krav(
             t_indtastet_for_linje, t_uarm_krav, t_krav_best=None,
@@ -3969,8 +4001,8 @@ def _render_opbygningsvisualisering(
         sub_red_u = _sub_lag_skaleret_fra_materialer(materialer, t_uarm_krav)
         brug_sub_u = len(sub_red_u) >= 2
         snit_liste.append(rapport_mod.Snit(
-            titel="Ustabiliseret basistykkelse (φ-korrigeret)" if har_indtastet
-                  else "Ustabiliseret basistykkelse",
+            titel="Ustabiliseret bærelagstykkelse (φᵥ-korrigeret)" if har_indtastet
+                  else "Ustabiliseret bærelagstykkelse",
             t_baerelag_mm=t_uarm_krav,
             geonet_y_fracs=[],
             sub_lag=sub_red_u if brug_sub_u else None,
@@ -3983,7 +4015,7 @@ def _render_opbygningsvisualisering(
         ))
     else:
         snit_liste.append(rapport_mod.Snit(
-            titel="Ustabiliseret basistykkelse",
+            titel="Ustabiliseret bærelagstykkelse",
             t_baerelag_mm=None,
             geonet_y_fracs=[],
             sub_lag=None,
@@ -3997,8 +4029,8 @@ def _render_opbygningsvisualisering(
 
     # Søjle 3+4: byg reducerede sub_lag når brugeren har angivet ≥2 materialer.
     # Reduktionen fordeles proportionalt — matematisk identisk med den vægtede
-    # φ-tilgang (lineær formel, se core/data.py:K_PHI). Når der er færre end 2
-    # lag falder vi tilbage til den neutrale "φ-vægtet bærelag"-blok.
+    # φᵥ-tilgang (lineær formel, se core/data.py:K_PHI). Når der er færre end 2
+    # lag falder vi tilbage til den neutrale "φᵥ-vægtet bærelag"-blok.
     sub_red_1 = _sub_lag_skaleret_fra_materialer(materialer, t_1)
     sub_red_2 = _sub_lag_skaleret_fra_materialer(materialer, t_2)
     brug_sub_1 = len(sub_red_1) >= 2
@@ -4120,11 +4152,13 @@ def _render_oversigt_expanders(
     t_basis_table: dict | None = None,
     eo_interpoleret: bool = False,
     vis_opbygning: bool = True,
+    status_slot=None,
 ) -> None:
     """Opbygningsafsnittet og informations-expanderne under resultaterne.
 
     Beregningsmetoden og datagrundlaget står i Hjælp og gentages ikke her;
-    expanderne rummer alene advarsler og udførelseskrav for det valgte net.
+    expanderne rummer alene kontrolpunkter, anbefalinger og udførelseskrav
+    for det valgte net.
 
     Bruges af både Standard (phi=37, geonet=None, materialer=None)
     og Brugerdefineret (egne phi/geonet/materialer-værdier).
@@ -4152,6 +4186,7 @@ def _render_oversigt_expanders(
     # bedst reducerende net (gælder også specifikt produkt, da begge
     # lag-modes vises samtidig i den nye UI).
     advarsler_pr_lag: list[tuple[str, str]] = []
+    placeringsanbefalinger_pr_lag: list[tuple[str, str]] = []
     lag_by_advarsel: dict[str, set[str]] = {}
     advarsler_unik: list[str] = []
     seen_a: set[str] = set()
@@ -4227,8 +4262,13 @@ def _render_oversigt_expanders(
             advarsler_pr_lag.append((a, lm))
             lag_by_advarsel.setdefault(a, set()).add(lm)
         for a, a_lm in _placeringsadvarsler_for_valgt_opbygning(lm):
-            advarsler_pr_lag.append((a, a_lm))
-            lag_by_advarsel.setdefault(a, set()).add(a_lm)
+            # En overskredet maksimal afstand er en anbefaling om placering,
+            # ikke et krav der i sig selv gør beregningen ugyldig.
+            if "Anbefalingen for bedst effekt" in a:
+                placeringsanbefalinger_pr_lag.append((a, a_lm))
+            else:
+                advarsler_pr_lag.append((a, a_lm))
+                lag_by_advarsel.setdefault(a, set()).add(a_lm)
 
     for a, lm in advarsler_pr_lag:
         if len(lag_by_advarsel[a]) == 1:
@@ -4284,6 +4324,19 @@ def _render_oversigt_expanders(
     # --- Tilpassede anbefalinger baseret på bedste produkt --------------
     anbefalinger: list[str] = []
 
+    # Placeringsanbefalinger holdes adskilt fra kontrolpunkterne. Hvis den
+    # samme anbefaling gælder begge lag-modes, vises den kun én gang.
+    lag_by_placeringsanbefaling: dict[str, set[str]] = {}
+    for a, lm in placeringsanbefalinger_pr_lag:
+        lag_by_placeringsanbefaling.setdefault(a, set()).add(lm)
+    seen_placeringsanbefaling: set[str] = set()
+    for a, lm in placeringsanbefalinger_pr_lag:
+        if len(lag_by_placeringsanbefaling[a]) == 1:
+            a = _advarsel_med_lagtekst(a, lm)
+        if a not in seen_placeringsanbefaling:
+            seen_placeringsanbefaling.add(a)
+            anbefalinger.append(a)
+
     # Anbefalinger bruger den afrundede (praktisk indbyggelige) tykkelse —
     # det er den værdi der konkret skal bygges, og som matcher kortenes
     # headline-tal.
@@ -4337,23 +4390,82 @@ def _render_oversigt_expanders(
             msg += "."
         anbefalinger.append(msg)
 
-    antal = len(advarsler_unik) + len(anbefalinger)
-    titel_adv = (
-        f"Advarsler og anbefalinger ({antal})"
-        if antal else "Advarsler og anbefalinger"
-    )
-    # Advarsler og udførelseskrav er konklusioner og bliver liggende
+    antal_kontrolpunkter = len(advarsler_unik)
+    antal_anbefalinger = len(anbefalinger)
+    antal = antal_kontrolpunkter + antal_anbefalinger
+    if antal:
+        dele_titel: list[str] = []
+        if antal_kontrolpunkter:
+            ord_kontrol = "kontrolpunkt" if antal_kontrolpunkter == 1 else "kontrolpunkter"
+            dele_titel.append(f"{antal_kontrolpunkter} {ord_kontrol}")
+        if antal_anbefalinger:
+            ord_anbefaling = "anbefaling" if antal_anbefalinger == 1 else "anbefalinger"
+            dele_titel.append(f"{antal_anbefalinger} {ord_anbefaling}")
+        titel_adv = "Kontrolpunkter og anbefalinger · " + " · ".join(dele_titel)
+    else:
+        titel_adv = "Kontrolpunkter og anbefalinger"
+
+    if status_slot is not None:
+        if antal:
+            statusdele: list[str] = []
+            if antal_kontrolpunkter:
+                ord_kontrol = (
+                    "kontrolpunkt" if antal_kontrolpunkter == 1
+                    else "kontrolpunkter"
+                )
+                kontrol_tooltip = (
+                    f"Der er {antal_kontrolpunkter} {ord_kontrol}. "
+                    "Fold 'Kontrolpunkter og anbefalinger' ud længere nede "
+                    "på siden for at se detaljerne."
+                )
+                statusdele.append(
+                    '<span class="bg-resultat-status-item bg-resultat-status-adv" '
+                    f'title="{html.escape(kontrol_tooltip, quote=True)}" '
+                    'aria-label="Kontrolpunkter">'
+                    f'⚠ <b>{antal_kontrolpunkter}</b> {ord_kontrol}'
+                    '</span>'
+                )
+            if antal_anbefalinger:
+                ord_anbefaling = (
+                    "anbefaling" if antal_anbefalinger == 1
+                    else "anbefalinger"
+                )
+                anbefaling_tooltip = (
+                    f"Der er {antal_anbefalinger} {ord_anbefaling}. "
+                    "Fold 'Kontrolpunkter og anbefalinger' ud længere nede "
+                    "på siden for at se detaljerne."
+                )
+                statusdele.append(
+                    '<span class="bg-resultat-status-item bg-resultat-status-info" '
+                    f'title="{html.escape(anbefaling_tooltip, quote=True)}" '
+                    'aria-label="Anbefalinger">'
+                    f'ⓘ <b>{antal_anbefalinger}</b> {ord_anbefaling}'
+                    '</span>'
+                )
+            status_slot.html(
+                '<div class="bg-resultat-status">'
+                + "".join(statusdele)
+                + "</div>"
+            )
+        else:
+            status_slot.empty()
+
+    # Kontrolpunkter, anbefalinger og udførelseskrav er konklusioner og bliver liggende
     # sammenfoldede. Antallet står i overskriften, så det fremgår, at der er
     # noget at læse.
     with st.expander(titel_adv):
         if antal == 0:
             st.caption(
-                "Ingen generelle advarsler for den valgte Eᵤ og belastning."
+                "Ingen kontrolpunkter for den valgte Eᵤ og belastning."
             )
-        for a in advarsler_unik:
-            vis_advarsel(a)
-        for r in anbefalinger:
-            vis_anbefaling(r)
+        if advarsler_unik:
+            st.markdown("**Kontrolpunkter**")
+            for a in advarsler_unik:
+                vis_advarsel(a)
+        if anbefalinger:
+            st.markdown("**Anbefalinger**")
+            for r in anbefalinger:
+                vis_anbefaling(r)
 
     # --- Udførelseskrav ---------------------------------------------------
     with st.expander("Udførelseskrav"):
@@ -4362,7 +4474,7 @@ def _render_oversigt_expanders(
 - Underbund jævnes og planeres — ingen skarpe fremspring eller huller
 - Komprimering i lag på maksimalt 200–300 mm
 - Direkte kørsel på udlagt geonet er **ikke tilladt**
-- Overlap ved skød: minimum **300 mm** (eller leverandørens anvisning)
+- Overlæg ved samlinger udføres efter kravene for det valgte produkt
 - Geonettet udlægges stramt uden folder eller bølger
         """)
 
@@ -4371,6 +4483,7 @@ def _render_oversigt_expanders(
             navn_vis = geonet_navn or geonet["navn"]
             krav = placement_requirements(geonet)
             min_dk_mm = krav["min_top_cover_mm"]
+            overlap_mm, overlap_betingelse = overlap_krav_mm(krav, eu)
             afstand_str = (
                 f"{krav['min_spacing_mm']:.0f}–"
                 f"{ui.mm(krav['max_spacing_mm'])}"
@@ -4383,6 +4496,8 @@ def _render_oversigt_expanders(
                 f"**Krav for {navn_vis}:**\n"
                 f"- Minimum dæklag over geonet: **{min_dk_mm} mm**\n"
                 f"- Afstand mellem geonetlag: **{afstand_str}**\n"
+                f"- Minimum overlæg ved samlinger: **{ui.mm(overlap_mm)}** "
+                f"({overlap_betingelse})\n"
                 f"- Max kornstørrelse i kontakt med geonet: {korn_str}"
             )
         else:
@@ -4526,9 +4641,10 @@ def _render_breakdown_best_case(
     st.markdown(
         f'<div style="font-size:0.85rem;color:#444;'
         f'padding:4px 10px 0 10px;margin-top:-6px">'
-        f'Best case (effektindeks i øvre ende, net-kor {kor_pct} %): '
+        f'Optimal ende (effektindeks i øvre ende, net-kor {kor_pct} %): '
         f'<b>{ui.mm(t_best)}</b>{reduktion_txt} — '
-        f'interval: <b>{t_best:.0f}–{ui.mm(t_konservativ)}</b>'
+        f'konservativ: <b>{ui.mm(t_konservativ)}</b> · '
+        f'optimal: <b>{ui.mm(t_best)}</b>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -4599,7 +4715,7 @@ def _vis_beregnings_breakdown(
         lag_mode="2_lag", t_basis_table=t_basis_table, skala=skala,
     )
 
-    # Reduktion sammenlignes mod φ-korrigeret uarmeret reference, så net-effekten
+    # Reduktion sammenlignes mod φᵥ-korrigeret uarmeret reference, så net-effekten
     # alene afspejles i procentdelen (se calculator.beregn() for begrundelse).
     t_uarm_final = (
         ref_uarm.get("t_uarmeret_phi_kor_mm") or ref_uarm.get("t_uarmeret_mm")
@@ -4619,12 +4735,12 @@ def _vis_beregnings_breakdown(
             ]
             if abs(phi_kor_mm_u) > 0.5:
                 rows_u.append((
-                    "φ-korrektion",
+                    "φᵥ-korrektion",
                     f"{_dk_num(phi_kor_mm_u, '+.0f')} mm",
-                    f"φ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
+                    f"φᵥ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
                 ))
             else:
-                rows_u.append(("(ingen φ- eller net-korrektion)", "", ""))
+                rows_u.append(("(ingen φᵥ- eller net-korrektion)", "", ""))
             _render_breakdown_tabel(rows_u, t_uarm_final)
         else:
             st.caption("Kan ikke beregnes for denne Eᵤ/Eₒ-kombination.")
@@ -4642,9 +4758,9 @@ def _vis_beregnings_breakdown(
                 rows_1: list[tuple[str, str, str]] = [
                     ("T_basis_stabiliseret (opslag)", f"{ui.mm(t_b_1)}", ""),
                     (
-                        "φ-korrektion",
+                        "φᵥ-korrektion",
                         f"{_dk_num(phi_kor_mm_1, '+.0f')} mm",
-                        f"φ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
+                        f"φᵥ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
                     ),
                     (
                         "Net-korrektion",
@@ -4675,9 +4791,9 @@ def _vis_beregnings_breakdown(
                 rows_2: list[tuple[str, str, str]] = [
                     ("T_basis_stabiliseret (opslag)", f"{ui.mm(t_b_2)}", ""),
                     (
-                        "φ-korrektion",
+                        "φᵥ-korrektion",
                         f"{_dk_num(phi_kor_mm_2, '+.0f')} mm",
-                        f"φ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
+                        f"φᵥ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
                     ),
                     (
                         "Net-korrektion",
@@ -4762,7 +4878,7 @@ def _faste_forudsaetninger() -> None:
     ui.etiket("Faste forudsætninger")
     st.markdown(
         "I standardberegningen forudsættes 1 samlet bærelag, med en "
-        f"friktionsvinkel φ = {PHI_BASIS:g}°. Der kan derfor ikke "
+        f"friktionsvinkel φᵥ = {PHI_BASIS:g}°. Der kan derfor ikke "
         "vælges forskellige materialelag. Reduktion i bærelagstykkelser "
         "korrigeres for de forskellige geonets effektindeks, som er "
         "virkningsgraden set i forhold til referencenettene, med indeks 100."
@@ -4918,7 +5034,7 @@ def _note_uarmeret(eo_interpoleret: bool, phi: float) -> str:
     if eo_interpoleret:
         dele.append("interpoleret")
     if abs(phi - PHI_BASIS) > 0.05:
-        dele.append("φ-korrigeret")
+        dele.append("φᵥ-korrigeret")
     return " · ".join(dele)
 
 
@@ -4936,7 +5052,7 @@ def _vis_resultatkort(
 ) -> None:
     """Resultatrækken: ustabiliseret tykkelse og de to armerede alternativer.
 
-    Kortet kaldes med den φ-korrigerede ustabiliserede tykkelse, og
+    Kortet kaldes med den φᵥ-korrigerede ustabiliserede tykkelse, og
     reduktionen måles derfor mod den — som produkttabellens reduktioner,
     snittene i opbygningen og rapporten gør det. Begge sider af
     sammenligningen hviler dermed på de valgte materialer, og de fire
@@ -4998,7 +5114,9 @@ def _vis_resultatkort(
     }]
     kort += [k for k in (kort_1, kort_2) if k]
 
-    ui.resultatkort(kort, badge_tekst="TYNDEST" if standard else "ANBEFALET")
+    # Mærkatet beskriver det tyndeste beregnede alternativ, ikke en faglig
+    # anbefaling. Egentlige anbefalinger vises separat under resultatet.
+    ui.resultatkort(kort, badge_tekst="TYNDEST")
 
 
 def render_standard() -> None:
@@ -5016,7 +5134,7 @@ def render_standard() -> None:
     with ui.trin_kort(2, "Forudsætninger") as trin2:
         _faste_forudsaetninger()
         trin2.opsummering = (
-            f"φ {ui.grader(PHI_BASIS)} · ingen φ-korrektion"
+            f"φᵥ {ui.grader(PHI_BASIS)} · ingen φᵥ-korrektion"
         )
 
     eo = grundlag["eo"]
@@ -5053,7 +5171,7 @@ def render_standard() -> None:
                 haard_fejl = p["fejl"]
                 break
 
-    # Den ustabiliserede reference vises φ-korrigeret — som snittene i
+    # Den ustabiliserede reference vises φᵥ-korrigeret — som snittene i
     # opbygningen, rapporten og produkttabellens reduktioner gør det — så de
     # to sider af sammenligningen hviler på samme materialer. Den rå aflæsning
     # anføres i parentes under kortet, jf. _vis_resultatkort().
@@ -5094,6 +5212,7 @@ def render_standard() -> None:
 
     # --- Resultater -----------------------------------------------------
     vis_kobling = False
+    status_slot = None
     with ui.resultat_blok(_resultat_note(eu, grundlag)):
         if haard_fejl:
             vis_fejl(haard_fejl)
@@ -5118,6 +5237,12 @@ def render_standard() -> None:
                 )
 
             valgt_geonet = find_geonet(valgt_net)
+            interval_note = _korrektion_interval_note(valgt_geonet)
+            if interval_note:
+                st.html(
+                    '<div class="bg-produkt-interval-note">'
+                    f'{html.escape(interval_note)}</div>'
+                )
             valgt_1 = next(
                 (p for p in prod_1lag if p.get("navn") == valgt_net), None
             )
@@ -5139,6 +5264,10 @@ def render_standard() -> None:
                 )
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
+
+            # Udfyldes efterfølgende, når kontrolpunkter og anbefalinger er
+            # samlet, men står visuelt lige under resultatkortene.
+            status_slot = st.empty()
 
             _render_opbygning_afsnit(
                 eu, ref_1, ref_2,
@@ -5193,14 +5322,30 @@ def render_standard() -> None:
             geonet=valgt_geonet,
         )
 
+    # Advarsler og udførelseskrav skal følge det produkt, som står i
+    # resultatblokken — ikke nødvendigvis det generelt tyndeste produkt.
+    # De globale bedste-grupper bruges fortsat til produktoversigten, men
+    # informationssektionerne skal have samme produktkontekst som resultatet.
+    valgt_gruppe_1 = (
+        _resultat_til_gruppe(valgt_1, valgt_geonet, valgt_klasse)
+        if valgt_1 is not None else None
+    )
+    valgt_gruppe_2 = (
+        _resultat_til_gruppe(valgt_2, valgt_geonet, valgt_klasse)
+        if valgt_2 is not None else None
+    )
+
     # --- Informations-expandere ----------------------------------------
     _render_oversigt_expanders(
-        eu, eo, bedste_1, bedste_2,
+        eu, eo, valgt_gruppe_1, valgt_gruppe_2,
         ref_1=ref_1, ref_2=ref_2,
         prod_1lag=prod_1lag, prod_2lag=prod_2lag,
+        geonet=valgt_geonet,
+        geonet_navn=valgt_net,
         t_basis_table=t_basis_table,
         eo_interpoleret=eo_interpoleret,
         vis_opbygning=False,
+        status_slot=status_slot,
     )
 
 
@@ -5222,7 +5367,7 @@ def _pct_fortegn(v: float, decimaler: int = 0) -> str:
     ui.procent() angiver ingen fortegn og anvendes til rene procentangivelser;
     net-korrektionen aflæses derimod som en signeret størrelse.
 
-    φ-korrektionen er lille og angives med én decimal, så en ændring af
+    φᵥ-korrektionen er lille og angives med én decimal, så en ændring af
     friktionsvinklen kan aflæses i tallet.
     """
     return (
@@ -5245,7 +5390,7 @@ def _delta_mm(v: float) -> str:
 
 
 def _phi_tabel_data(materialer: list[dict]) -> dict:
-    """Byg data til φ-beregningstabel — genbruges af opsummeringsboks og trin 3.
+    """Byg data til φᵥ-beregningstabel — genbruges af opsummeringsboks og trin 3.
 
     Returnerer dict med:
         tabel_md       — markdown-tabel (header + adskiller + rækker)
@@ -5268,7 +5413,7 @@ def _phi_tabel_data(materialer: list[dict]) -> dict:
     symbol = "p" if lag_mode_pct else "t"
     feltnavn = "Andel" if lag_mode_pct else "Tykkelse"
 
-    header = f"| Lag | Materiale | {feltnavn} | φ (°) | Vægtet bidrag |"
+    header = f"| Lag | Materiale | {feltnavn} | φᵢ (°) | Vægtet bidrag |"
     sep = "|---|---|---:|---:|---:|"
 
     rows: list[str] = []
@@ -5304,9 +5449,9 @@ def _vis_phi_opsummeringsboks(
     materialer: list[dict],
     phi_final: float,
 ) -> None:
-    """Opsummeringsboks under lag-inputs: tabel, formel, φ-korrektion, mm-ækvivalent.
+    """Opsummeringsboks under lag-inputs: tabel, formel, φᵥ-korrektion, mm-ækvivalent.
 
-    Boksen viser mellemregningen bag den vægtede φ.
+    Boksen viser mellemregningen bag den vægtede φᵥ.
     """
     data = _phi_tabel_data(materialer)
     phi_weighted = data["phi_weighted"]
@@ -5323,23 +5468,23 @@ def _vis_phi_opsummeringsboks(
 
     boks_kol, _ = st.columns([1, 1])
     with boks_kol, st.container(border=True):
-        st.markdown("**φ-beregning fra materialelagene**")
+        st.markdown("**φᵥ-beregning fra materialelagene**")
         st.markdown(data["tabel_md"])
         st.markdown(
-            f"**Vægtet φ** = Σ({data['symbol']}ᵢ × φᵢ) / Σ({data['symbol']}ᵢ) = "
+            f"**Vægtet φᵥ** = Σ({data['symbol']}ᵢ × φᵢ) / Σ({data['symbol']}ᵢ) = "
             f"{bidrag_str} / {v_str} = **{phi_w_str}°**"
         )
 
         if overskrevet:
             st.markdown(
-                f"φ overskrevet manuelt — bruger **{phi_f_str}°** "
+                f"φᵥ overskrevet manuelt — bruger **{phi_f_str}°** "
                 f"i resten af beregningen (vægtet værdi {phi_w_str}° ignoreres)."
             )
 
         k_phi_str = _dk_num(K_PHI, ".2f")
         phi_basis_str = f"{PHI_BASIS:g}"
         st.markdown(
-            f"**φ-korrektion** = {k_phi_str} × (φ − {phi_basis_str}°) = "
+            f"**φᵥ-korrektion** = {k_phi_str} × (φᵥ − {phi_basis_str}°) = "
             f"{k_phi_str} × ({phi_f_str} − {phi_basis_str}) = **{phi_kor_str}** "
             f"({phi_kor_pct_str} % af basistykkelsen)"
         )
@@ -5365,7 +5510,7 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
 
     Lagene opstilles med nummer, materiale, tykkelse og friktionsvinkel i
     kolonner, afsluttet af en samlet-række. Returnerer (materialer-liste,
-    beregnet eller overskrevet φ).
+    beregnet eller overskrevet φᵥ).
 
     kompakt bevares i signaturen af hensyn til kaldere uden for flow A.
     """
@@ -5390,7 +5535,7 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
         st.session_state.setdefault(f"bd_mat_{_idx}", _navn)
         st.session_state.setdefault(f"bd_t_{_idx}", _t)
 
-    # Bidraget t x phi er mellemregningen bag den vægtede φ.
+    # Bidraget t x phi er mellemregningen bag den vægtede φᵥ.
     BREDDER = [0.35, 3.2, 1.5, 0.9, 1.0]
     st.html(
         '<div class="bg-lagtabel-hoved med-bidrag">'
@@ -5450,11 +5595,11 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
             )
 
         if md is None:
-            # Manuel indtastning: φ, kornstørrelse og lagtype angives selv og
+            # Manuel indtastning: φᵢ, kornstørrelse og lagtype angives selv og
             # får en egen linje, da de ikke er plads til i tabellens kolonner.
             with kol_phi:
                 phi_i = st.number_input(
-                    "φ (°)", 20.0, 60.0, PHI_BASIS, 0.5, key=f"bd_phi_m_{i}",
+                    "φᵢ (°)", 20.0, 60.0, PHI_BASIS, 0.5, key=f"bd_phi_m_{i}",
                     label_visibility="collapsed",
                 )
             _, kol_korn, kol_type = st.columns(
@@ -5527,14 +5672,14 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
     )
     st.caption(
         f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm. "
-        f"Der gøres opmærksom på, at φ er vægtet efter lagtykkelse."
+        f"Der gøres opmærksom på, at φᵥ er vægtet efter lagtykkelse."
     )
 
-    if st.checkbox("Overskriv φ manuelt", key="bd_phi_override"):
+    if st.checkbox("Overskriv φᵥ manuelt", key="bd_phi_override"):
         overskriv_kol, _ = st.columns([1, 2.4])
         with overskriv_kol:
             phi = st.number_input(
-                "φ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5,
+                "φᵥ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5,
                 key="bd_phi_man",
             )
         ui.besked(
@@ -5552,7 +5697,7 @@ def _input_materialelag(kompakt: bool = False) -> tuple[list[dict], float]:
 
 
 def _input_materialelag_med_korrektioner() -> tuple[list[dict], float]:
-    """Materialelag med φ-korrektioner i en højre kolonne ved mellemregning."""
+    """Materialelag med φᵥ-korrektioner i en højre kolonne ved mellemregning."""
     for idx, (navn, tykkelse) in enumerate((
         ("Stabilgrus SGII 0-32", 300),
         ("Bundsikringssand", 400),
@@ -5614,7 +5759,7 @@ def _input_materialelag_med_korrektioner() -> tuple[list[dict], float]:
             if md is None:
                 with kol_phi:
                     phi_i = st.number_input(
-                        "φ (°)", 20.0, 60.0, PHI_BASIS, 0.5,
+                        "φᵢ (°)", 20.0, 60.0, PHI_BASIS, 0.5,
                         key=f"bd_phi_m_{i}", label_visibility="collapsed",
                     )
                 _, kol_korn, kol_type = st.columns([0.35, 3.2, 2.4])
@@ -5647,30 +5792,34 @@ def _input_materialelag_med_korrektioner() -> tuple[list[dict], float]:
             f'<span class="num">{ui.grader(phi_weighted)}</span></div>'
         )
         st.caption(f"Mindste lagtykkelse der kan indtastes er {MIN_LAGTYKKELSE_MM} mm.")
-        overskrevet = st.checkbox("Overskriv φ manuelt", key="bd_phi_override")
+        overskrevet = st.checkbox("Overskriv φᵥ manuelt", key="bd_phi_override")
         if overskrevet:
-            phi = st.number_input("φ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5, key="bd_phi_man")
+            phi = st.number_input("φᵥ (°)", 20.0, 60.0, round(phi_weighted, 1), 0.5, key="bd_phi_man")
         else:
             phi = phi_weighted
 
     phi_kor = K_PHI * (phi - PHI_BASIS)
     with korrektion_kol:
-        ui.etiket("φ-korrektion")
+        ui.etiket("φᵥ-korrektion")
         with st.container(border=True):
             st.markdown("**Vægtet friktionsvinkel**")
             st.code(
-                f"φ = Σ(tᵢ × φᵢ) / Σ(tᵢ)\n"
+                f"φᵥ = Σ(tᵢ × φᵢ) / Σ(tᵢ)\n"
                 f"  = {_dk_num(data['total_bidrag'], '.0f')} / {_dk_num(data['total_v'], '.0f')}"
                 f" = {_dk_num(phi_weighted, '.2f')}°",
                 language=None,
             )
         with st.container(border=True):
-            st.markdown("**φ-korrektionsfaktor**")
-            st.code(
-                f"kᵩ = {_dk_num(K_PHI, '.2f')} × (φ − {PHI_BASIS:g}°)\n"
-                f"    = {_dk_num(K_PHI, '.2f')} × ({_dk_num(phi, '.2f')} − {PHI_BASIS:g})\n"
-                f"    = {_dk_num(phi_kor, '+.4f')} = {_dk_num(phi_kor * 100, '+.2f')} %",
-                language=None,
+            st.markdown("**φᵥ-korrektionsfaktor**")
+            st.html(
+                '<div class="kob-formel">'
+                f'k<sub>φ</sub> = {_dk_num(K_PHI, ".2f")} × '
+                f'(φᵥ − {PHI_BASIS:g}°)\n'
+                f'    = {_dk_num(K_PHI, ".2f")} × '
+                f'({_dk_num(phi, ".2f")} − {PHI_BASIS:g})\n'
+                f'    = {_dk_num(phi_kor, "+.4f")} = '
+                f'{_dk_num(phi_kor * 100, "+.2f")} %'
+                "</div>"
             )
         st.caption("Korrektionen anvendes på basistykkelsen.")
 
@@ -5709,11 +5858,11 @@ def render_brugerdefineret() -> None:
         with ui.trin_kort(2, "Opbygning") as trin2:
             materialer, phi = _input_materialelag_med_korrektioner()
             total = _indtastet_total(materialer)
-            phi_ord = "vægtet φ"
+            phi_ord = "vægtet φᵥ"
             trin2.opsummering = (
                 f"{len(materialer)} lag · {ui.mm(total)} · "
                 f"{phi_ord} {ui.grader(phi)} · "
-                f"kᵩ {_pct_fortegn(K_PHI * (phi - PHI_BASIS), 1)}"
+                f"k<sub>φ</sub> {_pct_fortegn(K_PHI * (phi - PHI_BASIS), 1)}"
             )
 
     if zone_blokerer:
@@ -5731,6 +5880,7 @@ def render_brugerdefineret() -> None:
     # Argumenterne til koblings-forklaringen sættes nedenfor; forklaringen
     # renderes først nederst i resultatsektionen — se kaldet før st.divider().
     kobling_args: tuple | None = None
+    status_slot = None
 
     # Reference- og produktberegninger bruges i begge modes — både til
     # at vise reference-banneret og til opbygnings-expanderens dropdown.
@@ -5785,6 +5935,12 @@ def render_brugerdefineret() -> None:
                     help="0.00 = samme effektivitet som reference (TX160/SX160/T6).",
                 )
                 geonet = {**geonet, "korrektion": kor_man}
+        interval_note = _korrektion_interval_note(geonet)
+        if interval_note:
+            st.html(
+                '<div class="bg-produkt-interval-note">'
+                f'{html.escape(interval_note)}</div>'
+            )
         net_kor = geonet["korrektion"] if geonet else 0.0
         res_1 = beregn(
             eu=eu, eo=eo, phi=phi, net_korrektion=net_kor,
@@ -5844,7 +6000,7 @@ def render_brugerdefineret() -> None:
                     if k in res_best
                 }
 
-        # Vises φ-korrigeret, jf. _vis_resultatkort().
+        # Vises φᵥ-korrigeret, jf. _vis_resultatkort().
         t_uarm = None
         t_uarm_raa = None
         for r in (res_1, res_2):
@@ -5877,7 +6033,7 @@ def render_brugerdefineret() -> None:
                 "geonet": geonet, "geonet_navn": geonet_navn,
                 "res_1": res_1, "res_2": res_2,
                 # Den rå aflæsning gemmes under sit eget navn; rapporten
-                # danner selv den φ-korrigerede værdi af res_1/res_2.
+                # danner selv den φᵥ-korrigerede værdi af res_1/res_2.
                 "t_uarmeret_mm": (
                     res_1.get("t_uarmeret_mm")
                     or res_2.get("t_uarmeret_mm")
@@ -5903,6 +6059,10 @@ def render_brugerdefineret() -> None:
                 )
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
+
+            # Udfyldes efterfølgende, når kontrolpunkter og anbefalinger er
+            # samlet, men står visuelt lige under resultatkortene.
+            status_slot = st.empty()
 
             _render_opbygning_afsnit(
                 eu, ref_1, ref_2,
@@ -5946,7 +6106,7 @@ def render_brugerdefineret() -> None:
                 ui.underhoved(
                     "Designdiagram",
                     f"Eₒ = {ui.mpa(eo)} · {_grundlag_tekst(grundlag)} · "
-                    f"φ = {ui.grader(phi)} · {geonet_navn}",
+                    f"φᵥ = {ui.grader(phi)} · {geonet_navn}",
                     skillelinje=True,
                 )
                 vis_din_prik = st.checkbox(
@@ -5998,6 +6158,7 @@ def render_brugerdefineret() -> None:
         t_basis_table=t_basis_table,
         eo_interpoleret=eo_interpoleret,
         vis_opbygning=False,
+        status_slot=status_slot,
     )
 
 
@@ -6075,28 +6236,37 @@ def render_sidebar() -> str:
 _HJAELP_STANDARD_KAPITEL = "beregningsmetoden"
 
 _HJAELP_INTRO = (
-    "Værktøjet fastlægger, hvor tykt et ubundet bærelag en vej kræver, og hvor "
-    "meget tykkelsen kan nedsættes ved at armere opbygningen med geonet. "
-    "Grundlaget er leverandørernes designdiagrammer, ét pr. belastningsklasse.\n\n"
-    "Dimensioneringen kan tage udgangspunkt i to grundlag. **Belastningsklassen** "
-    "henviser direkte til sit designdiagram, hvor lagtykkelserne aflæses ved "
-    "underbundens E-modul. **Trafikklassen** har intet designdiagram; den føres "
-    "ind i diagrammerne gennem en VejDim-kørsel, som fastlægger den ubundne "
-    "lagtykkelse, og derfra til det punkt, hvor den ustabiliserede kurve giver "
-    "samme tykkelse. Der foretages ingen teoretisk omregning mellem de to "
-    "metoder."
+    "Værktøjet fastlægger den nødvendige samlede tykkelse af de ubundne lag i "
+    "en vejopbygning og viser, hvordan tykkelsen ændres, når opbygningen "
+    "forstærkes med geonet. Beregningen bygger på designdiagrammerne i BG "
+    "Byggros’ designmanualer, som indeholder ét diagram for hver "
+    "belastningsklasse.\n\n"
+    "Dimensioneringen kan tage udgangspunkt i enten en belastningsklasse eller "
+    "en trafikklasse. Ved valg af belastningsklasse anvendes det tilhørende "
+    "designdiagram direkte. Her aflæses lagtykkelsen ud fra underbundens "
+    "E-modul, både uden geonet og for opbygninger med ét eller to lag geonet.\n\n"
+    "Trafikklasserne følger Vejdirektoratets skala T1–T6, men har ikke egne "
+    "designdiagrammer. Derfor etableres sammenhængen gennem en VejDim-beregning "
+    "for den valgte trafikklasse og underbundens E-modul. VejDim fastlægger den "
+    "nødvendige samlede tykkelse af de ubundne lag. Denne tykkelse sammenholdes "
+    "derefter med den ustabiliserede kurve i belastningsklassernes "
+    "designdiagrammer ved samme underbunds-E-modul. Det tilsvarende punkt i "
+    "diagrammet anvendes som grundlag for at aflæse effekten af geonet.\n\n"
+    "Der foretages således ikke en teoretisk omregning mellem belastningsklasse "
+    "og trafikklasse. Trafikklasserne kobles i stedet empirisk til "
+    "designdiagrammerne på baggrund af de lagtykkelser, som VejDim beregner."
 )
 
 _HJAELP_TRIN = (
-    "Underbundens styrke og dimensioneringsgrundlaget angives",
-    "Opbygningens materialelag sammensættes",
-    "Geonettet vælges",
-    "Tykkelsen læses med og uden armering",
+    "Underbund og dimensioneringsgrundlag fastlægges",
+    "Opslagspunktet i designdiagrammet bestemmes",
+    "Lagtykkelsen aflæses med og uden geonet",
+    "Korrektioner og kontroller gennemføres",
 )
 
-# Fagudtrykkene og deres forklaring. Listen er sidens ordforklaring og er
+# Nøglebegreberne og deres forklaring. Listen er sidens ordforklaring og er
 # samtidig grundlaget for de forklaringer, udtrykkene bærer ude i appen.
-_HJAELP_FAGUDTRYK = (
+_HJAELP_NOEGLEBEGREBER = (
     ("Eᵤ", "Underbundens E-modul [MN/m²]. Angives i dimensioneringen."),
     ("Eₒ", "Designdiagrammets overflademodul [MN/m²]. Ved dimensionering efter "
            "belastningsklasse er værdien diagrammets egen, forudsatte "
@@ -6104,14 +6274,8 @@ _HJAELP_FAGUDTRYK = (
     ("Eₒ,ækv", "Det tilbageberegnede opslagspunkt ved dimensionering efter "
                "trafikklasse. En indeksværdi mellem to diagrammer, ikke et "
                "forventet overflademodul."),
-    ("NÆ10", "Dimensioneringstrafikken over 20 år for trafikklassen, angivet "
-             "i ækvivalente 10-tons akseltryk."),
-    ("φ", "Den tykkelsevægtede friktionsvinkel i de ubundne materialelag [°]. "
-          "Designmanualerne forudsætter 37°."),
-    ("k_net", "Korrektionen for det valgte geonet i forhold til "
-              "referencenettet. Positiv giver et tykkere bærelag."),
-    ("effektindeks", "Produktets effektivitet i forhold til referencenettet, "
-                     "som har indeks 100."),
+    ("φᵥ", "Den tykkelsevægtede friktionsvinkel i de ubundne materialelag [°]. "
+            "Designmanualerne forudsætter 37°."),
 )
 
 # Symboler, der sættes med sænket skrift i formlerne. Mønsteret dækker
@@ -6144,7 +6308,7 @@ def _render_hjaelp_formel(formel) -> None:
     st.html(f'<div class="hj-formel"><div class="hj-udtryk">{linjer}</div>{hvor}</div>')
 
 
-def _render_hjaelp_figur(figur, nummer: int) -> None:
+def _render_hjaelp_figur(figur, nummer: str) -> None:
     """Figuren som en lille tabel med figurtekst under.
 
     Tabellen sættes af markdown; nummer og figurtekst står omkring den, så
@@ -6218,11 +6382,11 @@ def _render_hjaelp_kapitel(kapitel) -> None:
                 elif isinstance(stykke, hjaelp_mod.Kilder):
                     _render_hjaelp_kilder(stykke)
                 else:
-                    st.markdown(stykke)
+                    st.markdown(stykke, unsafe_allow_html=True)
         with hoejre:
             for figur in afsnit.figurer:
                 figur_nr += 1
-                _render_hjaelp_figur(figur, figur_nr)
+                _render_hjaelp_figur(figur, f"{kapitel.nummer}.{figur_nr}")
 
 
 def render_hjaelp() -> None:
@@ -6260,13 +6424,13 @@ def render_hjaelp() -> None:
             udtryk = "".join(
                 f'<div class="hj-udtryk-post" title="{html.escape(forklaring, quote=True)}">'
                 f'{_formel_html(navn)}</div>'
-                for navn, forklaring in _HJAELP_FAGUDTRYK
+                for navn, forklaring in _HJAELP_NOEGLEBEGREBER
             )
             st.html(
                 '<div class="hj-trinblok">'
-                '<div class="hj-trinblok-hoved">En beregning i fire trin</div>'
+                '<div class="hj-trinblok-hoved">Beregningsgangen</div>'
                 f'{trin}'
-                '<div class="hj-fagudtryk-hoved">Fagudtryk — forklaringen '
+                '<div class="hj-fagudtryk-hoved">Nøglebegreber — forklaringen '
                 'vises ved markøren</div>'
                 f'<div class="hj-fagudtryk">{udtryk}</div></div>'
             )
@@ -7219,7 +7383,7 @@ def _materiale_editor(lagtype: str, materialer: list[dict], noegle: str):
         column_config={
             "navn": st.column_config.TextColumn("Materiale", required=True),
             "phi": st.column_config.NumberColumn(
-                "φ (°)",
+                "φᵢ (°)",
                 help=(
                     "Materialets friktionsvinkel. Værdien kan tilpasses "
                     "lokalt; standardværdien gendannes med Nulstil til "
@@ -7358,7 +7522,7 @@ def render_rapport() -> None:
     st.success(
         f"**Rapport baseret på:**  Eᵤ = {ui.mpa(sd['eu'])}  ·  "
         f"{grundlag_txt}  ·  "
-        f"Produkt: **{sd['geonet_navn']}**  ·  φ = {ui.grader(sd['phi'])}"
+        f"Produkt: **{sd['geonet_navn']}**  ·  φᵥ = {ui.grader(sd['phi'])}"
     )
 
     with ui.trin_kort(1, "Sagsoplysninger") as t1:
@@ -7627,8 +7791,8 @@ def render_rapport() -> None:
             # pct-mode fallback
             return (t_uarm, _sub_lag_skaleret(t_uarm) if t_uarm else [])
 
-        # Koncept A: Indtastet opbygning + neutrale krav-søjler. φ fra
-        # dimensioneringen (sd["phi"]) styrer φ-korrektionen på uarmeret-kravet.
+        # Koncept A: Indtastet opbygning + neutrale krav-søjler. φᵥ fra
+        # dimensioneringen (sd["phi"]) styrer φᵥ-korrektionen på uarmeret-kravet.
         phi_dim = float(sd.get("phi", PHI_BASIS))
         phi_kor_dim = K_PHI * (phi_dim - PHI_BASIS)
         har_indtastet_rap = in_mm_mode and bool(materialer_dim)
@@ -7692,8 +7856,8 @@ def render_rapport() -> None:
             )
             brug_sub_u = len(sub_red_u) >= 2
             snit_liste.append(rapport_mod.Snit(
-                titel="Ustabiliseret basistykkelse (φ-korrigeret)"
-                      if har_indtastet_rap else "Ustabiliseret basistykkelse",
+                titel="Ustabiliseret bærelagstykkelse (φᵥ-korrigeret)"
+                      if har_indtastet_rap else "Ustabiliseret bærelagstykkelse",
                 t_baerelag_mm=t_uarm_krav_rap,
                 geonet_y_fracs=[],
                 sub_lag=sub_red_u if brug_sub_u else None,
@@ -7817,7 +7981,7 @@ def render_rapport() -> None:
                 with ui.kort(
                     "Designdiagram",
                     f"Eₒ = {ui.mpa(sd['eo'])} · {grundlag_txt} · "
-                    f"φ = {ui.grader(sd.get('phi', PHI_BASIS))} · "
+                    f"φᵥ = {ui.grader(sd.get('phi', PHI_BASIS))} · "
                     f"{sd.get('geonet_navn') or 'referencenet'}",
                 ):
                     _tegn_designdiagram(

@@ -120,7 +120,7 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   gap:1rem; align-items:baseline;
   padding:.3rem .25rem;
 }
-/* Med mellemregningerne slået til kommer bidraget t×φ til som femte kolonne. */
+/* Med mellemregningerne slået til kommer bidraget t×φᵢ til som femte kolonne. */
 .bg-lagtabel-hoved.med-bidrag, .bg-lagtabel-sum.med-bidrag{
   grid-template-columns:.35fr 3.2fr 1.5fr .9fr 1fr;
 }
@@ -237,6 +237,19 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   margin-left:auto;
   font:400 11.5px/1.4 'IBM Plex Sans',sans-serif; color:var(--bg-ink-70);
 }
+.bg-resultat-status{
+  display:flex; justify-content:flex-end; align-items:center; gap:8px;
+  margin:-7px 0 11px;
+  min-height:18px;
+  font:400 11px/1.35 'IBM Plex Sans',sans-serif;
+}
+.bg-resultat-status-item{
+  display:inline-flex; align-items:center; gap:4px;
+  color:var(--bg-ink-70); cursor:help;
+}
+.bg-resultat-status-item b{ font-weight:600; }
+.bg-resultat-status-adv{ color:var(--bg-warn); }
+.bg-resultat-status-info{ color:var(--bg-ink-45); }
 
 /* Underoverskrifter inde i resultatblokken (Opbygning, Designdiagram,
    Produktvalg). */
@@ -254,6 +267,11 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 .bg-underhoved-forbehold{
   display:block; margin-top:3px;
   font:400 11px/1.45 'IBM Plex Sans',sans-serif; color:var(--bg-warn);
+}
+.bg-produkt-interval-note{
+  margin:-.2rem 0 .7rem;
+  font:400 10.5px/1.4 'IBM Plex Sans',sans-serif;
+  color:var(--bg-ink-45);
 }
 .bg-underhoved-skillelinje{
   border-top:1px solid var(--bg-line-soft);
@@ -309,6 +327,34 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 [data-testid="stButtonGroup"] button[aria-pressed="true"],
 [data-testid="stButtonGroup"] button[kind="segmented_controlActive"]{
   background:var(--bg-ink); color:#fff; border-color:var(--bg-ink);
+}
+/* Forklaring ved tilstandsvælgerens to knapper. Streamlit giver ikke hvert
+   valg i segmented_control() sit eget help-felt, så knapperne får hver sin
+   lille hover-/fokus-tooltip her. Den almindelige help-tekst på widgeten
+   bevares som fallback. */
+.st-key-tilstand [data-testid="stButtonGroup"] button{
+  position:relative; overflow:visible;
+}
+.st-key-tilstand [data-testid="stButtonGroup"] button::after{
+  display:none; position:absolute; z-index:20; top:calc(100% + 8px);
+  width:235px; padding:8px 10px; border:1px solid var(--bg-line);
+  border-radius:4px; background:var(--bg-surface); color:var(--bg-ink-70);
+  box-shadow:0 4px 12px rgba(21,33,26,.12);
+  font:400 11px/1.45 'IBM Plex Sans',sans-serif;
+  letter-spacing:0; text-align:left; text-transform:none; white-space:normal;
+  pointer-events:none;
+}
+.st-key-tilstand [data-testid="stButtonGroup"] button:nth-child(1)::after{
+  content:"Standard: ét samlet ubundet bærelag med φᵥ = 37°. Brug denne til en enkel beregning med produktoversigt.";
+  right:-8px;
+}
+.st-key-tilstand [data-testid="stButtonGroup"] button:nth-child(2)::after{
+  content:"Brugerdefineret: angiv op til tre materialelag og individuelle friktionsvinkler. Værktøjet beregner den vægtede φᵥ.";
+  right:0;
+}
+.st-key-tilstand [data-testid="stButtonGroup"] button:hover::after,
+.st-key-tilstand [data-testid="stButtonGroup"] button:focus-visible::after{
+  display:block;
 }
 /* Trafik- og belastningsklassen er derimod selve dimensioneringsgrundlaget
    og markeres grønt, så den valgte klasse kan findes med et blik. */
@@ -839,7 +885,7 @@ code, .stMetricValue, [data-testid="stMetricValue"],
    Sporet fra trafikklasse til bærelagstykkelse som seks trin, jf.
    designforslag 12b. Hvert trin er en linje med resultatet i højre kant og
    regnestykket indrykket under; formelboksene har samme udtryk som
-   φ-korrektionsboksen i trin 2 på dimensioneringssiden. Tal sættes altid i
+   φᵥ-korrektionsboksen i trin 2 på dimensioneringssiden. Tal sættes altid i
    IBM Plex Mono med tabular-nums, så cifrene står lodret på linje. */
 .kob{ margin:.1rem 0 .2rem; }
 .kob-trin{
@@ -1065,12 +1111,28 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 }
 
 .hj-afsnit-titel{
-  display:flex; align-items:baseline; gap:10px; margin:.9rem 0 .1rem;
-  font:600 13px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink);
+  display:flex; align-items:baseline; gap:10px; margin:1rem 0 .35rem;
+  font:600 15px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink);
 }
 .hj-afsnit-titel span{
   font:600 11.5px/1.3 'IBM Plex Mono',monospace; color:var(--bg-ink-25);
 }
+
+/* Hjælpens brødtekst skal have en tydelig typografisk underordning til
+   afsnitsoverskriften. Streamlits standardstørrelse for markdown-lister er
+   ellers større end den specialtegnede afsnitsoverskrift. */
+[class*="st-key-hj_indhold_"] .stMarkdown p,
+[class*="st-key-hj_indhold_"] .stMarkdown li{
+  font:400 14px/1.6 'IBM Plex Sans',sans-serif;
+  color:var(--bg-ink-70);
+}
+[class*="st-key-hj_indhold_"] .stMarkdown ul,
+[class*="st-key-hj_indhold_"] .stMarkdown ol{
+  margin:.35rem 0 .8rem;
+  padding-left:1.3rem;
+}
+[class*="st-key-hj_indhold_"] .stMarkdown li{ margin:.12rem 0; }
+[class*="st-key-hj_indhold_"] .stMarkdown strong{ font-weight:600; }
 
 /* Formlen sættes i egen ramme med en »hvor:«-liste under. */
 .hj-formel{
