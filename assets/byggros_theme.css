@@ -30,6 +30,11 @@
   --bg-crit:#B42318;   --bg-crit-bg:#FBF0EF;
   --bg-soil:#8B7355;
   --bg-space:4px;
+  /* Designdiagram-siden: den plads, der går fra skærmhøjden, før
+     scanningen og tabelkroppen får resten, jf. afsnit 14.3b. Fradragene
+     sættes, så kortets to spalter ender i samme højde. */
+  --dd-fig-fradrag:660px;
+  --dd-tabel-fradrag:410px;
 }
 
 /* ---- 1. Bredde og rytme -------------------------------------------------
@@ -750,9 +755,36 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   font:400 11px/1.3 'IBM Plex Sans',sans-serif; color:var(--bg-ink-45);
 }
 
+/* De to figurer står over hinanden i venstre spalte: optegningen af
+   tabellens værdier øverst og designmanualens egen scanning under. Hver
+   figur bærer sin etiket, og den nederste skilles fra den øverste med en
+   linje. */
+.dd-figur-titel{
+  font:600 9.5px/1.6 'IBM Plex Mono',monospace; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--bg-ink-45); padding-top:.35rem;
+}
+.dd-figur-titel-anden{
+  margin-top:1.2rem; padding-top:1rem; border-top:1px solid var(--bg-line);
+}
+/* Figurerne fylder spalten ud, så der ikke står tomrum ind mod tabellen.
+   Maksbredden virker først på brede skærme og holder figurerne i et
+   læsbart format; derunder er det spaltens egen bredde, der består. */
+[class*="st-key-dd_figurer"]{ max-width:560px; }
+/* Kortet skal kunne ses i sin helhed uden at der rulles videre ned på
+   siden. Scanningens højde følger derfor skærmens: --dd-fig-fradrag er den
+   plads, det øvrige indhold i spalten optager (optegningen, de to etiketter
+   og kortets ramme), og resten står til rådighed for billedet. Den nedre
+   grænse holder scanningen læsbar på lave skærme. Aspektforholdet bevares,
+   da alene højden bindes. */
+[class*="st-key-dd_figurer"] [data-testid="stImage"] img{
+  width:auto !important; max-width:100%;
+  max-height:max(180px, calc(100vh - var(--dd-fig-fradrag)));
+}
+
 /* Tabellen med de aflæste værdier. Tallene er tabulære, så søjlerne kan
-   sammenlignes lodret; kroppen ruller, da diagrammerne har op til 45
-   rækker. */
+   sammenlignes lodret. Kroppen ruller i sig selv og er målt, så spalten
+   ender i samme højde som figurerne ved siden af; --dd-tabel-fradrag er
+   pladsen til titel, kolonnehoved og fodnote samt kortets ramme. */
 .dd-tabel-titel{
   font:600 9.5px/1.6 'IBM Plex Mono',monospace; letter-spacing:.08em;
   text-transform:uppercase; color:var(--bg-ink-45); padding-top:.35rem;
@@ -767,7 +799,10 @@ code, .stMetricValue, [data-testid="stMetricValue"],
   color:var(--bg-ink-45); text-align:right;
 }
 .dd-tabel-hoved div:first-child{ text-align:right; }
-.dd-tabel-krop{ max-height:520px; overflow-y:auto; }
+.dd-tabel-krop{
+  max-height:max(300px, calc(100vh - var(--dd-tabel-fradrag)));
+  overflow-y:auto;
+}
 .dd-tabel-raekke{
   padding:.34rem .25rem; border-bottom:1px solid #F4F6F4;
   font:400 12px/1.3 'IBM Plex Mono',monospace; color:var(--bg-ink-70);

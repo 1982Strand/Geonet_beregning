@@ -6729,31 +6729,21 @@ def render_designdiagrammer() -> None:
     redigerer = st.session_state.get("dd_redigerer") == valgt_nr
 
     with ui.trin_kort(2, titel):
-        kol_diagram, kol_tabel = st.columns([1.1, 1], gap="large")
+        # Spalteforholdet og afstanden mellem dem afgør, hvor brede figurerne
+        # bliver, jf. st-key-dd_figurer i stylesheetet.
+        kol_diagram, kol_tabel = st.columns([1, 1.35], gap="medium")
 
         with kol_diagram:
-            # Optegningen gengiver tabellen; scanningen er manualens egen
-            # figur. De to visninger skiftes der imellem, så den aflæste
-            # kurve kan holdes op mod kilden.
-            visning = st.segmented_control(
-                "Visning",
-                ["Original scan", "Optegnet"],
-                default="Optegnet",
-                key=f"dd_visning_{valgt_nr}",
-                label_visibility="collapsed",
-            ) or "Optegnet"
-            if visning == "Original scan":
-                st.image(
-                    os.path.join(
-                        os.path.dirname(__file__),
-                        "diagrambilleder",
-                        diagram["image_name"],
-                    ),
-                    width="stretch",
+            # Optegningen gengiver tabellen, og scanningen er manualens egen
+            # figur. De står over hinanden, så den aflæste kurve kan holdes
+            # op mod kilden uden skift af visning. Begge figurer holdes inden
+            # for en fast bredde, jf. st-key-dd_figurer i stylesheetet.
+            with st.container(key="dd_figurer"):
+                st.html(
+                    '<div class="dd-figur-titel">Optegnet af tabellens '
+                    'værdier</div>'
                 )
-                st.caption("Scanning fra designmanualen")
-            else:
-                fig = byg_raadiagram(diagram)
+                fig = byg_raadiagram(diagram, hoejde_px=290)
                 if fig is None:
                     ui.besked(
                         "Diagrammet kan ikke optegnes, da tabellen ikke "
@@ -6766,10 +6756,19 @@ def render_designdiagrammer() -> None:
                         config={"displayModeBar": False},
                         key=f"dd_fig_{valgt_nr}",
                     )
-                    st.caption(
-                        "Optegnet af tabellens værdier · skift til den "
-                        "originale scanning i vælgeren ovenfor"
-                    )
+
+                st.html(
+                    '<div class="dd-figur-titel dd-figur-titel-anden">'
+                    'Original scanning fra designmanualen</div>'
+                )
+                st.image(
+                    os.path.join(
+                        os.path.dirname(__file__),
+                        "diagrambilleder",
+                        diagram["image_name"],
+                    ),
+                    width="stretch",
+                )
 
         with kol_tabel:
             kol_titel, kol_knap, kol_nulstil = st.columns(
@@ -6860,7 +6859,9 @@ def _rediger_diagramdata(diagram: dict, pd) -> None:
             for row in diagram["rows"]
         ]),
         width="stretch",
-        height=520,
+        # Højden følger antallet af rækker, men klippes, så kortet stadig
+        # kan ses i sin helhed. Resten nås ved at rulle i tabellen.
+        height=min(38 + 35 * (len(diagram["rows"]) + 1), 620),
         hide_index=True,
         num_rows="dynamic",
         column_config={
