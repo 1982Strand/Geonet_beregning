@@ -8059,12 +8059,22 @@ def render_rapport() -> None:
             )
             visu_png: bytes | None = None
         else:
-            visu_png = rapport_mod.render_opbygning_png(
-                eu=sd["eu"], snit_liste=snit_liste,
-                geonet_label=geonet_label,
-                materialer=materialer_dim,
-                reference_mm=t_indtastet_for_snit,
-            )
+            try:
+                visu_png = rapport_mod.render_opbygning_png(
+                    eu=sd["eu"], snit_liste=snit_liste,
+                    geonet_label=geonet_label,
+                    materialer=materialer_dim,
+                    reference_mm=t_indtastet_for_snit,
+                )
+            except Exception as e:
+                # Billedeksporten kræver en Chrome-motor på serveren, jf.
+                # core.rapport._sikr_chrome(). Slår den fejl, udelades
+                # figuren, og rapporten kan fortsat genereres.
+                st.warning(
+                    f"Opbygningen kunne ikke tegnes til rapporten: {e} "
+                    "Rapporten genereres uden figuren."
+                )
+                visu_png = None
             with ui.kort(
                 "Opbygning",
                 "Snit i samme lodrette skala · forhåndsvisning fra dimensioneringen",

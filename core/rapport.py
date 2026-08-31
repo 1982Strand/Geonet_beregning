@@ -18,6 +18,7 @@ Offentlig API:
 from __future__ import annotations
 
 import io
+import os
 import platform
 import re
 import shutil
@@ -235,6 +236,73 @@ MAT_LABEL_DX = 0.0
 MAT_LABEL_DY = 0.0
 
 
+# ---------------------------------------------------------------------------
+# 2.1 Billedmotor
+#
+# Kaleido 1.0 og senere gengiver figurerne i en Chrome-motor, som ikke følger
+# med pakken. Lokalt er Chrome installeret i forvejen; på serveren leveres
+# chromium af packages.txt. Stien meddeles gennem miljøvariablen BROWSER_PATH,
+# som kaleido læser forud for sin egen søgning.
+# ---------------------------------------------------------------------------
+
+_CHROME_NAVNE = (
+    "chromium",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome-stable",
+    "chrome",
+)
+
+_chrome_fastlagt = False
+
+
+def _sikr_chrome() -> None:
+    """Fastlæg stien til den Chrome-motor, figurerne gengives i.
+
+    Fastlæggelsen sker i tre trin: en allerede sat BROWSER_PATH benyttes
+    uændret, dernæst søges der i systemets søgesti, og findes der intet,
+    hentes Chrome for Testing af kaleido selv til serverens cache. Resultatet
+    fastholdes, så søgningen kun gennemføres én gang pr. kørsel.
+
+    Der gøres opmærksom på, at Chrome alene kræves ved billedeksport til
+    rapporten. Figurerne på skærmen tegnes af brugerens egen browser og
+    berøres ikke.
+    """
+    global _chrome_fastlagt
+
+    if _chrome_fastlagt or os.environ.get("BROWSER_PATH"):
+        return
+
+    for navn in _CHROME_NAVNE:
+        sti = shutil.which(navn)
+        if sti:
+            os.environ["BROWSER_PATH"] = sti
+            _chrome_fastlagt = True
+            return
+
+    if platform.system() == "Windows":
+        # På Windows installeres Chrome uden for søgestien og findes i stedet
+        # af kaleido gennem registreringsdatabasen.
+        _chrome_fastlagt = True
+        return
+
+    try:
+        import kaleido
+
+        sti = kaleido.get_chrome_sync()
+    except Exception as exc:
+        raise RuntimeError(
+            "Figuren kan ikke tegnes til rapporten, fordi der ikke blev "
+            "fundet en Chrome-motor på serveren. Motoren installeres ved at "
+            "tilføje 'chromium' til packages.txt og 'kaleido>=1.0' til "
+            "requirements.txt, hvorefter appen genstartes."
+        ) from exc
+
+    if sti:
+        os.environ["BROWSER_PATH"] = str(sti)
+    _chrome_fastlagt = True
+
+
 def render_opbygning_png(
     *,
     eu: float,
@@ -280,6 +348,7 @@ def render_opbygning_png(
     # diagram._SIGNATUR_PX. Eksporthøjden aflæses derfor af figuren, så
     # signaturen ikke beskæres.
     hoejde = int(fig.layout.height or figsize[1] * 100)
+    _sikr_chrome()
     return fig.to_image(
         format="png",
         width=int(figsize[0] * 100),
@@ -362,6 +431,7 @@ def render_personligt_designdiagram_png(
     # Skærmen lader figuren fylde kolonnen; rapporten har en fast billedbredde.
     bredde = int(figsize[0] * 100)
     hoejde = int(figsize[1] * 100)
+    _sikr_chrome()
     return fig.to_image(
         format="png", width=bredde, height=hoejde, scale=dpi / 100,
     )

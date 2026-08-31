@@ -1,7 +1,10 @@
 streamlit>=1.35
 pandas>=2.2
-plotly>=5.22
-kaleido==0.2.1  # >=1.0 kraever en separat Chrome-installation, som Streamlit Cloud ikke har
+plotly>=6.1
+# Billedeksport til rapporten. Plotly >=7 understoetter ikke laengere
+# kaleido 0.2.1, og kaleido >=1.0 gengiver figurerne i en Chrome-motor, der
+# ikke foelger med pakken - chromium installeres derfor i packages.txt.
+kaleido>=1.0
 python-docx>=1.1
 docxtpl>=0.16
 docx2pdf>=0.1.8
