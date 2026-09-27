@@ -14,6 +14,15 @@ MAX_SPACING_TENSAR_MM = 400.0
 MAX_SPACING_GS_EGRID_MM = 500.0
 MAX_SPACING_CONSERVATIVE_MM = 400.0
 
+# Placering af det øverste geonet ved 2 lag, når opbygningen har flere
+# materialelag. Valget fastlægges under Indstillinger.
+PLACERING_LAGGRAENSE = "laggraense"          # ved grænsen mellem øverste og næste lag
+PLACERING_DAEKLAG = "daeklag"                # ved nettets mindste dæklag
+PLACERING_LAGGRAENSE_MIN = "laggraense_min"  # ved laggrænsen, dog mindst dæklaget
+PLACERING_VALG: tuple[str, ...] = (
+    PLACERING_LAGGRAENSE, PLACERING_DAEKLAG, PLACERING_LAGGRAENSE_MIN,
+)
+
 # Overlæg i samlinger. Kravet afhænger af underbundens E-værdi og er ens for
 # begge serier, men aflæses pr. produkt, så et afvigende produkt slår igennem.
 OVERLAP_EU_GRAENSE_MPA = 5.0
@@ -86,12 +95,22 @@ def _upper_position_from_layers(
     total_mm: float,
     min_top_cover_mm: float,
     sub_lag: list[dict] | None,
+    placering: str = PLACERING_LAGGRAENSE,
 ) -> tuple[float, str]:
-    """Return upper geonet depth from top and the placement basis."""
+    """Return upper geonet depth from top and the placement basis.
+
+    Med to eller flere materialelag afgør placering, hvor det øverste net
+    ligger: ved laggrænsen, ved nettets mindste dæklag, eller ved laggrænsen,
+    dog mindst dæklaget. Uden lag placeres nettet ved mindste dæklag.
+    """
     layers = _positive_sub_layers(sub_lag)
-    if len(layers) >= 2:
-        return layers[0]["tykkelse_mm"], "materialeskift"
-    return min(min_top_cover_mm, total_mm), "minimumsdæklag"
+    daeklag = min(min_top_cover_mm, total_mm)
+    if len(layers) >= 2 and placering != PLACERING_DAEKLAG:
+        graense = layers[0]["tykkelse_mm"]
+        if placering == PLACERING_LAGGRAENSE_MIN and graense < min_top_cover_mm:
+            return daeklag, "minimumsdæklag"
+        return graense, "materialeskift"
+    return daeklag, "minimumsdæklag"
 
 
 def check_geonet_placement(
@@ -100,8 +119,12 @@ def check_geonet_placement(
     total_mm: float | None,
     geonet: dict | None = None,
     sub_lag: list[dict] | None = None,
+    placering: str = PLACERING_LAGGRAENSE,
 ) -> dict:
     """Check geonet layer placement for 1- or 2-layer reinforcement.
+
+    placering fastlægger det øverste nets placering ved 2 lag, når sub_lag
+    har flere lag, jf. _upper_position_from_layers().
 
     Positions are returned as depths in mm from the top of the unbound bearing
     layer. The bottom geonet is therefore placed at ``total_mm``.
@@ -140,7 +163,7 @@ def check_geonet_placement(
                 f"{_top_cover_requirement_text(krav)}"
             )
     else:
-        upper, basis = _upper_position_from_layers(total, min_cover, sub_lag)
+        upper, basis = _upper_position_from_layers(total, min_cover, sub_lag, placering)
         bottom = total
         positions = [upper, bottom]
         top_cover = upper

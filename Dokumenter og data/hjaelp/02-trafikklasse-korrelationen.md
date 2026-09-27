@@ -24,7 +24,7 @@ ved det aktuelle Eᵤ, og derefter findes det tilsvarende Eₒ,ækv-opslagspunkt
 :::figur Eksempel på korrelation for T4. Først bestemmes den ubundne lagtykkelse, hvorefter Eₒ,ækv findes ud fra de ustabiliserede kurver.
 | Eᵤ [MPa] | t_ubundet [mm] | Eₒ,ækv [MPa] |
 | ---: | ---: | ---: |
-| 5 | 1.184 | 90 |
+| 5 | 1.184 | 77 |
 | 8 | 1.038 | 95,3 |
 | 10 | 969 | 108 |
 :::
@@ -37,16 +37,16 @@ zonebetegnelse frem for et tal:
 
 - **under** — kravet er tyndere end diagrammernes tyndeste kurve (Diagram 1,
   Eₒ = 30 MPa). T1 ved Eᵤ = 5 MPa kræver 560 mm, hvor kurven ligger på 900 mm.
-  Zonen omfatter 5 celler: de laveste trafikklasser på blød underbund.
+  Zonen omfatter 6 celler: de laveste trafikklasser på blød underbund.
 - **over** — kravet er tykkere end den tykkeste kurve (Diagram 6,
   Eₒ = 150 MPa). T6 ved Eᵤ = 10 MPa kræver 1.146 mm, hvor kurven slutter ved
-  1.100 mm. Zonen omfatter 13 celler: de høje trafikklasser på stiv underbund.
+  1.100 mm. Zonen omfatter 12 celler: de høje trafikklasser på stiv underbund.
 
 Med det aktuelle standardgrundlag består matricen af 48 celler: 30 i
-kernezonen, 5 i zonen under og 13 i zonen over. I kernezonen aflæses
-reduktionen i selve driftspunktet. Her ligger den ved ét lag geonet på 25–47 %
+kernezonen, 6 i zonen under og 12 i zonen over. I kernezonen aflæses
+reduktionen i selve driftspunktet. Her ligger den ved ét lag geonet på 26–47 %
 med en middelværdi
-på 30 %, hvilket svarer til niveauet ved dimensionering efter
+på 31 %, hvilket svarer til niveauet ved dimensionering efter
 belastningsklasse. Antallet af celler i de tre zoner følger det aktive
 kørsels- og diagramgrundlag og kan derfor ændre sig, hvis dataene ændres.
 
@@ -69,12 +69,12 @@ ved samme Eᵤ og viser, hvorfor T1 ligger uden for diagramområdet i eksemplet.
 :::figur De seks diagrammer ved Eᵤ = 8 MPa. T1 kræver 489 mm og falder uden for.
 | Diagram | Uden geonet | 1 lag | Reduktion |
 | --- | --- | --- | --- |
-| 1 | 700 mm | 437 mm | 37,6 % |
-| 2 | 800 mm | 530 mm | 33,8 % |
-| 3 | 877 mm | 638 mm | 27,3 % |
-| 4 | 1.000 mm | 700 mm | 30,0 % |
+| 1 | 700 mm | 440 mm | 37,1 % |
+| 2 | 800 mm | 533 mm | 33,4 % |
+| 3 | 900 mm | 640 mm | 28,9 % |
+| 4 | 1.000 mm | 683 mm | 31,7 % |
 | 5 | 1.100 mm | 800 mm | 27,3 % |
-| 6 | 1.200 mm | 817 mm | 31,9 % |
+| 6 | 1.200 mm | 820 mm | 31,7 % |
 :::
 
 Falder VejDims krav uden for de seks tykkelser, findes der intet opslagssted i
@@ -123,16 +123,16 @@ k_net     er korrektionen for det valgte geonet
 | --- | --- |
 | VejDims krav, interpoleret | 489 mm |
 | Diagram 1 ved Eᵤ = 8, ustabiliseret | 700 mm |
-| Diagram 1 ved Eᵤ = 8, 1 lag | 437 mm |
-| Reduktion på randkurven | 37,6 % |
+| Diagram 1 ved Eᵤ = 8, 1 lag | 440 mm |
+| Reduktion på randkurven | 37,1 % |
 | Skala 489 / 700 | 0,699 |
-| Resultat 489 × (1 − 0,376) | 306 mm |
+| Resultat 489 × (1 − 0,371) | 308 mm |
 :::
 
 Inden for diagrammernes område er randkurven og opslagsstedet det samme, og
 tilvalget ændrer derfor intet i kernezonens 30 celler. Uden for området
 angives forholdet mellem VejDims krav og randkurvens tykkelse sammen med
-resultatet. For de celler, der kan beregnes, ligger det mellem 0,562 og 1,262.
+resultatet. For de celler, der kan beregnes, ligger det mellem 0,562 og 1,259.
 I matricen mærkes cellerne med `*`.
 
 Forbeholdet ved fremgangsmåden er beskrevet i kapitel 7, afsnit 2.

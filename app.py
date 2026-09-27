@@ -43,6 +43,7 @@ from core.data import (
     eo_til_klasse,
     T_BASIS_TABLE,
     DESIGNDIAGRAM_RAW_TABLES,
+    DESIGNDIAGRAM_AFLAESTE_CELLER,
     EO_KOLONNER,
     format_klasse_interval,
     TRAFIKKLASSER,
@@ -73,7 +74,13 @@ from core.calculator import (
 from core.validators import valider_input
 from core.diagram import byg_designdiagram, byg_raadiagram, snit_til_kolonner
 from core import hjaelp as hjaelp_mod
+from core import afrunding as afrunding_mod
+from core import lagfordeling as lagfordeling_mod
 from core.placement import (
+    PLACERING_DAEKLAG,
+    PLACERING_LAGGRAENSE,
+    PLACERING_LAGGRAENSE_MIN,
+    PLACERING_VALG,
     check_geonet_placement,
     overlap_krav_mm,
     placement_requirements,
@@ -98,7 +105,340 @@ RAPPORT_METADATA_JSON = os.path.join(
     os.path.dirname(__file__),
     "rapport_metadata_brugerdefineret.json",
 )
+INDSTILLINGER_JSON = os.path.join(
+    os.path.dirname(__file__),
+    "indstillinger_brugerdefineret.json",
+)
 MIN_LAGTYKKELSE_MM = 200
+
+
+# ---------------------------------------------------------------------------
+# Indstillinger — gemmes på disk, så de huskes mellem sessioner
+# ---------------------------------------------------------------------------
+#
+# Filen rummer én blok pr. afsnit på siden Indstillinger. Afrundingen er
+# beskrevet i core.afrunding; nye afsnit føjes til _standard_indstillinger()
+# og normaliseres i indlaes_indstillinger(), så en ældre fil ikke kan
+# efterlade manglende felter.
+
+# Opbygningssøjlerne: geonet_paaskrift skriver nettets navn ud for hver
+# geonetlinje; ellers står navnet alene i signaturen. maal_streg tegner
+# målsætningsstregen ved den samlede tykkelse, og maal_tal skriver målet.
+_OPBYGNING_STANDARD: dict = {
+    "geonet_paaskrift": True,
+    "maal_streg": True,
+    "maal_tal": True,
+}
+
+
+def _normaliser_opbygning(ind: dict | None) -> dict:
+    ud = dict(_OPBYGNING_STANDARD)
+    if isinstance(ind, dict):
+        for felt in _OPBYGNING_STANDARD:
+            if isinstance(ind.get(felt), bool):
+                ud[felt] = ind[felt]
+    return ud
+
+
+def _standard_indstillinger() -> dict:
+    return {
+        "afrunding": dict(afrunding_mod.STANDARD_INDSTILLING),
+        "opbygning": dict(_OPBYGNING_STANDARD),
+        "lagfordeling": lagfordeling_mod.normaliser(None),
+    }
+
+
+def _normaliser_indstillinger(ind: dict | None) -> dict:
+    ind = ind if isinstance(ind, dict) else {}
+    return {
+        "afrunding": afrunding_mod.normaliser(ind.get("afrunding")),
+        "opbygning": _normaliser_opbygning(ind.get("opbygning")),
+        "lagfordeling": lagfordeling_mod.normaliser(ind.get("lagfordeling")),
+    }
+
+
+def indlaes_indstillinger() -> dict:
+    """Indlæs indstillingerne fra disk; ugyldige eller manglende felter
+    erstattes af standardværdierne."""
+    gemt = None
+    if os.path.exists(INDSTILLINGER_JSON):
+        try:
+            with open(INDSTILLINGER_JSON, "r", encoding="utf-8") as f:
+                gemt = json.load(f)
+        except (OSError, json.JSONDecodeError, TypeError):
+            gemt = None
+    return _normaliser_indstillinger(gemt)
+
+
+def gem_indstillinger(ind: dict) -> None:
+    data = _normaliser_indstillinger(ind)
+    try:
+        with open(INDSTILLINGER_JSON, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
+
+
+if "indstillinger" not in st.session_state:
+    st.session_state["indstillinger"] = indlaes_indstillinger()
+
+
+def _aktiv_afrunding() -> dict:
+    """Den gældende oprundingsindstilling, jf. core.afrunding."""
+    return afrunding_mod.normaliser(
+        st.session_state.get("indstillinger", {}).get("afrunding")
+    )
+
+
+def _afrundingstrin() -> int:
+    return _aktiv_afrunding()["trin_mm"]
+
+
+def _aktiv_lagfordeling() -> dict:
+    """Den gældende indstilling for lagfordeling og minimumstykkelse, jf.
+    core.lagfordeling."""
+    return lagfordeling_mod.normaliser(
+        st.session_state.get("indstillinger", {}).get("lagfordeling")
+    )
+
+
+def _minimumsklasse(grundlag: dict) -> int | None:
+    """Belastningsklassen, hvis minimumstykkelse gælder for grundlaget.
+
+    Ved trafikklasse er det den højeste af de to belastningsklasser, som
+    opslagspunktet Eₒ,ækv ligger imellem, jf. lagfordeling.klasse_for_eo().
+    """
+    if grundlag.get("type") == "trafikklasse":
+        return lagfordeling_mod.klasse_for_eo(grundlag.get("eo"))
+    return grundlag.get("valgt_klasse")
+
+
+def _fordelingsgrundlag(grundlag: dict) -> dict:
+    """Lagfordelingen og minimumstykkelserne for grundlaget.
+
+    fordeling           indstillingens fordeling, jf. core.lagfordeling
+    klasse              belastningsklassen bag minimumstykkelsen
+    min_mm              minimumstykkelsen for det øverste lag, eller None
+    samlet_min_mm       minimumet for den samlede tykkelse, eller None
+    restlag             reglen for tynde underliggende lag
+    restlag_graense_mm  grænsen for sammenlægning ved reglen »flet«
+    vd_minimum_mm       mindste lagtykkelse pr. lagtype ved reglen »vd«
+    phi_regel           reglen for friktionsvinklen i de beregnede opbygninger
+    kraev_bundsikring   ved reglen »vd«: kræv altid de underliggende lag
+    netplacering        placeringen af det øverste geonet ved 2 lag
+    """
+    ind = _aktiv_lagfordeling()
+    klasse = _minimumsklasse(grundlag)
+    return {
+        "fordeling": ind["fordeling"],
+        "klasse": klasse,
+        "min_mm": lagfordeling_mod.min_oeverste_lag(ind, klasse),
+        "samlet_min_mm": lagfordeling_mod.min_samlet(ind, klasse),
+        "restlag": ind["restlag"],
+        "restlag_graense_mm": ind["restlag_graense_mm"],
+        "vd_minimum_mm": dict(ind["vd_minimum_mm"]),
+        "phi_regel": ind["phi_regel"],
+        "kraev_bundsikring": ind["kraev_bundsikring"],
+        "netplacering": ind["netplacering"],
+    }
+
+
+def _lag_til_fordeling(materialer: list[dict] | None) -> list[dict]:
+    """Materialelagene som {"navn", "andel", "lagtype", "phi"} til
+    core.lagfordeling.
+
+    Andelen er tykkelsen i mm, når nogen lag har en tykkelse, ellers
+    procenten, jf. _sub_lag_skaleret_fra_materialer().
+    """
+    materialer = materialer or []
+    in_mm_mode = any((m.get("tykkelse_mm") or 0) > 0 for m in materialer)
+    felt = "tykkelse_mm" if in_mm_mode else "pct"
+    return [
+        {
+            "navn": m.get("navn", "Lag"),
+            "andel": float(m.get(felt) or 0),
+            "lagtype": m.get("lagtype"),
+            "phi": m.get("phi"),
+        }
+        for m in materialer if (m.get(felt) or 0) > 0
+    ]
+
+
+def _indtastet_oeverste_lag(
+    materialer: list[dict] | None, fordeling: dict | None,
+) -> float | None:
+    """Det indtastede øverste lags tykkelse i mm ved fordelingen
+    »fastholdt«, eller None.
+
+    Er lagene angivet i procent, findes der ingen indtastet tykkelse; det
+    øverste lag fastholdes da på sin tykkelse i den ustabiliserede
+    opbygning, jf. core.lagfordeling.
+    """
+    if not fordeling or fordeling.get("fordeling") != lagfordeling_mod.FORDELING_FASTHOLDT:
+        return None
+    for m in materialer or []:
+        t = m.get("tykkelse_mm") or 0
+        if t > 0:
+            return float(t)
+        if (m.get("pct") or 0) > 0:
+            return None
+    return None
+
+
+def _lagspec(materialer: list[dict] | None, fordeling: dict) -> dict | None:
+    """Lagopbygningen til core.lagfordeling.fordel_soejle(), eller None ved
+    færre end to materialelag.
+
+    Samme opbygning danner søjlerne og — båret af oprundingsindstillingen —
+    beregningens løft til VD's mindste lagtykkelse og φᵥ for søjlernes egne
+    lag, så de tre stemmer overens.
+    """
+    lag = _lag_til_fordeling(materialer)
+    if len(lag) < 2:
+        return None
+    return {
+        "lag": lag,
+        "fordeling": fordeling.get("fordeling"),
+        "min_mm": fordeling.get("min_mm"),
+        "oeverst_ref_mm": _indtastet_oeverste_lag(materialer, fordeling),
+        "restlag": fordeling.get("restlag", lagfordeling_mod.RESTLAG_VIS),
+        "restlag_graense_mm": fordeling.get("restlag_graense_mm"),
+        "vd_minimum_mm": (
+            fordeling.get("vd_minimum_mm")
+            if fordeling.get("restlag") == lagfordeling_mod.RESTLAG_VD
+            else None
+        ),
+        "phi_regel": fordeling.get("phi_regel", lagfordeling_mod.PHI_INDTASTET),
+        "kraev_bundsikring": bool(fordeling.get("kraev_bundsikring")),
+    }
+
+
+def _afrunding_til_beregning(
+    grundlag: dict,
+    materialer: list[dict] | None = None,
+    fordeling: dict | None = None,
+) -> dict:
+    """Oprundingsindstillingen til beregn(), jf. core.afrunding.
+
+    Den bærer minimumet for den samlede tykkelse som t_min_mm, når det
+    gælder. Har opbygningen mindst to materialelag, og er reglen for
+    underliggende lag »vd« eller reglen for friktionsvinklen en anden end
+    »indtastet«, bærer den desuden lagopbygningen, jf. _lagspec().
+
+    fordeling er lagfordelingen fra _fordelingsgrundlag(); uden den dannes
+    den af grundlaget.
+    """
+    afr = dict(_aktiv_afrunding())
+    if fordeling is None:
+        fordeling = _fordelingsgrundlag(grundlag)
+    if fordeling["samlet_min_mm"]:
+        afr["t_min_mm"] = fordeling["samlet_min_mm"]
+    spec = _lagspec(materialer, fordeling)
+    if spec is not None and (
+        spec["vd_minimum_mm"]
+        or spec["phi_regel"] != lagfordeling_mod.PHI_INDTASTET
+    ):
+        afr["lagopbygning"] = spec
+    return afr
+
+
+def _netplacering() -> str:
+    """Placeringen af det øverste geonet ved 2 lag, jf. core.placement."""
+    return _aktiv_lagfordeling()["netplacering"]
+
+
+def _standard_opdeling(grundlag: dict) -> dict:
+    """Standard-tilstandens beregningsgrundlag for minimum og opdeling.
+
+    klassisk         klassisk standardberegning: intet minimum, ingen
+                     opdeling og ingen lagregler
+    spec             lagopbygningen bag opdelingen i stabilgrus og
+                     bundsikring, jf. lagfordeling.standard_spec(), eller
+                     None, når opdelingen ikke anvendes
+    stabilgrus_mm    stabilgrusminimum oprundet til trinnet, eller None
+    under_minimum    opførslen, når samlet minimum er fjernet, og
+                     opbygningen er tyndere end stabilgrusminimum
+    t_min_mm         minimumet for den samlede tykkelse, eller None
+    klasse           belastningsklassen bag minimumstykkelsen
+
+    Stabilgrusminimum hentes altid i tabellen i Indstillinger, afsnit 3,
+    uanset fordelingsvalget dér, som alene gælder Brugerdefineret.
+    """
+    ind = _aktiv_lagfordeling()
+    klasse = _minimumsklasse(grundlag)
+    ud = {
+        "klassisk": ind["standard_klassisk"],
+        "spec": None,
+        "stabilgrus_mm": None,
+        "under_minimum": ind["standard_under_minimum"],
+        "t_min_mm": None,
+        "klasse": klasse,
+    }
+    if ind["standard_klassisk"]:
+        return ud
+    sg_min = lagfordeling_mod.minimum_for_klasse(ind, klasse)
+    t_min = lagfordeling_mod.min_samlet(ind, klasse)
+    if ind["standard_opdeling"] and sg_min:
+        ud["spec"] = lagfordeling_mod.standard_spec(ind, sg_min)
+        ud["stabilgrus_mm"] = afrunding_mod.rund_op(sg_min, _afrundingstrin())
+        # Er samlet minimum fjernet, kan opdelingen selv løfte tykkelsen.
+        if t_min is None and ind["standard_under_minimum"] == lagfordeling_mod.UNDER_MIN_LOEFT:
+            t_min = sg_min
+    ud["t_min_mm"] = t_min
+    return ud
+
+
+def _afrunding_standard(opdeling: dict) -> dict:
+    """Oprundingsindstillingen til Standard-beregningen, jf.
+    _afrunding_til_beregning(). Ved klassisk standardberegning bærer den
+    alene oprundingen."""
+    afr = dict(_aktiv_afrunding())
+    if opdeling["klassisk"]:
+        return afr
+    if opdeling["t_min_mm"]:
+        afr["t_min_mm"] = opdeling["t_min_mm"]
+    spec = opdeling["spec"]
+    if spec is not None and spec.get("vd_minimum_mm"):
+        afr["lagopbygning"] = spec
+    return afr
+
+
+def _sub_lag_standard(opdeling: dict | None, total_mm: float | None) -> list[dict] | None:
+    """Lagene i en Standard-søjle, eller None for ét samlet ubundet lag.
+
+    Er opbygningen tyndere end stabilgrusminimum, og er opførslen »ét
+    samlet ubundet lag« valgt, vises søjlen uden opdeling.
+    """
+    if not opdeling or opdeling.get("spec") is None or not total_mm:
+        return None
+    sg = opdeling.get("stabilgrus_mm")
+    if (
+        opdeling.get("under_minimum") == lagfordeling_mod.UNDER_MIN_UBUNDET
+        and sg and total_mm < sg - 0.5
+    ):
+        return None
+    fordelt = lagfordeling_mod.fordel_soejle(
+        opdeling["spec"], total_mm, _afrundingstrin(),
+    )
+    return fordelt or None
+
+
+def _aktiv_opbygning() -> dict:
+    """Den gældende indstilling for opbygningssøjlerne."""
+    return _normaliser_opbygning(
+        st.session_state.get("indstillinger", {}).get("opbygning")
+    )
+
+
+def _snit_visning() -> dict:
+    """Indstillingen for opbygningssøjlerne som argumenter til ui.snit() og
+    rapport.render_opbygning_png()."""
+    opb = _aktiv_opbygning()
+    return {
+        "geonet_paaskrift": opb["geonet_paaskrift"],
+        "vis_maal_streg": opb["maal_streg"],
+        "vis_maal_tal": opb["maal_tal"],
+    }
 
 def _standard_materialer() -> list[dict]:
     """Returner standardmaterialer i samme format som editoren gemmer."""
@@ -2229,8 +2569,10 @@ def _kob_trin6(
     krav_kilde benævner den ustabiliserede tykkelse i noten om de to
     procentreferencer. Ved trafikklasse hidrører den fra VejDim; ved
     belastningsklasse er den aflæst i designdiagrammet.
+
+    Er opbygningerne regnet med φᵥ for deres egne lag, jf. Indstillinger, bærer
+    ref_1 og ref_2 hver sin φᵥ, og φᵥ-korrektionen regnes af den.
     """
-    phi_kor = K_PHI * (phi - PHI_BASIS)
     # Nettets afvigelse angives ved effektindekset, hvor det er kendt —
     # det er den størrelse, geonet-databasen ordner produkterne efter.
     indeks = (find_geonet(net_navn) or {}).get("effektindeks")
@@ -2244,10 +2586,20 @@ def _kob_trin6(
         ("1_lag", "1 LAG GEONET", "kob-1lag", ref_1),
         ("2_lag", "2 LAG GEONET", "kob-2lag", ref_2),
     ):
-        t_arm = (ref or {}).get("t_armeret_mm")
+        # Leddene regnes af den beregnede tykkelse; den oprundede står som
+        # slutresultat med oprundingen som eget led.
+        t_arm_slut = (ref or {}).get("t_armeret_mm")
+        t_arm = _eksakt_vaerdi(ref, "t_armeret_mm")
         if lag not in t3 or t_arm is None:
             continue
+        oprundet = afrunding_mod.er_oprundet(t_arm_slut, t_arm)
         basis = t3[lag]["basis"]
+        phi_lag = (ref or {}).get("phi", phi)
+        phi_kor = K_PHI * (phi_lag - PHI_BASIS)
+        phi_maerkat = (
+            f" for opbygningens lag, φᵥ = {_kob_tal(phi_lag, 2)}°"
+            if abs(phi_lag - phi) >= 0.005 else ""
+        )
         # Mellemregningen står nedtonet efter hvert led. Korrektionerne
         # regnes af den armerede kurve i punktet — aflæsningstrinnets
         # basisværdi — og ikke af den ustabiliserede tykkelse.
@@ -2271,7 +2623,7 @@ def _kob_trin6(
         if abs(phi_kor) >= 1e-9:
             linjer.append(
                 _kob_esc(_kob_regnelinje(
-                    f"{'+' if phi_kor > 0 else '−'} φᵥ-korrektion",
+                    f"{'+' if phi_kor > 0 else '−'} φᵥ-korrektion{phi_maerkat}",
                     f"{_kob_tal(abs(basis * phi_kor))} mm"))
                 + _kob_svag(f"{b_tal} × {_kob_tal(abs(phi_kor) * 100, 2)} %")
             )
@@ -2283,19 +2635,56 @@ def _kob_trin6(
                 "basisreduktion + net-korrektion + φᵥ-korrektion"
             )
         )
+        if oprundet:
+            # Oprundingen og et eventuelt tillæg op til minimumstykkelsen
+            # står som hver sit led, jf. core.afrunding.tillaeg().
+            trin_mm = (ref or {}).get("afrunding_trin_mm") or _afrundingstrin()
+            op_mm, min_mm, lag_mm = afrunding_mod.tillaeg(
+                t_arm_slut, t_arm, trin_mm, (ref or {}).get("t_min_mm"),
+            )
+            if round(op_mm) > 0:
+                linjer.append(
+                    _kob_esc(_kob_regnelinje(
+                        f"+ oprunding til nærmeste {afrunding_mod.trin_tekst(trin_mm)}",
+                        f"{_kob_tal(op_mm)} mm"))
+                    + _kob_svag(f"beregnet {_kob_tal(t_arm)} mm, jf. Indstillinger")
+                )
+            if round(min_mm) > 0:
+                linjer.append(
+                    _kob_esc(_kob_regnelinje(
+                        "+ tillæg til minimumstykkelse",
+                        f"{_kob_tal(min_mm)} mm"))
+                    + _kob_svag(
+                        f"mindst {_kob_tal(t_arm_slut - lag_mm)} mm, "
+                        "jf. Indstillinger"
+                    )
+                )
+            if round(lag_mm) > 0:
+                linjer.append(
+                    _kob_esc(_kob_regnelinje(
+                        "+ tillæg for mindste lagtykkelse",
+                        f"{_kob_tal(lag_mm)} mm"))
+                    + _kob_svag(
+                        _lagtillaeg_tekst(ref, kort=True)
+                        or "underliggende lag efter VD, jf. Indstillinger"
+                    )
+                )
         red_krav = (t_krav - t_arm) / t_krav * 100 if t_krav else None
         red_kor = (ref or {}).get("reduktion_pct")
+        t_uarm_kor_vist = (ref or {}).get("t_uarmeret_phi_kor_mm") or t_uarm_kor
         hale = ""
         if red_krav is not None:
             hale = f"−{_kob_tal(red_krav)} % af {_kob_tal(t_krav)}"
-            # Den anden reference nævnes kun, når φᵥ-korrektionen flytter
-            # udgangspunktet — ellers er de to procenter det samme tal.
-            if red_kor is not None and t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
-                hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_tal(t_uarm_kor)}"
+            # Den anden reference nævnes kun, når φᵥ-korrektionen eller
+            # oprundingen flytter udgangspunktet — ellers er de to procenter
+            # det samme tal.
+            if (red_kor is not None and t_uarm_kor_vist
+                    and (abs(t_uarm_kor_vist - t_krav) >= 1 or oprundet)):
+                hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_tal(t_uarm_kor_vist)}"
         # Slutresultatet stilles i samme talkolonne som leddene ovenfor og
         # adskilles visuelt fra mellemregningerne.
         slut_etiket = _kob_esc(f"{'Stabiliseret bærelagstykkelse =':<33}")
-        slut_tal = _kob_esc(f"{_kob_tal(t_arm)} mm".rjust(10))
+        slut_tal = _kob_esc(f"{_kob_tal(t_arm_slut)} mm".rjust(10))
         linjer.append(
             '<div class="kob-slutlinje">'
             + slut_etiket
@@ -2307,27 +2696,46 @@ def _kob_trin6(
             f'<div><div class="kob-lag-hoved {klasse}">{navn}</div>'
             + _kob_formel(*linjer) + "</div>"
         )
-        resultater.append(_kob_tal(t_arm))
+        resultater.append(_kob_tal(t_arm_slut))
         if red_krav is not None:
             pct_krav.append(f"−{_kob_tal(red_krav)} %")
 
     if not kolonner:
         return ""
     krop = f'<div class="kob-lag">{"".join(kolonner)}</div>'
+    # Resultatkortets reference er den φᵥ-korrigerede tykkelse, som den
+    # vises — oprundet, når indstillingen kræver det.
+    ref_vist = ref_1 or ref_2 or {}
+    t_uarm_kor_vist = ref_vist.get("t_uarmeret_phi_kor_mm") or t_uarm_kor
+    nogen_oprundet = any(
+        afrunding_mod.er_oprundet(
+            (r or {}).get("t_armeret_mm"), _eksakt_vaerdi(r, "t_armeret_mm"),
+        )
+        for r in (ref_1, ref_2)
+    ) or afrunding_mod.er_oprundet(t_uarm_kor_vist, t_uarm_kor)
+    oprundings_note = ""
+    if nogen_oprundet:
+        trin_mm = ref_vist.get("afrunding_trin_mm") or _afrundingstrin()
+        oprundings_note = (
+            " Lagtykkelserne oprundes til nærmeste "
+            f"{_kob_esc(afrunding_mod.trin_tekst(trin_mm))}, jf. Indstillinger; "
+            "regnestykket er ført med de beregnede værdier, og oprundingen "
+            "står som sidste led."
+        )
     krop += (
         '<div class="kob-note">Basisreduktionen gælder referencenettet i '
         "punktet, og net-korrektionen er det valgte nets afvigelse herfra. "
         "<b>To referencer for procenterne:</b> regnestykket her tager udgangspunkt i den ukorrigerede værdi på "
         f"{_kob_esc(krav_kilde)} {_kob_esc(_kob_tal(t_krav))} mm, så leddene "
         "summerer til resultatet, mens resultatkortet øverst måler "
-        f"reduktionen mod de φᵥ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor))} "
+        f"reduktionen mod de φᵥ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor_vist))} "
         "mm, hvor begge sider hviler på de valgte materialer. Begge er "
         "angivet, så de to sæt procenter ikke fremstår som en "
-        "uoverensstemmelse.</div>"
-        if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1 else
+        f"uoverensstemmelse.{oprundings_note}</div>"
+        if t_uarm_kor_vist and (abs(t_uarm_kor_vist - t_krav) >= 1 or nogen_oprundet) else
         '<div class="kob-note">Basisreduktionen gælder referencenettet i '
         "punktet, og net-korrektionen er det valgte nets afvigelse herfra."
-        "</div>"
+        f"{oprundings_note}</div>"
     )
     return _kob_trin(
         nr, "Reduktion med geonet", f"geonet-databasen, {_kob_esc(net_navn)}",
@@ -2415,10 +2823,10 @@ def _kob_bk_trin2(
         f'<div class="kob-note">Eₒ = {_kob_esc(ui.mpa(eo))} er en af '
         f"diagrammernes egne kurver, og Eᵤ = {_kob_esc(ui.mpa(eu))} en af "
         "tabellens rækker; beregningen foretager derfor ingen interpolation. "
-        "Opmærksomheden henledes på, at tabellens rækker er fastlagt ved "
-        "digitaliseringen af diagrammerne, og at en del af værdierne herved "
-        "er indlagt ved interpolation mellem kurvernes aflæste punkter. "
-        "Rækkerne kan efterses under <b>Designdiagrammer</b>.</div>"
+        "Opmærksomheden henledes på, at tabellens værdier er bestemt ved "
+        "lineær interpolation mellem kurvernes aflæste punkter, og at kun "
+        "en del af dem er aflæst direkte. Rækkerne kan efterses under "
+        "<b>Designdiagrammer</b>, hvor de aflæste værdier står med fed.</div>"
     )
     naboer = _kob_eo_naboer(eo)
     nabo_tekst = " og ".join(str(eo_til_klasse(n)) for n in naboer)
@@ -2524,9 +2932,11 @@ def _render_kobling_sektion(
                 )
         return
 
-    t_uarm_kor = (ref_1 or ref_2 or {}).get("t_uarmeret_phi_kor_mm")
-    t_1lag = (ref_1 or {}).get("t_armeret_mm")
-    t_2lag = (ref_2 or {}).get("t_armeret_mm")
+    # Kæden føres med de beregnede tykkelser, så leddene summerer; oprundingen
+    # til indbygningstrin står som eget led i sidste trin, jf. _kob_trin6().
+    t_uarm_kor = _eksakt_vaerdi(ref_1 or ref_2, "t_uarmeret_phi_kor_mm")
+    t_1lag = _eksakt_vaerdi(ref_1, "t_armeret_mm")
+    t_2lag = _eksakt_vaerdi(ref_2, "t_armeret_mm")
     net_kor = float((geonet or {}).get("korrektion") or 0.0)
     net_navn = (geonet or {}).get("navn") or "referencenet"
     punkter, sign = _kob_punkter(t_krav, t_uarm_kor, t_1lag, t_2lag)
@@ -2583,7 +2993,8 @@ def _render_kobling_sektion(
     krop = '<div class="kob-skel"></div>'.join(t for t in trin if t)
     # Titlen sættes fed og underrubrikken normal, som i sektionens hoved i
     # designforslaget; ekspanderens etiket sættes af markdown.
-    resultat = t_1lag if t_1lag is not None else t_2lag
+    # Overskriften nævner resultatet, som det vises — oprundet.
+    resultat = (ref_1 or ref_2 or {}).get("t_armeret_mm")
     overskrift = f"**Sådan er resultatet beregnet** · {grundlag_tekst}"
     if resultat is not None:
         overskrift += f" til {ui.mm(resultat)} bærelag"
@@ -2725,6 +3136,74 @@ def _korrektion_interval_note(geonet: dict | None) -> str | None:
     )
 
 
+# Placeringsfelter, der føres fra et beregn()-resultat over på produktet.
+_PLACERING_FELTER: tuple[str, ...] = (
+    "placering_ok", "geonet_placeringer_mm_fra_top", "geonet_y_fracs",
+    "topdaeklag_mm", "afstande_mellem_geonet_mm", "placeringsadvarsler",
+    "t_min_placering_mm", "t_dimensionerende_mm", "min_top_cover_mm",
+    "min_spacing_mm", "max_spacing_mm", "placeringsbasis",
+)
+
+# De beregnede værdier bag oprundingen samt minimumstykkelsen, jf.
+# core.afrunding.
+_EKSAKT_FELTER: tuple[str, ...] = (
+    "t_armeret_eksakt_mm", "t_uarmeret_eksakt_mm",
+    "t_uarmeret_phi_kor_eksakt_mm",
+    "reduktion_mm_eksakt", "reduktion_pct_eksakt", "afrunding_trin_mm",
+    "t_min_mm", "t_armeret_til_minimum", "t_uarmeret_til_minimum",
+    "t_uarmeret_phi_kor_til_minimum", "t_armeret_til_lagminimum",
+    "t_uarmeret_phi_kor_til_lagminimum", "t_armeret_lagtillaeg_lag",
+    # φᵥ for hver opbygning, når den er regnet af opbygningens egne lag.
+    "phi", "phi_uarmeret", "phi_indtastet", "phi_regel",
+)
+
+
+def _reduktion_fra_res(res: dict) -> tuple[float | None, float | None]:
+    """(reduktion_mm, reduktion_pct) fra et beregn()-resultat.
+
+    Værdierne er opgjort i beregn() mod den φᵥ-korrigerede ustabiliserede
+    tykkelse og følger oprundingsindstillingen. Mangler de — resultater fra
+    ældre kald uden afrunding — opgøres de her på samme grundlag.
+    """
+    if "reduktion_pct" in res:
+        return res.get("reduktion_mm"), res.get("reduktion_pct")
+    t_arm = res.get("t_armeret_mm")
+    t_uarm_ref = res.get("t_uarmeret_phi_kor_mm") or res.get("t_uarmeret_mm")
+    if t_arm is None or not t_uarm_ref:
+        return None, None
+    return t_uarm_ref - t_arm, (t_uarm_ref - t_arm) / t_uarm_ref
+
+
+def _eksakt_vaerdi(res: dict | None, felt: str) -> float | None:
+    """Den beregnede værdi bag et oprundet tykkelsesfelt.
+
+    Bærer resultatet ikke eksakt-feltet — kald uden afrunding — er den
+    oprundede og den beregnede værdi den samme.
+    """
+    if not res:
+        return None
+    e = res.get(afrunding_mod.eksakt_navn(felt))
+    return e if e is not None else res.get(felt)
+
+
+def _eksakt_best(produkt: dict | None) -> float | None:
+    """Den beregnede tykkelse ved den optimale ende af korrektionsintervallet."""
+    if not produkt:
+        return None
+    e = produkt.get("t_armeret_eksakt_mm_min")
+    return e if e is not None else produkt.get("t_armeret_mm_min")
+
+
+def _eksakt_eller(res: dict, felt: str, ellers):
+    """Den beregnede værdi i felt, når resultatet bærer den; ellers ellers."""
+    v = res.get(felt)
+    if v is None:
+        v = ellers
+    if v is None:
+        return None
+    return round(v, 0) if felt.endswith("_mm") else round(v, 4)
+
+
 def _resultat_til_gruppe(
     res: dict, geonet: dict, valgt_klasse: int
 ) -> dict | None:
@@ -2739,10 +3218,10 @@ def _resultat_til_gruppe(
 
     t_eks = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
-    # Reduktion sammenlignes mod den φᵥ-korrigerede uarmerede reference,
-    # så begge sider af regnestykket er konsistent korrigeret for materiale.
-    t_uarm_ref = res.get("t_uarmeret_phi_kor_mm") or t_uarm
-    red_eks = (t_uarm_ref - t_eks) / t_uarm_ref if t_uarm_ref else None
+    # Reduktionen er opgjort i beregn() mod den φᵥ-korrigerede uarmerede
+    # reference, så begge sider af regnestykket er konsistent korrigeret for
+    # materiale — og efter oprundingsindstillingen, jf. core.afrunding.
+    red_mm, red_eks = _reduktion_fra_res(res)
 
     produkt = {
         "navn":           geonet["navn"],
@@ -2752,7 +3231,7 @@ def _resultat_til_gruppe(
         "t_uarmeret_mm":  t_uarm,
         "t_uarmeret_phi_kor_mm": res.get("t_uarmeret_phi_kor_mm"),
         "t_basis_arm_mm": res.get("t_basis_arm_mm"),
-        "reduktion_mm":   t_uarm_ref - t_eks if t_uarm_ref is not None else None,
+        "reduktion_mm":   red_mm,
         "reduktion_pct":  red_eks,
         "klasse_ok":      valgt_klasse in geonet["klasser"],
         "klasser":        geonet["klasser"],
@@ -2760,19 +3239,14 @@ def _resultat_til_gruppe(
         "max_korn":       geonet["max_korn"],
         "fejl":           None,
     }
-    for key in (
-        "placering_ok", "geonet_placeringer_mm_fra_top", "geonet_y_fracs",
-        "topdaeklag_mm", "afstande_mellem_geonet_mm", "placeringsadvarsler",
-        "t_min_placering_mm", "t_dimensionerende_mm", "min_top_cover_mm",
-        "min_spacing_mm", "max_spacing_mm", "placeringsbasis",
-    ):
+    for key in _PLACERING_FELTER + _EKSAKT_FELTER:
         if key in res:
             produkt[key] = res[key]
     return {
         "t_armeret_mm":         round(t_eks, 0),
-        "t_armeret_eksakt_mm":  round(t_eks, 0),
+        "t_armeret_eksakt_mm":  _eksakt_eller(res, "t_armeret_eksakt_mm", round(t_eks, 0)),
         "reduktion_pct":        round(red_eks, 4) if red_eks is not None else None,
-        "reduktion_pct_eksakt": round(red_eks, 4) if red_eks is not None else None,
+        "reduktion_pct_eksakt": _eksakt_eller(res, "reduktion_pct_eksakt", red_eks),
         "t_basis_arm_mm":       res.get("t_basis_arm_mm"),
         "produkter":            [produkt],
         "placering_ok":         produkt.get("placering_ok", True),
@@ -2798,8 +3272,7 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
     t_ref = res["t_armeret_mm"]
     t_uarm = res["t_uarmeret_mm"]
     # Reduktion mod φᵥ-korrigeret reference (se _resultat_til_gruppe).
-    t_uarm_ref = res.get("t_uarmeret_phi_kor_mm") or t_uarm
-    red_ref = (t_uarm_ref - t_ref) / t_uarm_ref if t_uarm_ref else None
+    red_mm, red_ref = _reduktion_fra_res(res)
     produkt = {
         "navn": REFERENCE_NAVN,
         "serie": "Reference",
@@ -2808,7 +3281,7 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
         "t_uarmeret_mm": t_uarm,
         "t_uarmeret_phi_kor_mm": res.get("t_uarmeret_phi_kor_mm"),
         "t_basis_arm_mm": res.get("t_basis_arm_mm"),
-        "reduktion_mm": t_uarm_ref - t_ref if t_uarm_ref is not None else None,
+        "reduktion_mm": red_mm,
         "reduktion_pct": red_ref,
         "klasse_ok": valgt_klasse in REFERENCE_KLASSER,
         "klasser": REFERENCE_KLASSER,
@@ -2816,19 +3289,14 @@ def _reference_resultat_til_gruppe(res: dict, valgt_klasse: int) -> dict | None:
         "max_korn": None,
         "fejl": None,
     }
-    for key in (
-        "placering_ok", "geonet_placeringer_mm_fra_top", "geonet_y_fracs",
-        "topdaeklag_mm", "afstande_mellem_geonet_mm", "placeringsadvarsler",
-        "t_min_placering_mm", "t_dimensionerende_mm", "min_top_cover_mm",
-        "min_spacing_mm", "max_spacing_mm", "placeringsbasis",
-    ):
+    for key in _PLACERING_FELTER + _EKSAKT_FELTER:
         if key in res:
             produkt[key] = res[key]
     return {
         "t_armeret_mm": round(t_ref, 0),
-        "t_armeret_eksakt_mm": round(t_ref, 0),
+        "t_armeret_eksakt_mm": _eksakt_eller(res, "t_armeret_eksakt_mm", round(t_ref, 0)),
         "reduktion_pct": round(red_ref, 4) if red_ref is not None else None,
-        "reduktion_pct_eksakt": round(red_ref, 4) if red_ref is not None else None,
+        "reduktion_pct_eksakt": _eksakt_eller(res, "reduktion_pct_eksakt", red_ref),
         "t_basis_arm_mm": res.get("t_basis_arm_mm"),
         "produkter": [produkt],
         "placering_ok": produkt.get("placering_ok", True),
@@ -2844,14 +3312,21 @@ def _beregn_referencegrupper(
     valgt_klasse: int,
     t_basis_table: dict | None,
     skala: float = 1.0,
+    afrunding: dict | None = None,
 ) -> tuple[dict | None, dict | None, str | None, str | None]:
+    # afrunding kan bære minimumet for den samlede tykkelse, jf.
+    # _afrunding_til_beregning(); uden den gælder oprundingen alene.
+    if afrunding is None:
+        afrunding = _aktiv_afrunding()
     res_1 = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=0.0,
         lag_mode="1_lag", t_basis_table=t_basis_table, skala=skala,
+        afrunding=afrunding,
     )
     res_2 = beregn(
         eu=eu, eo=eo, phi=phi, net_korrektion=0.0,
         lag_mode="2_lag", t_basis_table=t_basis_table, skala=skala,
+        afrunding=afrunding,
     )
     return (
         _reference_resultat_til_gruppe(res_1, valgt_klasse),
@@ -2945,14 +3420,22 @@ def _optimal_beregning(
         return None
     t_best = produkt.get("t_armeret_mm_min")
     kor_best = produkt.get("korrektion_min")
-    t_uarm = produkt.get("t_uarmeret_mm")
+    # Regnestykket føres med de beregnede tykkelser; oprundingen til
+    # indbygningstrin står som eget led, jf. _render_valgt_net_detaljer().
+    t_best_eks = produkt.get("t_armeret_eksakt_mm_min")
+    if t_best_eks is None:
+        t_best_eks = t_best
+    t_uarm = _eksakt_vaerdi(produkt, "t_uarmeret_mm")
     t_basis = produkt.get("t_basis_arm_mm")
     if t_best is None or kor_best is None or t_basis is None:
         return None
 
     ender = _indeks_ender(net_navn)
     indeks = ender[1] if ender else _effektindeks(net_navn)
-    phi_kor = K_PHI * (phi - PHI_BASIS)
+    # Er opbygningerne regnet med φᵥ for deres egne lag, bærer den optimale ende
+    # sin egen φᵥ, jf. core.calculator.beregn().
+    phi_best = produkt.get("phi_min") or produkt.get("phi") or phi
+    phi_kor = K_PHI * (phi_best - PHI_BASIS)
     basis_mm = (
         round(t_uarm - t_basis) if t_uarm is not None and t_basis is not None
         else None
@@ -2975,6 +3458,20 @@ def _optimal_beregning(
             f"φᵥ-korrektion, {_pct_fortegn(phi_kor, 1)}",
             abs(phi_mm),
         ))
+    trin = produkt.get("afrunding_trin_mm") or _afrundingstrin()
+    oprunding_mm, minimum_mm, lag_mm = afrunding_mod.tillaeg(
+        t_best, t_best_eks, trin, produkt.get("t_min_mm"),
+    )
+    if round(oprunding_mm) > 0:
+        linjer.append((
+            "+",
+            f"Oprunding til nærmeste {afrunding_mod.trin_tekst(trin)}",
+            round(oprunding_mm),
+        ))
+    if round(minimum_mm) > 0:
+        linjer.append(("+", "Tillæg til minimumstykkelse", round(minimum_mm)))
+    if round(lag_mm) > 0:
+        linjer.append(("+", "Tillæg for mindste lagtykkelse", round(lag_mm)))
     return {
         "linjer": linjer,
         "t_mm": t_best,
@@ -3013,6 +3510,44 @@ def _optimal_note(
     return _optimal_tooltip(beregning) if beregning else None
 
 
+def _lagtillaeg_tekst(res: dict | None, *, kort: bool = False) -> str | None:
+    """Lagene og tallene bag tillægget for mindste lagtykkelse.
+
+    Hviler på lagene før og efter tillægget, som core.afrunding gemmer i
+    t_armeret_lagtillaeg_lag. Den lange form er forklaringen i kortet
+    »Detaljer«; den korte er noten i »Sådan er resultatet beregnet«.
+    Returnerer None, når resultatet ikke bærer lagene.
+    """
+    lag = (res or {}).get("t_armeret_lagtillaeg_lag")
+    if not lag or not lag.get("efter"):
+        return None
+    foer = {l["navn"]: l["tykkelse_mm"] for l in lag.get("foer") or []}
+    efter = lag["efter"]
+    samlet = sum(l["tykkelse_mm"] for l in efter)
+    oegede = [
+        (l["navn"], foer.get(l["navn"], 0.0), l["tykkelse_mm"])
+        for l in efter[1:]
+        if l["tykkelse_mm"] > foer.get(l["navn"], 0.0) + 0.5
+    ]
+    if kort:
+        tekst = " + ".join(_kob_tal(l["tykkelse_mm"]) for l in efter) + " mm"
+        if oegede:
+            tekst += "; " + ", ".join(
+                f"{navn} øget fra {_kob_tal(fra)} mm" for navn, fra, _ in oegede
+            )
+        return tekst + ", jf. Indstillinger"
+    tekst = (
+        " + ".join(f"{l['navn']} {ui.mm(l['tykkelse_mm'])}" for l in efter)
+        + f" = {ui.mm(samlet)}."
+    )
+    for navn, fra, til in oegede:
+        tekst += (
+            f" {navn} er øget fra {ui.mm(fra)} til {ui.mm(til)}, som er "
+            "mindste lagtykkelse for lagtypen."
+        )
+    return tekst + " Jf. Indstillinger, afsnit 4."
+
+
 def _render_valgt_net_detaljer(
     produkt_1: dict | None,
     produkt_2: dict | None,
@@ -3032,22 +3567,40 @@ def _render_valgt_net_detaljer(
                 '</div></section>'
             )
 
+        # Regnestykket føres med de beregnede tykkelser, så leddene summerer
+        # til den beregnede armerede tykkelse; oprundingen til
+        # indbygningstrin står som eget led til sidst, jf. core.afrunding.
         t_uarm = produkt.get("t_uarmeret_mm")
+        t_uarm_eks = _eksakt_vaerdi(produkt, "t_uarmeret_mm")
         t_basis = produkt.get("t_basis_arm_mm")
         t_arm = produkt.get("t_armeret_mm")
+        t_arm_eks = _eksakt_vaerdi(produkt, "t_armeret_mm")
         net_kor = 0.0 if er_reference else float(produkt.get("korrektion") or 0.0)
-        phi_kor = K_PHI * (phi - PHI_BASIS)
+        # Opbygningens egen φᵥ, når den er regnet af dens lag, jf. Indstillinger.
+        phi_arm = produkt.get("phi", phi)
+        phi_kor = K_PHI * (phi_arm - PHI_BASIS)
         # Produkter med korrektionsinterval er tabuleret med et effektindeks i
         # to ender. Tabellen er regnet af den nedre, konservative ende, og
         # rækken angiver derfor denne ende alene; det fulde spænd og den
         # optimale ende fremgår af blokken nederst.
         ender = None if er_reference else _indeks_ender(net_navn)
         index = ender[0] if ender else _effektindeks(net_navn, is_ref=er_reference)
-        basis_mm = -round(t_uarm - t_basis) if t_uarm is not None and t_basis is not None else None
+        basis_mm = -round(t_uarm_eks - t_basis) if t_uarm_eks is not None and t_basis is not None else None
         net_mm = round(t_basis * net_kor) if t_basis is not None else None
         phi_mm = round(t_basis * phi_kor) if t_basis is not None else None
-        reduktion_mm = round(t_uarm - t_arm) if t_uarm is not None else None
-        reduktion_pct = reduktion_mm / t_uarm if t_uarm else None
+        # Oprundingen til trinnet og et eventuelt tillæg op til
+        # minimumstykkelsen står som hver sit led, jf. core.afrunding.
+        trin_arm = produkt.get("afrunding_trin_mm") or _afrundingstrin()
+        oprunding_mm, minimum_mm, lag_mm = afrunding_mod.tillaeg(
+            t_arm, t_arm_eks, trin_arm, produkt.get("t_min_mm"),
+        )
+        oprunding_mm = round(oprunding_mm)
+        minimum_mm = round(minimum_mm)
+        lag_mm = round(lag_mm)
+        reduktion_mm, reduktion_pct = afrunding_mod.reduktion_for(
+            t_uarm, t_arm, t_uarm_eks, t_arm_eks, _aktiv_afrunding(),
+        )
+        reduktion_mm = round(reduktion_mm) if reduktion_mm is not None else None
 
         def _raekke(
             tegn: str, titel: str, vaerdi: str, klasse: str = "",
@@ -3076,7 +3629,7 @@ def _render_valgt_net_detaljer(
             if ender else f"Net-korrektion, indeks {index}"
         )
         rows = [
-            _raekke("", "Ustabiliseret bærelagstykkelse", ui.mm(t_uarm)),
+            _raekke("", "Ustabiliseret bærelagstykkelse", ui.mm(t_uarm_eks)),
             _raekke("−", "Basisreduktion, referencenet", ui.mm(abs(basis_mm or 0))),
             _raekke(
                 "−" if (net_mm or 0) < 0 else "+",
@@ -3089,8 +3642,52 @@ def _render_valgt_net_detaljer(
             rows.append(
                 _raekke(
                     "−" if (phi_mm or 0) < 0 else "+",
-                    f"φᵥ-korrektion, {phi_tekst}",
+                    (
+                        f"φᵥ-korrektion, opbygningens lag {ui.grader(phi_arm)}, {phi_tekst}"
+                        if abs(phi_arm - phi) >= 0.005
+                        else f"φᵥ-korrektion, {phi_tekst}"
+                    ),
                     ui.mm(abs(phi_mm or 0)),
+                )
+            )
+        if oprunding_mm > 0:
+            rows.append(
+                _raekke(
+                    "+",
+                    f"Oprunding til nærmeste {afrunding_mod.trin_tekst(trin_arm)}",
+                    ui.mm(oprunding_mm),
+                    forklaring=(
+                        f"Beregnet tykkelse {ui.mm(t_arm_eks)}. Lagtykkelsen "
+                        f"oprundes til nærmeste {afrunding_mod.trin_tekst(trin_arm)}, "
+                        "jf. Indstillinger."
+                    ),
+                )
+            )
+        if minimum_mm > 0:
+            rows.append(
+                _raekke(
+                    "+",
+                    "Tillæg til minimumstykkelse",
+                    ui.mm(minimum_mm),
+                    forklaring=(
+                        "Den samlede bærelagstykkelse sættes mindst til "
+                        f"minimumstykkelsen {ui.mm(produkt.get('t_min_mm') or t_arm)} "
+                        "for klassen, jf. Indstillinger."
+                    ),
+                )
+            )
+        if lag_mm > 0:
+            rows.append(
+                _raekke(
+                    "+",
+                    "Tillæg for mindste lagtykkelse",
+                    ui.mm(lag_mm),
+                    forklaring=(
+                        _lagtillaeg_tekst(produkt)
+                        or "Lagtykkelsen øges, så de underliggende lag mindst "
+                        "har den mindste lagtykkelse efter Vejdirektoratets "
+                        "håndbog, Figur 6.5, jf. Indstillinger."
+                    ),
                 )
             )
 
@@ -3126,16 +3723,20 @@ def _render_valgt_net_detaljer(
         # materialer. Forskellen anføres, så de to procenter ikke fremstår
         # som en uoverensstemmelse.
         t_uarm_kor = produkt.get("t_uarmeret_phi_kor_mm")
+        t_uarm_kor_eks = _eksakt_vaerdi(produkt, "t_uarmeret_phi_kor_mm")
         ref_note = ""
         if (t_uarm and t_arm and t_uarm_kor
                 and abs(t_uarm_kor - t_uarm) >= 1):
+            _, red_kor_pct = afrunding_mod.reduktion_for(
+                t_uarm_kor, t_arm, t_uarm_kor_eks, t_arm_eks, _aktiv_afrunding(),
+            )
             ref_note = (
                 '<div class="rt-detaljer-optimal-note">'
                 "Regnestykket tager udgangspunkt i den ukorrigerede værdi på "
-                f"{html.escape(ui.mm(t_uarm))}. Resultatkortet øverst måler "
+                f"{html.escape(ui.mm(t_uarm_eks))}. Resultatkortet øverst måler "
                 "reduktionen mod de φᵥ-korrigerede "
                 f"{html.escape(ui.mm(t_uarm_kor))} og angiver derfor "
-                f"{html.escape(ui.procent((t_uarm_kor - t_arm) / t_uarm_kor * 100))}"
+                f"{html.escape(ui.procent((red_kor_pct or 0) * 100))}"
                 ".</div>"
             )
 
@@ -3145,7 +3746,7 @@ def _render_valgt_net_detaljer(
             f'{"".join(rows)}'
             '<div class="rt-detaljer-resultat">'
             '<div><strong>Stabiliseret bærelagstykkelse</strong></div>'
-            f'<div class="rt-detaljer-resultat-tal">{html.escape(ui.mm(t_arm))}</div>'
+            f'<div class="rt-detaljer-resultat-tal">{html.escape(_mm_res(produkt))}</div>'
             '</div>'
             '<div class="rt-detaljer-samlet">Reduktion i alt '
             f'{html.escape(_delta_mm(-(reduktion_mm or 0)))} · '
@@ -3285,12 +3886,39 @@ def _render_produkttabel_hoved(
     return kolonne, retning
 
 
+def _sparet(produkt: dict | None) -> tuple[float | None, float | None]:
+    """Besparelsen (mm, %) ved geonet mod den rå ustabiliserede tykkelse.
+
+    Følger oprundingsindstillingen: af de oprundede tykkelser, eller af de
+    beregnede, når reduktionen er sat til at følge dem, jf. core.afrunding.
+    """
+    if not _rt_gyldig(produkt) or not produkt.get("t_uarmeret_mm"):
+        return None, None
+    return afrunding_mod.reduktion_for(
+        produkt["t_uarmeret_mm"], produkt["t_armeret_mm"],
+        produkt.get("t_uarmeret_eksakt_mm"), produkt.get("t_armeret_eksakt_mm"),
+        _aktiv_afrunding(),
+    )
+
+
 def _sparet_pct(produkt: dict | None) -> float | None:
     """Besparelsen i procent ved geonet, eller None uden gyldigt resultat."""
-    if not _rt_gyldig(produkt) or not produkt.get("t_uarmeret_mm"):
-        return None
-    t_uarm, t_arm = produkt["t_uarmeret_mm"], produkt["t_armeret_mm"]
-    return (t_uarm - t_arm) / t_uarm * 100
+    _, pct = _sparet(produkt)
+    return pct * 100 if pct is not None else None
+
+
+def _mm_res(res: dict | None, felt: str = "t_armeret_mm") -> str:
+    """Oprundet tykkelse som tekst — »550 mm«, eller »550 mm (532 mm)« med
+    den beregnede værdi i parentes, når indstillingen kræver det."""
+    if not res or res.get(felt) is None:
+        return "—"
+    v = res[felt]
+    tekst = ui.mm(v)
+    if _aktiv_afrunding()["vis_eksakt"]:
+        e = res.get(afrunding_mod.eksakt_navn(felt))
+        if afrunding_mod.er_oprundet(v, e):
+            tekst += f" ({ui.mm(e)})"
+    return tekst
 
 
 def _sorteret_produktnavne(
@@ -3400,14 +4028,13 @@ def _render_alle_produkter_overblik(
         )
 
     def _tykkelse(produkt: dict | None) -> str:
-        return ui.mm(produkt.get("t_armeret_mm")) if _rt_gyldig(produkt) else "—"
+        return _mm_res(produkt) if _rt_gyldig(produkt) else "—"
 
-    def _sparet(produkt: dict | None) -> str:
-        if not _rt_gyldig(produkt) or produkt.get("t_uarmeret_mm") is None:
+    def _sparet_tekst(produkt: dict | None) -> str:
+        red_mm, red_pct = _sparet(produkt)
+        if red_mm is None or red_pct is None:
             return "—"
-        t_uarm = produkt["t_uarmeret_mm"]
-        t_arm = produkt["t_armeret_mm"]
-        return f"{_delta_mm(-(t_uarm - t_arm))} · {ui.procent((t_uarm - t_arm) / t_uarm * 100)}"
+        return f"{_delta_mm(-red_mm)} · {ui.procent(red_pct * 100)}"
 
     kolonne, retning = _render_produkttabel_hoved(scope, trafik_eu)
     navne_sorteret = _sorteret_produktnavne(
@@ -3433,9 +4060,9 @@ def _render_alle_produkter_overblik(
             f'<div>{html.escape(klasser)}</div>'
             f'<div class="rt-alle-num">{html.escape(_effektindeks(navn))}</div>'
             f'<div class="rt-alle-num">{html.escape(_tykkelse(p1))}</div>'
-            f'<div class="rt-alle-sparet">{html.escape(_sparet(p1))}</div>'
+            f'<div class="rt-alle-sparet">{html.escape(_sparet_tekst(p1))}</div>'
             f'<div class="rt-alle-num">{html.escape(_tykkelse(p2))}</div>'
-            f'<div class="rt-alle-sparet">{html.escape(_sparet(p2))}</div>'
+            f'<div class="rt-alle-sparet">{html.escape(_sparet_tekst(p2))}</div>'
             '</div>'
         )
 
@@ -3603,37 +4230,57 @@ def _produkt_opslag(produkter: list[dict] | None, navn: str) -> dict | None:
 
 
 def _sub_lag_skaleret_fra_materialer(
-    materialer: list[dict] | None, total_mm: float | None
+    materialer: list[dict] | None,
+    total_mm: float | None,
+    fordeling: dict | None = None,
+    t_uarm_mm: float | None = None,
 ) -> list[dict]:
     """Returnér materialer skaleret så summen = total_mm.
 
     Bruger mm-mode (m["tykkelse_mm"]) hvis nogen lag har det sat,
     ellers pct-mode (m["pct"]). Lag med 0/None bidrag filtreres væk.
+
+    Lagene fordeles i hele indbygningstrin, jf. core.afrunding.fordel_lag,
+    så hvert lag kan indbygges i den viste tykkelse, og summen fortsat er
+    den oprundede totaltykkelse.
+
+    fordeling er lagfordelingen fra _fordelingsgrundlag(). Uden den fordeles
+    lagene proportionalt. Med den kan det øverste lag holdes på
+    minimumstykkelsen, eller — ved fordelingen »fastholdt« — på den
+    indtastede tykkelse. Er lagene angivet i procent, fastholdes det øverste
+    lag på sin tykkelse i den ustabiliserede opbygning t_uarm_mm, jf.
+    core.lagfordeling.
     """
     if not materialer or not total_mm:
         return []
-    in_mm_mode = any((m.get("tykkelse_mm") or 0) > 0 for m in materialer)
-    if in_mm_mode:
-        sum_t = sum((m.get("tykkelse_mm") or 0) for m in materialer)
-        if sum_t <= 0:
-            return []
-        return [
-            {
-                "navn": m.get("navn", "Lag"),
-                "tykkelse_mm": (m.get("tykkelse_mm") or 0) * total_mm / sum_t,
-            }
-            for m in materialer if (m.get("tykkelse_mm") or 0) > 0
-        ]
-    sum_p = sum((m.get("pct") or 0) for m in materialer)
-    if sum_p <= 0:
-        return []
-    return [
-        {
-            "navn": m.get("navn", "Lag"),
-            "tykkelse_mm": (m.get("pct") or 0) / sum_p * total_mm,
-        }
-        for m in materialer if (m.get("pct") or 0) > 0
-    ]
+    lag = _lag_til_fordeling(materialer)
+    trin = _afrundingstrin()
+    spec = _lagspec(materialer, fordeling) if fordeling else None
+    if spec is None:
+        return afrunding_mod.fordel_lag(lag, total_mm, trin)
+    # Ved »fastholdt« er referencen det indtastede øverste lag i alle
+    # søjler. Er lagene angivet i procent, anvendes det øverste lag i den
+    # ustabiliserede opbygning t_uarm_mm, jf. lagfordeling.fordel_soejle(),
+    # som også danner lagene bag beregningens φᵥ.
+    return lagfordeling_mod.fordel_soejle(spec, total_mm, trin, t_uarm_mm=t_uarm_mm)
+
+
+def _sub_lag_til_soejle(
+    sub_lag: list[dict], materialer: list[dict] | None,
+) -> list[dict] | None:
+    """Lagene til en krav-søjle, eller None for én neutral blok.
+
+    Med to eller flere materialelag vises fordelingen, også når det øverste
+    lag efter lagfordelingen udgør hele opbygningen, jf. core.lagfordeling.
+    Med ét materialelag vises den neutrale »φᵥ-vægtet bærelag«-blok.
+    """
+    antal = sum(
+        1 for m in materialer or []
+        if (m.get("tykkelse_mm") or 0) > 0 or (m.get("pct") or 0) > 0
+    )
+    if len(sub_lag) >= 2 or (sub_lag and antal >= 2):
+        return sub_lag
+    return None
 
 
 def _sub_lag_uarmeret_fra_materialer(
@@ -3754,6 +4401,7 @@ def _geonet_fracs_kravsoejle(
         total_mm=total_mm,
         geonet=geonet,
         sub_lag=sub_lag,
+        placering=_netplacering(),
     )
     return placement.get("geonet_y_fracs", []), placement
 
@@ -3806,6 +4454,22 @@ def _status_for_krav(
     return f"{ui.mm(-diff_kons)} for lidt", "danger"
 
 
+def _phi_kurver(res_1: dict | None, res_2: dict | None) -> dict | None:
+    """φᵥ for hver kurve i designdiagrammet, når søjlerne er regnet med φᵥ
+    for deres egne lag, jf. core.calculator.beregn(); ellers None."""
+    if not any((r or {}).get("phi_regel") for r in (res_1, res_2)):
+        return None
+    kurver = {}
+    for r in (res_1, res_2):
+        if r and r.get("phi_uarmeret") is not None:
+            kurver["uarmeret"] = r["phi_uarmeret"]
+            break
+    for navn, r in (("1_lag", res_1), ("2_lag", res_2)):
+        if r and r.get("phi") is not None:
+            kurver[navn] = r["phi"]
+    return kurver or None
+
+
 def _tegn_designdiagram(
     eu: float,
     eo: float,
@@ -3822,6 +4486,11 @@ def _tegn_designdiagram(
     Figuren bærer selv sin signatur, og fremgangsmåden bag kurverne —
     interpolation og korrektion — står i Hjælp, kapitel 1 og 3. Der er derfor
     ingen forklaring under figuren.
+
+    Punkterne markerer aflæsningen på kurverne og sættes derfor ved de
+    beregnede tykkelser, ikke de oprundede, jf. core.afrunding. Er søjlerne
+    regnet med φᵥ for deres egne lag, tegnes hver kurve med sin søjles φᵥ,
+    jf. _phi_kurver().
     """
     try:
         fig = byg_designdiagram(
@@ -3831,11 +4500,12 @@ def _tegn_designdiagram(
             geonet=geonet,
             t_indtastet_mm=t_indtastet_mm,
             t_basis_table=t_basis_table,
-            t_1_lag_mm=(produkt_1 or {}).get("t_armeret_mm"),
-            t_2_lag_mm=(produkt_2 or {}).get("t_armeret_mm"),
-            t_1_lag_best_mm=(produkt_1 or {}).get("t_armeret_mm_min"),
-            t_2_lag_best_mm=(produkt_2 or {}).get("t_armeret_mm_min"),
+            t_1_lag_mm=_eksakt_vaerdi(produkt_1, "t_armeret_mm"),
+            t_2_lag_mm=_eksakt_vaerdi(produkt_2, "t_armeret_mm"),
+            t_1_lag_best_mm=_eksakt_best(produkt_1),
+            t_2_lag_best_mm=_eksakt_best(produkt_2),
             skala=skala,
+            phi_kurver=_phi_kurver(produkt_1, produkt_2),
         )
     except Exception as exc:
         st.warning(f"Kunne ikke generere designdiagram: {exc}")
@@ -3854,8 +4524,16 @@ def _render_opbygningsvisualisering(
     phi: float = PHI_BASIS,
     tvunget_produkt: str | None = None,
     laas_valg: bool = False,
+    fordeling: dict | None = None,
+    standard_opdeling: dict | None = None,
 ) -> None:
     """Tre eller fire opbygnings-snit side om side (Koncept A).
+
+    fordeling styrer fordelingen af krav-søjlernes tykkelse på
+    materialelagene, jf. _sub_lag_skaleret_fra_materialer().
+    standard_opdeling er Standard-tilstandens opdeling i stabilgrus og
+    bundsikring, jf. _standard_opdeling(); den anvendes, når der ikke er
+    indtastede materialelag.
 
     I Brugerdefineret-tilstand (materialer != []) vises fire søjler:
     "Indtastet opbygning" + tre krav-søjler (Uarmeret/1 lag/2 lag).
@@ -3871,12 +4549,16 @@ def _render_opbygningsvisualisering(
     """
     from core import rapport as rapport_mod
     # ── Find uarmeret-tykkelse (uafhængig af produktvalg) ──────────────
+    # Den φᵥ-korrigerede værdi læses fra samme resultat, så den er oprundet
+    # på samme måde som den rå aflæsning, jf. core.afrunding.
     t_uarm = None
+    t_uarm_phi_kor = None
     for r in (ref_1, ref_2):
         if r is not None and r.get("produkter"):
             t_uarm_kandidat = r["produkter"][0].get("t_uarmeret_mm")
             if t_uarm_kandidat is not None:
                 t_uarm = t_uarm_kandidat
+                t_uarm_phi_kor = r["produkter"][0].get("t_uarmeret_phi_kor_mm")
                 break
 
     # ── Dropdown med valgmuligheder ────────────────────────────────────
@@ -3938,6 +4620,9 @@ def _render_opbygningsvisualisering(
         note_2_best = None
         valgt_geonet = None
         geonet_label = "Tensar TriAx 160 / GS-GRID SX160 / E'GRID T6"
+        # Påskriften ved geonetlinjerne skal være kort; de tre referencenet
+        # benævnes under ét.
+        geonet_maerkat = "Referencenet"
     else:
         t_1 = _produkt_t(prod_1lag, valg)
         t_2 = _produkt_t(prod_2lag, valg)
@@ -3951,6 +4636,7 @@ def _render_opbygningsvisualisering(
         )
         valgt_geonet = find_geonet(valg)
         geonet_label = valg
+        geonet_maerkat = valg
 
     # ── Skalering: brug t_uarm hvis defineret, ellers største armerede ─
     kandidater = [t for t in (t_uarm, t_1, t_2) if t is not None]
@@ -3967,11 +4653,23 @@ def _render_opbygningsvisualisering(
         (m.get("tykkelse_mm") or 0) > 0 for m in materialer
     )
 
-    # phi-korrigeret uarmeret-krav: t_uarm × (1 + K_PHI × (phi - 37))
+    # φᵥ-korrigeret uarmeret-krav: t_uarm × (1 + K_PHI × (phi − 37)). Værdien
+    # tages fra beregningen, hvor den er oprundet til indbygningstrin sammen
+    # med de øvrige tykkelser; uden materialelag gælder den rå aflæsning.
     t_uarm_krav: float | None = None
     if t_uarm is not None:
-        phi_kor = K_PHI * (phi - PHI_BASIS) if har_indtastet else 0.0
-        t_uarm_krav = round(t_uarm * (1 + phi_kor))
+        if har_indtastet and t_uarm_phi_kor is not None:
+            t_uarm_krav = t_uarm_phi_kor
+        elif har_indtastet:
+            phi_kor = K_PHI * (phi - PHI_BASIS)
+            t_uarm_krav = afrunding_mod.rund_op(
+                t_uarm * (1 + phi_kor), _afrundingstrin()
+            )
+        else:
+            # Uden materialelag er φᵥ = 37°, og den korrigerede værdi er den
+            # rå aflæsning — medmindre tykkelsen er øget for mindste
+            # lagtykkelse i Standard-opdelingen, jf. core.afrunding.
+            t_uarm_krav = t_uarm_phi_kor if t_uarm_phi_kor is not None else t_uarm
 
     # Indtastet opbygning som total (sum af brugerens lag)
     indtastet_total, indtastet_sub = _sub_lag_uarmeret_fra_materialer(
@@ -3992,13 +4690,25 @@ def _render_opbygningsvisualisering(
             t_indtastet_mm=t_indtastet_for_linje,
         ))
 
+    def _soejle_lag(
+        total: float | None, t_uarm_ref: float | None = None,
+    ) -> tuple[list[dict], bool]:
+        """(lag, brug_lag) for en krav-søjle. Uden indtastede materialelag
+        anvendes Standard-opdelingen, når den er aktiv."""
+        if not materialer and standard_opdeling is not None:
+            sub = _sub_lag_standard(standard_opdeling, total)
+            return sub or [], sub is not None
+        sub = _sub_lag_skaleret_fra_materialer(
+            materialer, total, fordeling, t_uarm_ref,
+        )
+        return sub, _sub_lag_til_soejle(sub, materialer) is not None
+
     # Søjle 2: Uarmeret basistykkelse (φᵥ-korrigeret)
     if t_uarm_krav is not None:
         status_tekst_uarm, status_farve_uarm = _status_for_krav(
             t_indtastet_for_linje, t_uarm_krav, t_krav_best=None,
         )
-        sub_red_u = _sub_lag_skaleret_fra_materialer(materialer, t_uarm_krav)
-        brug_sub_u = len(sub_red_u) >= 2
+        sub_red_u, brug_sub_u = _soejle_lag(t_uarm_krav)
         snit_liste.append(rapport_mod.Snit(
             titel="Ustabiliseret bærelagstykkelse (φᵥ-korrigeret)" if har_indtastet
                   else "Ustabiliseret bærelagstykkelse",
@@ -4027,13 +4737,14 @@ def _render_opbygningsvisualisering(
         ))
 
     # Søjle 3+4: byg reducerede sub_lag når brugeren har angivet ≥2 materialer.
-    # Reduktionen fordeles proportionalt — matematisk identisk med den vægtede
-    # φᵥ-tilgang (lineær formel, se core/data.py:K_PHI). Når der er færre end 2
-    # lag falder vi tilbage til den neutrale "φᵥ-vægtet bærelag"-blok.
-    sub_red_1 = _sub_lag_skaleret_fra_materialer(materialer, t_1)
-    sub_red_2 = _sub_lag_skaleret_fra_materialer(materialer, t_2)
-    brug_sub_1 = len(sub_red_1) >= 2
-    brug_sub_2 = len(sub_red_2) >= 2
+    # Ved proportional fordeling er lagforholdet det indtastede, og φᵥ passer
+    # derfor til søjlen (lineær formel, se core/data.py:K_PHI). Holdes det
+    # øverste lag på minimumstykkelsen eller fastholdes det, ændres
+    # lagforholdet, mens φᵥ fortsat er den indtastede opbygnings, jf.
+    # core.lagfordeling. Når der er færre end 2 lag falder vi tilbage til den
+    # neutrale "φᵥ-vægtet bærelag"-blok.
+    sub_red_1, brug_sub_1 = _soejle_lag(t_1, t_uarm_krav)
+    sub_red_2, brug_sub_2 = _soejle_lag(t_2, t_uarm_krav)
 
     # Søjle 3: 1 lag geonet
     fracs_1, placement_1 = _geonet_fracs_kravsoejle(
@@ -4092,6 +4803,8 @@ def _render_opbygningsvisualisering(
         snit_til_kolonner(snit_liste, materialer, eu),
         reference_mm=t_indtastet_for_linje,
         geonet_navn=geonet_label,
+        geonet_maerkat=geonet_maerkat,
+        **_snit_visning(),
     )
 
 
@@ -4107,8 +4820,15 @@ def _render_opbygning_afsnit(
     geonet_navn: str | None = None,
     laas_geonetvalg: bool = False,
     som_kort: bool = False,
+    fordeling: dict | None = None,
+    standard_opdeling: dict | None = None,
 ) -> None:
-    """Opbygning som et primært resultatkort, lige efter resultatkortene."""
+    """Opbygning som et primært resultatkort, lige efter resultatkortene.
+
+    fordeling er lagfordelingen fra _fordelingsgrundlag(); uden den fordeles
+    materialelagene proportionalt. standard_opdeling er Standard-tilstandens
+    opdeling i stabilgrus og bundsikring, jf. _standard_opdeling().
+    """
     if ref_1 is None and ref_2 is None:
         return
     materialer = materialer or []
@@ -4116,6 +4836,11 @@ def _render_opbygning_afsnit(
     note = "Snit i samme lodrette skala"
     if indtastet:
         note += f" · stiplet linje = indtastet {ui.mm(indtastet)}"
+    elif standard_opdeling and standard_opdeling.get("spec") is not None:
+        note += (
+            " · stabilgrus og bundsikring viser en typisk opbygning; "
+            "beregningen er ført med referencematerialet φ = 37°"
+        )
     else:
         note += " · uden materialelag vises kravet som ét ubundet lag"
     def _vis_indhold() -> None:
@@ -4123,7 +4848,8 @@ def _render_opbygning_afsnit(
             eu, ref_1, ref_2,
             prod_1lag=prod_1lag, prod_2lag=prod_2lag,
             materialer=materialer, phi=phi, tvunget_produkt=geonet_navn,
-            laas_valg=laas_geonetvalg,
+            laas_valg=laas_geonetvalg, fordeling=fordeling,
+            standard_opdeling=standard_opdeling,
         )
 
     if som_kort:
@@ -4152,8 +4878,14 @@ def _render_oversigt_expanders(
     eo_interpoleret: bool = False,
     vis_opbygning: bool = True,
     status_slot=None,
+    fordeling: dict | None = None,
+    standard_opdeling: dict | None = None,
 ) -> None:
     """Opbygningsafsnittet og informations-expanderne under resultaterne.
+
+    fordeling er lagfordelingen fra _fordelingsgrundlag(), jf.
+    _sub_lag_skaleret_fra_materialer(). standard_opdeling er
+    Standard-tilstandens opdeling, jf. _standard_opdeling().
 
     Beregningsmetoden og datagrundlaget står i Hjælp og gentages ikke her;
     expanderne rummer alene kontrolpunkter, anbefalinger og udførelseskrav
@@ -4168,6 +4900,16 @@ def _render_oversigt_expanders(
     _resultat_til_gruppe().
     """
     materialer = materialer or []
+    # Den ustabiliserede tykkelse, som det øverste lag fastholdes i ved
+    # fordelingen »fastholdt«, jf. _render_opbygningsvisualisering().
+    _t_uarm_for_fordeling = next(
+        (
+            r["produkter"][0].get("t_uarmeret_phi_kor_mm")
+            for r in (ref_1, ref_2)
+            if r is not None and r.get("produkter")
+        ),
+        None,
+    )
 
     # --- Opbygningsvisualisering (referencenet eller valgt produkt) -----
     if vis_opbygning:
@@ -4175,6 +4917,7 @@ def _render_oversigt_expanders(
             eu, ref_1, ref_2,
             prod_1lag=prod_1lag, prod_2lag=prod_2lag,
             materialer=materialer, phi=phi, geonet_navn=geonet_navn,
+            fordeling=fordeling, standard_opdeling=standard_opdeling,
         )
 
     # --- Advarsler -------------------------------------------------------
@@ -4206,7 +4949,12 @@ def _render_oversigt_expanders(
         # (uden lag-baseret placering blev afstanden regnet fra minimumsdæklaget
         # og gav en falsk >max-afstand-advarsel).
         def _sub_for(total_mm: float) -> list[dict] | None:
-            skaleret = _sub_lag_skaleret_fra_materialer(materialer, total_mm)
+            if not materialer and standard_opdeling is not None:
+                skaleret = _sub_lag_standard(standard_opdeling, total_mm) or []
+            else:
+                skaleret = _sub_lag_skaleret_fra_materialer(
+                    materialer, total_mm, fordeling, _t_uarm_for_fordeling,
+                )
             return skaleret if len(skaleret) >= 2 else None
 
         if valgt_opbygning == _REF_VALG:
@@ -4219,6 +4967,7 @@ def _render_oversigt_expanders(
                 total_mm=t_ref,
                 geonet=None,
                 sub_lag=_sub_for(t_ref),
+                placering=_netplacering(),
             )
             return [
                 (f"{_REF_VALG}: {a}", lag_mode)
@@ -4240,6 +4989,7 @@ def _render_oversigt_expanders(
                 total_mm=t,
                 geonet=valgt_geonet,
                 sub_lag=_sub_for(t),
+                placering=_netplacering(),
             )
             return [
                 (f"{valgt_opbygning}: {a}", lag_mode)
@@ -4828,17 +5578,20 @@ def _beregn_produkter_cachet(
     valgt_klasse: int | None,
     t_basis_table: dict,
     skala: float = 1.0,
+    afrunding_noegle: tuple = (),
 ) -> list[dict]:
     """Cachet indpakning af beregn_alle_produkter.
 
     Streamlit gentegner hele siden ved hver ændring. Uden cache genberegnes
     samtlige produkter, hver gang en skyder flyttes, og resultatpanelet
-    blinker. Nøglen er de syv argumenter alene; funktionen læser ikke
+    blinker. Nøglen er de otte argumenter alene; funktionen læser ikke
     st.session_state, jf. afsnit 5.
 
     Opmærksomheden henledes på, at skala indgår i nøglen. Uden den ville
     tilvalget om dimensionering uden for diagrammernes område ikke slå
-    igennem, idet det foregående opslag ville blive genbrugt.
+    igennem, idet det foregående opslag ville blive genbrugt. Det samme
+    gælder afrunding_noegle — oprundingsindstillingen som tuple, jf.
+    _afrunding_noegle() — så et skift af trin slår igennem straks.
 
     Der returneres en kopi ved hvert opslag, så kalderen frit kan berige
     produkterne med placeringsdata uden at forurene cachen.
@@ -4846,7 +5599,25 @@ def _beregn_produkter_cachet(
     return beregn_alle_produkter(
         eu, eo, lag_mode, phi=phi, t_basis_table=t_basis_table,
         klasse_for_anbefaling=valgt_klasse, skala=skala,
+        afrunding=dict(afrunding_noegle) if afrunding_noegle else None,
     )
+
+
+def _afrunding_noegle(afrunding: dict | None = None) -> tuple:
+    """Oprundingsindstillingen som hashbar tuple til cachen.
+
+    Uden afrunding anvendes den gældende indstilling. Med afrunding fra
+    _afrunding_til_beregning() indgår minimumet for den samlede tykkelse i
+    nøglen, så et skift af klasse eller minimum slår igennem.
+
+    vis_eksakt er alene en visningsindstilling og udelades, så et skift af
+    den ikke udløser en genberegning.
+    """
+    if afrunding is None:
+        afrunding = _aktiv_afrunding()
+    return tuple(sorted(
+        (k, v) for k, v in afrunding.items() if k != "vis_eksakt"
+    ))
 
 
 def _tilstand_vaelger() -> str:
@@ -4874,14 +5645,30 @@ def _faste_forudsaetninger() -> None:
     Forudsætningerne fremgår ikke af inputfelterne og gøres derfor eksplicitte,
     så forskellen til Brugerdefineret kan aflæses direkte.
     """
+    ind = _aktiv_lagfordeling()
     ui.etiket("Faste forudsætninger")
-    st.markdown(
-        "I standardberegningen forudsættes 1 samlet bærelag, med en "
-        f"friktionsvinkel φᵥ = {PHI_BASIS:g}°. Der kan derfor ikke "
+    tekst = (
+        "I standardberegningen regnes med designdiagrammernes "
+        f"referencemateriale, φᵥ = {PHI_BASIS:g}°. Der kan derfor ikke "
         "vælges forskellige materialelag. Reduktion i bærelagstykkelser "
         "korrigeres for de forskellige geonets effektindeks, som er "
         "virkningsgraden set i forhold til referencenettene, med indeks 100."
     )
+    if ind["standard_klassisk"]:
+        tekst += (
+            " Der regnes med klassisk standardberegning: opbygningen vises "
+            "som ét samlet bærelag uden minimumstykkelse, jf. Indstillinger, "
+            "afsnit 6."
+        )
+    elif ind["standard_opdeling"]:
+        tekst += (
+            " Opbygningen vises som stabilgrus og bundsikring, hvor "
+            "stabilgruset er minimumstykkelsen for klassen, jf. "
+            "Indstillinger, afsnit 6."
+        )
+    else:
+        tekst += " Opbygningen vises som ét samlet bærelag."
+    st.markdown(tekst)
 
 
 def _input_trin1(key_prefix: str) -> tuple[float, dict]:
@@ -5048,6 +5835,8 @@ def _vis_resultatkort(
     navne_2: str = "",
     indtastet_total: float | None = None,
     t_uarm_raa: float | None = None,
+    res_1: dict | None = None,
+    res_2: dict | None = None,
 ) -> None:
     """Resultatrækken: ustabiliseret tykkelse og de to armerede alternativer.
 
@@ -5062,6 +5851,11 @@ def _vis_resultatkort(
     den fra t_uarm, anføres den i parentes efter note_uarm, så tallet i
     mellemregningerne (»Ustabiliseret bærelagstykkelse«) kan genfindes her.
 
+    res_1 og res_2 er beregningsresultaterne bag t_1 og t_2. Er de angivet,
+    hentes reduktionen i mm og % herfra, så den følger
+    oprundingsindstillingen, og de beregnede tykkelser bag oprundingen
+    anføres, når indstillingen kræver det, jf. core.afrunding.
+
     Det tyndeste alternativ fremhæves. I brugerdefineret tilstand fremhæves
     alene et alternativ, som den indtastede opbygning holder til; holder ingen
     af dem, fremhæves intet, og årsagen fremgår af advarselsafsnittet.
@@ -5070,23 +5864,40 @@ def _vis_resultatkort(
         return
     if t_uarm_raa is not None and abs(t_uarm_raa - t_uarm) >= 1:
         note_uarm += f" ({ui.mm(t_uarm_raa)} ukorrigeret)"
+    vis_eksakt = _aktiv_afrunding()["vis_eksakt"]
 
-    def _kort(etiket: str, t: float | None, navne: str) -> dict | None:
+    def _beregnet(res: dict | None, felt: str, t: float | None) -> str | None:
+        """Den beregnede værdi bag t som notetekst, eller None."""
+        if not vis_eksakt or not res:
+            return None
+        e = res.get(afrunding_mod.eksakt_navn(felt))
+        if not afrunding_mod.er_oprundet(t, e):
+            return None
+        return f"beregnet {ui.mm(e)}"
+
+    def _kort(
+        etiket: str, t: float | None, navne: str, res: dict | None,
+    ) -> dict | None:
         if t is None:
             return None
-        red_mm = t_uarm - t
+        red_mm, red_pct = (
+            _reduktion_fra_res(res) if res else (t_uarm - t, (t_uarm - t) / t_uarm)
+        )
+        if red_mm is None:
+            red_mm, red_pct = t_uarm - t, (t_uarm - t) / t_uarm
         kort = {
             "etiket": etiket,
             "vaerdi": ui.mm(t).replace(" mm", ""),
-            "delta": f"{ui.fortegn(t - t_uarm)} mm",
-            "delta_note": f"{ui.procent(red_mm / t_uarm * 100)} tyndere",
+            "beregnet": _beregnet(res, "t_armeret_mm", t),
+            "delta": f"{ui.fortegn(-red_mm)} mm",
+            "delta_note": f"{ui.procent((red_pct or 0) * 100)} tyndere",
         }
         if navne:
             kort["delta_note"] += f" · {navne}"
         return kort
 
-    kort_1 = _kort("Bedste med 1 lag" if standard else "1 lag geonet", t_1, navne_1)
-    kort_2 = _kort("Bedste med 2 lag" if standard else "2 lag geonet", t_2, navne_2)
+    kort_1 = _kort("Bedste med 1 lag" if standard else "1 lag geonet", t_1, navne_1, res_1)
+    kort_2 = _kort("Bedste med 2 lag" if standard else "2 lag geonet", t_2, navne_2, res_2)
 
     # Det tyndeste alternativ, opbygningen holder til. Uden indtastet opbygning
     # er der intet krav at holde mod, og det tyndeste alternativ fremhæves.
@@ -5106,9 +5917,16 @@ def _vis_resultatkort(
         if indtastet_total is not None:
             kort_1["delta_note"] += f" · holder ved {ui.mm(indtastet_total)}"
 
+    # Den ustabiliserede tykkelse er den φᵥ-korrigerede; dens beregnede
+    # værdi ligger under det tilsvarende eksakt-felt i samme resultat.
+    res_uarm = res_1 or res_2
+    beregnet_uarm = _beregnet(res_uarm, "t_uarmeret_phi_kor_mm", t_uarm)
+    if beregnet_uarm is None and res_uarm and res_uarm.get("t_uarmeret_phi_kor_mm") is None:
+        beregnet_uarm = _beregnet(res_uarm, "t_uarmeret_mm", t_uarm)
     kort = [{
         "etiket": "Uden geonet" if standard else "Nødvendig uden geonet",
         "vaerdi": ui.mm(t_uarm).replace(" mm", ""),
+        "beregnet": beregnet_uarm,
         "note": note_uarm,
     }]
     kort += [k for k in (kort_1, kort_2) if k]
@@ -5132,8 +5950,14 @@ def render_standard() -> None:
 
     with ui.trin_kort(2, "Forudsætninger") as trin2:
         _faste_forudsaetninger()
+        _ind_std = _aktiv_lagfordeling()
         trin2.opsummering = (
-            f"φᵥ {ui.grader(PHI_BASIS)} · ingen φᵥ-korrektion"
+            f"φᵥ {ui.grader(PHI_BASIS)} · ingen φᵥ-korrektion · "
+            + (
+                "klassisk standardberegning" if _ind_std["standard_klassisk"]
+                else "stabilgrus og bundsikring" if _ind_std["standard_opdeling"]
+                else "ét samlet bærelag"
+            )
         )
 
     eo = grundlag["eo"]
@@ -5144,6 +5968,7 @@ def render_standard() -> None:
     # Er dimensionering på VejDims tal tilvalgt, er eo sat også uden for
     # diagrammernes område, og beregningen fortsætter.
     if grundlag["type"] == "trafikklasse" and grundlag["eo"] is None:
+        st.session_state.pop("sidste_dim", None)
         return
 
     # --- Beregn alt -----------------------------------------------------
@@ -5151,14 +5976,21 @@ def render_standard() -> None:
     # dimensionering på VejDims tal er tilvalgt uden for det.
     skala = grundlag.get("skala", 1.0)
     t_basis_table = _aktiv_t_basis_table()
+    # Minimum og opdeling i stabilgrus og bundsikring følger Standards
+    # indstillinger; ved klassisk standardberegning bærer oprundingen alene
+    # trinnet, jf. _standard_opdeling().
+    opdeling = _standard_opdeling(grundlag)
+    afrunding = _afrunding_standard(opdeling)
     ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
-        eu, eo, PHI_BASIS, valgt_klasse, t_basis_table, skala
+        eu, eo, PHI_BASIS, valgt_klasse, t_basis_table, skala, afrunding,
     )
     prod_1lag = _beregn_produkter_cachet(
-        eu, eo, "1_lag", PHI_BASIS, valgt_klasse, t_basis_table, skala
+        eu, eo, "1_lag", PHI_BASIS, valgt_klasse, t_basis_table, skala,
+        _afrunding_noegle(afrunding),
     )
     prod_2lag = _beregn_produkter_cachet(
-        eu, eo, "2_lag", PHI_BASIS, valgt_klasse, t_basis_table, skala
+        eu, eo, "2_lag", PHI_BASIS, valgt_klasse, t_basis_table, skala,
+        _afrunding_noegle(afrunding),
     )
 
     alle_fejler_1 = all(p["fejl"] for p in prod_1lag)
@@ -5215,6 +6047,7 @@ def render_standard() -> None:
     with ui.resultat_blok(_resultat_note(eu, grundlag)):
         if haard_fejl:
             vis_fejl(haard_fejl)
+            st.session_state.pop("sidste_dim", None)
         else:
             resultat_geonet_valg, std_index = _geonet_valgliste(gyldige_geonet)
             if st.session_state.get("std_geonet") not in resultat_geonet_valg:
@@ -5249,6 +6082,15 @@ def render_standard() -> None:
                 (p for p in prod_2lag if p.get("navn") == valgt_net), None
             )
 
+            # Resultatet gemmes til rapporten, som bygger på den seneste
+            # dimensionering, jf. render_rapport().
+            st.session_state["sidste_dim"] = _standard_til_rapport(
+                eu=eu, eo=eo, grundlag=grundlag, valgt_klasse=valgt_klasse,
+                geonet=valgt_geonet, geonet_navn=valgt_net,
+                valgt_1=valgt_1, valgt_2=valgt_2,
+                afrunding=afrunding, opdeling=opdeling,
+            )
+
             if t_uarm is not None:
                 _vis_resultatkort(
                     t_uarm,
@@ -5260,6 +6102,8 @@ def render_standard() -> None:
                         if eo_interpoleret else "Ubunden opbygning"
                     ),
                     t_uarm_raa=t_uarm_raa,
+                    res_1=valgt_1,
+                    res_2=valgt_2,
                 )
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
@@ -5273,6 +6117,7 @@ def render_standard() -> None:
                 prod_1lag=prod_1lag, prod_2lag=prod_2lag,
                 materialer=[], phi=PHI_BASIS,
                 geonet_navn=valgt_net, laas_geonetvalg=True, som_kort=True,
+                standard_opdeling=opdeling,
             )
 
             with ui.kort(
@@ -5345,7 +6190,57 @@ def render_standard() -> None:
         eo_interpoleret=eo_interpoleret,
         vis_opbygning=False,
         status_slot=status_slot,
+        standard_opdeling=opdeling,
     )
+
+
+def _standard_til_rapport(
+    *,
+    eu: float,
+    eo: float,
+    grundlag: dict,
+    valgt_klasse: int | None,
+    geonet: dict | None,
+    geonet_navn: str,
+    valgt_1: dict | None,
+    valgt_2: dict | None,
+    afrunding: dict,
+    opdeling: dict,
+) -> dict:
+    """Standard-resultatet i samme form som Brugerdefinerets, så rapporten
+    kan bygge på det, jf. render_rapport().
+
+    Standard har ingen indtastede materialelag og regnes med
+    referencematerialet φᵥ = 37°. Opdelingen i stabilgrus og bundsikring
+    føres med, så rapportens figur viser samme lag som dimensioneringen.
+    """
+    mangler = {"fejl": "Ikke gyldigt for denne kombination."}
+    return {
+        "tilstand": "Standard",
+        "eu": eu, "eo": eo, "valgt_klasse": valgt_klasse,
+        "grundlag_type": grundlag["type"],
+        "t_klasse": grundlag.get("t_klasse"),
+        "eo_aekv": grundlag.get("eo_aekv"),
+        "zone": grundlag.get("zone"),
+        "skala": grundlag.get("skala", 1.0),
+        "brug_vejdim": grundlag.get("brug_vejdim", False),
+        "phi": PHI_BASIS, "materialer": [],
+        "geonet": geonet, "geonet_navn": geonet_navn,
+        "res_1": valgt_1 or mangler,
+        "res_2": valgt_2 or mangler,
+        "afrunding": afrunding,
+        "standard_opdeling": opdeling,
+        "t_uarmeret_mm": (
+            (valgt_1 or {}).get("t_uarmeret_mm")
+            or (valgt_2 or {}).get("t_uarmeret_mm")
+        ),
+        "t_1_lag_best_mm": (valgt_1 or {}).get("t_armeret_mm_min"),
+        "t_2_lag_best_mm": (valgt_2 or {}).get("t_armeret_mm_min"),
+        "t_1_lag_best_eksakt_mm": (valgt_1 or {}).get("t_armeret_eksakt_mm_min"),
+        "t_2_lag_best_eksakt_mm": (valgt_2 or {}).get("t_armeret_eksakt_mm_min"),
+        "phi_1_lag_best": (valgt_1 or {}).get("phi_min"),
+        "phi_2_lag_best": (valgt_2 or {}).get("phi_min"),
+    }
 
 
 # ===========================================================================
@@ -5881,16 +6776,28 @@ def render_brugerdefineret() -> None:
     kobling_args: tuple | None = None
     status_slot = None
 
+    # Oprundingen bærer minimumet for den samlede tykkelse og — ved reglen
+    # »vd« for underliggende lag — lagopbygningen; fordelingen styrer
+    # materialelagene i søjlerne, jf. core.lagfordeling.
+    fordeling = _fordelingsgrundlag(grundlag)
+    # Er φᵥ overskrevet manuelt, gælder den manuelle værdi alle opbygninger, og
+    # φᵥ regnes ikke af søjlernes lag.
+    if st.session_state.get("bd_phi_override"):
+        fordeling["phi_regel"] = lagfordeling_mod.PHI_INDTASTET
+    afrunding = _afrunding_til_beregning(grundlag, materialer, fordeling)
+
     # Reference- og produktberegninger bruges i begge modes — både til
     # at vise reference-banneret og til opbygnings-expanderens dropdown.
     ref_1, ref_2, ref_fejl_1, ref_fejl_2 = _beregn_referencegrupper(
-        eu, eo, phi, valgt_klasse, t_basis_table, skala
+        eu, eo, phi, valgt_klasse, t_basis_table, skala, afrunding,
     )
     prod_1lag = _beregn_produkter_cachet(
-        eu, eo, "1_lag", phi, valgt_klasse, t_basis_table, skala
+        eu, eo, "1_lag", phi, valgt_klasse, t_basis_table, skala,
+        _afrunding_noegle(afrunding),
     )
     prod_2lag = _beregn_produkter_cachet(
-        eu, eo, "2_lag", phi, valgt_klasse, t_basis_table, skala
+        eu, eo, "2_lag", phi, valgt_klasse, t_basis_table, skala,
+        _afrunding_noegle(afrunding),
     )
     prod_1lag = _berig_produkter_med_placering(prod_1lag, "1_lag", materialer)
     prod_2lag = _berig_produkter_med_placering(prod_2lag, "2_lag", materialer)
@@ -5944,10 +6851,12 @@ def render_brugerdefineret() -> None:
         res_1 = beregn(
             eu=eu, eo=eo, phi=phi, net_korrektion=net_kor,
             lag_mode="1_lag", t_basis_table=t_basis_table, skala=skala,
+            afrunding=afrunding,
         )
         res_2 = beregn(
             eu=eu, eo=eo, phi=phi, net_korrektion=net_kor,
             lag_mode="2_lag", t_basis_table=t_basis_table, skala=skala,
+            afrunding=afrunding,
         )
         res_1 = _berig_resultat_med_placering(res_1, geonet, materialer)
         res_2 = _berig_resultat_med_placering(res_2, geonet, materialer)
@@ -5970,7 +6879,7 @@ def render_brugerdefineret() -> None:
                 res_best = beregn(
                     eu=eu, eo=eo, phi=phi, net_korrektion=kor_best,
                     lag_mode=lag_mode, t_basis_table=t_basis_table,
-                    skala=skala,
+                    skala=skala, afrunding=afrunding,
                 )
                 res_best = _berig_resultat_med_placering(
                     res_best, geonet, materialer
@@ -5982,6 +6891,8 @@ def render_brugerdefineret() -> None:
                 produkt["korrektion_max"] = kor_kons
                 produkt["t_armeret_mm_min"] = res_best.get("t_armeret_mm")
                 produkt["t_armeret_mm_max"] = produkt["t_armeret_mm"]
+                produkt["t_armeret_eksakt_mm_min"] = res_best.get("t_armeret_eksakt_mm")
+                produkt["phi_min"] = res_best.get("phi")
                 produkt["reduktion_mm_min"] = produkt.get("reduktion_mm")
                 produkt["reduktion_mm_max"] = res_best.get("reduktion_mm")
                 produkt["reduktion_pct_min"] = produkt.get("reduktion_pct")
@@ -6021,6 +6932,7 @@ def render_brugerdefineret() -> None:
         else:
             # Stash til Rapport-siden
             st.session_state["sidste_dim"] = {
+                "tilstand": "Brugerdefineret",
                 "eu": eu, "eo": eo, "valgt_klasse": valgt_klasse,
                 "grundlag_type": grundlag["type"],
                 "t_klasse": grundlag.get("t_klasse"),
@@ -6031,6 +6943,13 @@ def render_brugerdefineret() -> None:
                 "phi": phi, "materialer": materialer,
                 "geonet": geonet, "geonet_navn": geonet_navn,
                 "res_1": res_1, "res_2": res_2,
+                # Oprundingsindstillingen bag tykkelserne, så rapporten kan
+                # anføre de beregnede værdier i parentes, jf.
+                # rapport.formatér_dimensioneringsresultat.
+                "afrunding": afrunding,
+                # Lagfordelingen og minimumstykkelsen, så rapportens søjler
+                # fordeles som dimensioneringens, jf. core.lagfordeling.
+                "fordeling": fordeling,
                 # Den rå aflæsning gemmes under sit eget navn; rapporten
                 # danner selv den φᵥ-korrigerede værdi af res_1/res_2.
                 "t_uarmeret_mm": (
@@ -6045,6 +6964,26 @@ def render_brugerdefineret() -> None:
                     bedste_2["produkter"][0].get("t_armeret_mm_min")
                     if bedste_2 and bedste_2.get("produkter") else None
                 ),
+                # De beregnede værdier bag den optimale ende, så rapportens
+                # mellemregning kan føres som på dimensioneringssiden.
+                "t_1_lag_best_eksakt_mm": (
+                    bedste_1["produkter"][0].get("t_armeret_eksakt_mm_min")
+                    if bedste_1 and bedste_1.get("produkter") else None
+                ),
+                "t_2_lag_best_eksakt_mm": (
+                    bedste_2["produkter"][0].get("t_armeret_eksakt_mm_min")
+                    if bedste_2 and bedste_2.get("produkter") else None
+                ),
+                # φᵥ ved den optimale ende, når søjlerne er regnet med φᵥ
+                # for deres egne lag, jf. core.calculator.beregn().
+                "phi_1_lag_best": (
+                    bedste_1["produkter"][0].get("phi_min")
+                    if bedste_1 and bedste_1.get("produkter") else None
+                ),
+                "phi_2_lag_best": (
+                    bedste_2["produkter"][0].get("phi_min")
+                    if bedste_2 and bedste_2.get("produkter") else None
+                ),
             }
             if t_uarm is not None:
                 _vis_resultatkort(
@@ -6055,6 +6994,8 @@ def render_brugerdefineret() -> None:
                     note_uarm=_note_uarmeret(eo_interpoleret, phi),
                     indtastet_total=_indtastet_total(materialer),
                     t_uarm_raa=t_uarm_raa,
+                    res_1=None if res_1.get("fejl") else res_1,
+                    res_2=None if res_2.get("fejl") else res_2,
                 )
             else:
                 _render_uarmeret_mangler_besked(eu, eo)
@@ -6067,7 +7008,7 @@ def render_brugerdefineret() -> None:
                 eu, ref_1, ref_2,
                 prod_1lag=prod_1lag, prod_2lag=prod_2lag,
                 materialer=materialer, phi=phi, geonet_navn=geonet_navn,
-                laas_geonetvalg=True, som_kort=True,
+                laas_geonetvalg=True, som_kort=True, fordeling=fordeling,
             )
 
             # res_1/res_2 er beregnet med det VALGTE nets korrektion —
@@ -6158,6 +7099,7 @@ def render_brugerdefineret() -> None:
         eo_interpoleret=eo_interpoleret,
         vis_opbygning=False,
         status_slot=status_slot,
+        fordeling=fordeling,
     )
 
 
@@ -6165,9 +7107,10 @@ def render_brugerdefineret() -> None:
 # Sidebar navigation
 # ===========================================================================
 
-# Navigationen er delt i to blokke. Beregning er arbejdsgangen fra
+# Navigationen er delt i tre blokke. Beregning er arbejdsgangen fra
 # dimensionering til færdig rapport; Opslag er de tabelværker, beregningen
-# hviler på, og som redigeres uafhængigt af den enkelte sag.
+# hviler på, og som redigeres uafhængigt af den enkelte sag; Opsætning er
+# værktøjets egne indstillinger, som huskes mellem sessioner.
 _NAV_GRUPPER = [
     ("Beregning", [
         (":material/straighten:",   "Dimensionering",           "dimensionering"),
@@ -6179,6 +7122,9 @@ _NAV_GRUPPER = [
         (":material/show_chart:",   "Designdiagrammer",         "designdiagrammer"),
         (":material/table_chart:",  "Trafikklasse-korrelation", "trafikklasse_korrelation"),
         (":material/help:",          "Hjælp og dokumentation",   "hjaelp"),
+    ]),
+    ("Opsætning", [
+        (":material/settings:",      "Indstillinger",            "indstillinger"),
     ]),
 ]
 
@@ -6620,8 +7566,8 @@ def _diagram_daekning(diagram: dict) -> str:
     dele: list[str] = []
     for felt, navn in (
         ("t_uarmeret_cm", "Ustabiliseret"),
-        ("t_1_lag_cm", "1 lag armering"),
-        ("t_2_lag_cm", "2 lag armering"),
+        ("t_1_lag_cm", "1 lag geonet"),
+        ("t_2_lag_cm", "2 lag geonet"),
     ):
         eu_vals = [
             r["eu"] for r in diagram["rows"] if r.get(felt) is not None
@@ -6715,7 +7661,11 @@ def _diagram_afvigelse_tekst(afvigelser: dict) -> str:
     return " · ".join(dele)
 
 
-def _diagram_tabel_html(diagram: dict, afvigelser: dict | None = None) -> str:
+def _diagram_tabel_html(
+    diagram: dict,
+    afvigelser: dict | None = None,
+    aflaeste: set[tuple[float, str]] | None = None,
+) -> str:
     """De aflæste diagramdata som fast tabel.
 
     Tabellen er skrivebeskyttet i visningstilstanden; redigering foregår i
@@ -6725,15 +7675,25 @@ def _diagram_tabel_html(diagram: dict, afvigelser: dict | None = None) -> str:
     Værdier, der afviger fra designmanualens, mærkes, så det fremgår, hvad
     der er rettet, og hvad der står som aflæst; det samme gør rækker, hvis
     Eᵤ ikke findes i manualen, jf. _diagram_afvigelser().
+
+    aflaeste er de celler (eu, felt), der ligger i et aflæst punkt på
+    kurven, jf. DESIGNDIAGRAM_AFLAESTE_CELLER. De sættes med fed, så længe
+    værdien står som i standarddataene; en rettet celle mærkes som rettet.
     """
     afvigelser = afvigelser or {"celler": set(), "nye": set(), "fjernede": 0}
+    aflaeste = aflaeste or set()
 
     def _tal(v: float | None) -> str:
         return "—" if v is None else f"{v:.1f}".replace(".", ",")
 
     def _celle(row: dict, felt: str) -> str:
-        rettet = (row["eu"], felt) in afvigelser["celler"]
-        klasse = ' class="dd-tabel-rettet"' if rettet else ""
+        noegle = (row["eu"], felt)
+        if noegle in afvigelser["celler"]:
+            klasse = ' class="dd-tabel-rettet"'
+        elif noegle in aflaeste and row.get(felt) is not None:
+            klasse = ' class="dd-tabel-aflaest"'
+        else:
+            klasse = ""
         return f"<div{klasse}>{_tal(row.get(felt))}</div>"
 
     def _raekke(row: dict) -> str:
@@ -6816,8 +7776,8 @@ def render_designdiagrammer() -> None:
     ui.sidehoved(
         "Designdiagrammer",
         "Diagrammer fra designmanualerne med tilhørende aflæste data. "
-        "Beregningerne slår op direkte i tabellerne, da interpolationen "
-        "mellem diagrammernes værdier er foretaget på forhånd.",
+        "Tabellerne er bestemt ved lineær interpolation mellem kurvernes "
+        "aflæste punkter, og beregningerne slår op direkte i dem.",
     )
 
     import pandas as pd
@@ -6938,7 +7898,10 @@ def render_designdiagrammer() -> None:
             if redigerer:
                 _rediger_diagramdata(diagram, pd)
             else:
-                st.html(_diagram_tabel_html(diagram, afvigelser))
+                st.html(_diagram_tabel_html(
+                    diagram, afvigelser,
+                    DESIGNDIAGRAM_AFLAESTE_CELLER.get(diagram["diagram_nr"]),
+                ))
 
             afvigelse_tekst = _diagram_afvigelse_tekst(afvigelser)
             if afvigelse_tekst:
@@ -6955,9 +7918,16 @@ def render_designdiagrammer() -> None:
                     ' Manualens værdier genskabes med Nulstil.</div>'
                 )
 
+            # Fed skrift findes kun i den faste tabel, ikke i redigeringen.
+            fed = (
+                "" if redigerer else
+                "Værdier med <b>fed</b> skrift er aflæst direkte i "
+                "designdiagrammet; de øvrige er bestemt ved lineær "
+                "interpolation mellem de aflæste punkter. "
+            )
             st.html(
-                '<div class="dd-tabel-fod">— Uden for diagrammets område. '
-                f'{html.escape(_diagram_daekning(diagram))}.</div>'
+                f'<div class="dd-tabel-fod">{fed}— Uden for diagrammets '
+                f'område. {html.escape(_diagram_daekning(diagram))}.</div>'
             )
 
     # Nulstillingen gælder samtlige diagrammer og står derfor for sig, uden
@@ -7635,10 +8605,11 @@ def render_rapport() -> None:
     sd = st.session_state.get("sidste_dim")
     if not sd or not sd.get("geonet"):
         st.info(
-            "Der skal først foretages en dimensionering med et specifikt "
-            "valgt geonet, før rapporten kan genereres.\n\n"
-            "Dimensioneringen udføres under **Dimensionering → "
-            "Brugerdefineret** med visningen **Vælg specifikt produkt**."
+            "Der skal først foretages en dimensionering med et valgt "
+            "geonet, før rapporten kan genereres.\n\n"
+            "Dimensioneringen udføres under **Dimensionering**, i Standard "
+            "eller Brugerdefineret. Rapporten bygger på den seneste "
+            "dimensionering."
         )
         if st.button("Gå til Dimensionering", type="primary"):
             st.session_state.aktiv_side = "dimensionering"
@@ -7653,8 +8624,10 @@ def render_rapport() -> None:
         )
     else:
         grundlag_txt = f"Klasse {sd['valgt_klasse']} (Eₒ = {ui.mpa(sd['eo'])})"
+    tilstand_txt = sd.get("tilstand") or "Brugerdefineret"
     st.success(
-        f"**Rapport baseret på:**  Eᵤ = {ui.mpa(sd['eu'])}  ·  "
+        f"**Rapport baseret på:**  {tilstand_txt}  ·  "
+        f"Eᵤ = {ui.mpa(sd['eu'])}  ·  "
         f"{grundlag_txt}  ·  "
         f"Produkt: **{sd['geonet_navn']}**  ·  φᵥ = {ui.grader(sd['phi'])}"
     )
@@ -7880,50 +8853,11 @@ def render_rapport() -> None:
             )
 
 
-        def _sub_lag_skaleret(total_mm: float | None) -> list[dict]:
-            """Returnér brugerens materialer skaleret så summen = total_mm.
-            For mm-mode: forhold = tykkelse_mm / sum. For pct-mode: forhold = pct / sum.
-            """
-            if not materialer_dim or not total_mm:
-                return []
-            if in_mm_mode:
-                sum_t = sum((m.get("tykkelse_mm") or 0) for m in materialer_dim)
-                if sum_t <= 0:
-                    return []
-                return [
-                    {
-                        "navn": m.get("navn", "Lag"),
-                        "tykkelse_mm": (m.get("tykkelse_mm") or 0) * total_mm / sum_t,
-                    }
-                    for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
-                ]
-            # pct-mode
-            sum_p = sum((m.get("pct") or 0) for m in materialer_dim)
-            if sum_p <= 0:
-                return []
-            return [
-                {
-                    "navn": m.get("navn", "Lag"),
-                    "tykkelse_mm": (m.get("pct") or 0) / sum_p * total_mm,
-                }
-                for m in materialer_dim if (m.get("pct") or 0) > 0
-            ]
-
         def _sub_lag_uarmeret() -> tuple[float | None, list[dict]]:
             """For uarmeret-snittet: brug brugerens dimensionerede tykkelser
-            (mm-mode). I pct-mode falder vi tilbage på t_uarm-beregningen."""
-            if in_mm_mode and materialer_dim:
-                lag = [
-                    {
-                        "navn": m.get("navn", "Lag"),
-                        "tykkelse_mm": float(m.get("tykkelse_mm") or 0),
-                    }
-                    for m in materialer_dim if (m.get("tykkelse_mm") or 0) > 0
-                ]
-                total = sum(l["tykkelse_mm"] for l in lag)
-                return (total if total > 0 else None, lag)
-            # pct-mode fallback
-            return (t_uarm, _sub_lag_skaleret(t_uarm) if t_uarm else [])
+            (mm-mode). I pct-mode falder vi tilbage på t_uarm-beregningen.
+            Samme fordeling som på dimensioneringssiden."""
+            return _sub_lag_uarmeret_fra_materialer(materialer_dim, t_uarm)
 
         # Koncept A: Indtastet opbygning + neutrale krav-søjler. φᵥ fra
         # dimensioneringen (sd["phi"]) styrer φᵥ-korrektionen på uarmeret-kravet.
@@ -7935,9 +8869,36 @@ def render_rapport() -> None:
             indtastet_total_rap = sum(
                 float(m.get("tykkelse_mm") or 0) for m in materialer_dim
             ) or None
+        # Den φᵥ-korrigerede ustabiliserede tykkelse tages fra
+        # beregningen, hvor den er oprundet som de øvrige tykkelser; ældre
+        # gemte dimensioneringer uden feltet regnes som hidtil.
         t_uarm_krav_rap = (
-            round(t_uarm * (1 + phi_kor_dim)) if t_uarm is not None else None
+            res_1.get("t_uarmeret_phi_kor_mm")
+            or res_2.get("t_uarmeret_phi_kor_mm")
         )
+        if t_uarm_krav_rap is None and t_uarm is not None:
+            t_uarm_krav_rap = afrunding_mod.rund_op(
+                t_uarm * (1 + phi_kor_dim), _afrundingstrin()
+            )
+        # Lagfordelingen fra dimensioneringen, så søjlerne fordeles ens;
+        # ældre gemte dimensioneringer uden feltet fordeles proportionalt.
+        # En Standard-dimensionering bærer i stedet sin opdeling i
+        # stabilgrus og bundsikring, jf. _standard_til_rapport().
+        fordeling_rap = sd.get("fordeling")
+        standard_rap = sd.get("standard_opdeling")
+
+        def _rap_lag(
+            total: float | None, t_uarm_ref: float | None = None,
+        ) -> tuple[list[dict], bool]:
+            """(lag, brug_lag) for en krav-søjle i rapporten, som på
+            dimensioneringssiden, jf. _render_opbygningsvisualisering()."""
+            if not materialer_dim and standard_rap is not None:
+                sub = _sub_lag_standard(standard_rap, total)
+                return sub or [], sub is not None
+            sub = _sub_lag_skaleret_fra_materialer(
+                materialer_dim, total, fordeling_rap, t_uarm_ref,
+            )
+            return sub, _sub_lag_til_soejle(sub, materialer_dim) is not None
 
         # Når 'Indtastet opbygning' er fravalgt, slukkes både søjlen OG
         # sammenligningslinjen — t_indtastet_for_snit styrer linjen via Snit-feltet.
@@ -7956,14 +8917,19 @@ def render_rapport() -> None:
         # som på dimensioneringssiden.
         _interval_rap = (sd.get("geonet") or {}).get("korrektion_interval")
 
-        def _optimal_note_rap(res: dict, t_best: float | None) -> str | None:
+        def _optimal_note_rap(
+            res: dict, t_best: float | None, t_best_eksakt: float | None = None,
+            phi_best: float | None = None,
+        ) -> str | None:
             if not _interval_rap or t_best is None:
                 return None
             return _optimal_note(
                 {
                     **res,
                     "t_armeret_mm_min": t_best,
+                    "t_armeret_eksakt_mm_min": t_best_eksakt,
                     "korrektion_min": _interval_rap[0],
+                    "phi_min": phi_best,
                 },
                 net_navn=sd.get("geonet_navn"),
                 phi=phi_dim,
@@ -7985,10 +8951,7 @@ def render_rapport() -> None:
             status_tekst_u, status_farve_u = _status_for_krav(
                 status_indtastet_ref, t_uarm_krav_rap, None,
             )
-            sub_red_u = _sub_lag_skaleret_fra_materialer(
-                materialer_dim, t_uarm_krav_rap
-            )
-            brug_sub_u = len(sub_red_u) >= 2
+            sub_red_u, brug_sub_u = _rap_lag(t_uarm_krav_rap)
             snit_liste.append(rapport_mod.Snit(
                 titel="Ustabiliseret bærelagstykkelse (φᵥ-korrigeret)"
                       if har_indtastet_rap else "Ustabiliseret bærelagstykkelse",
@@ -8002,8 +8965,7 @@ def render_rapport() -> None:
                 phi_vaegtet=har_indtastet_rap,
             ))
         if vis_1lag and t_1 is not None:
-            sub_red_1 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_1)
-            brug_sub_1 = len(sub_red_1) >= 2
+            sub_red_1, brug_sub_1 = _rap_lag(t_1, t_uarm_krav_rap)
             fracs_1, placement_1 = _geonet_fracs_kravsoejle(
                 "1_lag", t_1, geonet,
                 sub_lag=sub_red_1 if brug_sub_1 else None,
@@ -8017,7 +8979,8 @@ def render_rapport() -> None:
                 sub_lag=sub_red_1 if brug_sub_1 else None,
                 best_case_mm=sd.get("t_1_lag_best_mm"),
                 best_case_note=_optimal_note_rap(
-                    res_1, sd.get("t_1_lag_best_mm")
+                    res_1, sd.get("t_1_lag_best_mm"),
+                    sd.get("t_1_lag_best_eksakt_mm"), sd.get("phi_1_lag_best"),
                 ),
                 placement=placement_1,
                 er_krav_soejle=not brug_sub_1,
@@ -8027,8 +8990,7 @@ def render_rapport() -> None:
                 phi_vaegtet=har_indtastet_rap,
             ))
         if vis_2lag and t_2 is not None and to_lag_muligt:
-            sub_red_2 = _sub_lag_skaleret_fra_materialer(materialer_dim, t_2)
-            brug_sub_2 = len(sub_red_2) >= 2
+            sub_red_2, brug_sub_2 = _rap_lag(t_2, t_uarm_krav_rap)
             fracs_2, placement_2 = _geonet_fracs_kravsoejle(
                 "2_lag", t_2, geonet,
                 sub_lag=sub_red_2 if brug_sub_2 else None,
@@ -8042,7 +9004,8 @@ def render_rapport() -> None:
                 sub_lag=sub_red_2 if brug_sub_2 else None,
                 best_case_mm=sd.get("t_2_lag_best_mm"),
                 best_case_note=_optimal_note_rap(
-                    res_2, sd.get("t_2_lag_best_mm")
+                    res_2, sd.get("t_2_lag_best_mm"),
+                    sd.get("t_2_lag_best_eksakt_mm"), sd.get("phi_2_lag_best"),
                 ),
                 placement=placement_2,
                 er_krav_soejle=not brug_sub_2,
@@ -8065,6 +9028,7 @@ def render_rapport() -> None:
                     geonet_label=geonet_label,
                     materialer=materialer_dim,
                     reference_mm=t_indtastet_for_snit,
+                    **_snit_visning(),
                 )
             except Exception as e:
                 # Billedeksporten kræver en Chrome-motor på serveren, jf.
@@ -8083,6 +9047,7 @@ def render_rapport() -> None:
                     snit_til_kolonner(snit_liste, materialer_dim, sd["eu"]),
                     reference_mm=t_indtastet_for_snit,
                     geonet_navn=geonet_label,
+                    **_snit_visning(),
                 )
 
         # --- Personligt designdiagram (preview + rapport-PNG) ----------------
@@ -8104,23 +9069,39 @@ def render_rapport() -> None:
                         if har_indtastet_rap and vis_dd_din_prik else None
                     ),
                     t_basis_table=_aktiv_t_basis_table(),
-                    t_1_lag_mm=t_1 if vis_dd_lag_prikker else None,
-                    t_2_lag_mm=t_2 if vis_dd_lag_prikker else None,
+                    # Punkterne markerer aflæsningen på kurverne og sættes
+                    # ved de beregnede tykkelser, jf. _tegn_designdiagram().
+                    t_1_lag_mm=(
+                        _eksakt_vaerdi(res_1, "t_armeret_mm")
+                        if vis_dd_lag_prikker and t_1 is not None else None
+                    ),
+                    t_2_lag_mm=(
+                        _eksakt_vaerdi(res_2, "t_armeret_mm")
+                        if vis_dd_lag_prikker and t_2 is not None else None
+                    ),
                     t_1_lag_best_mm=(
-                        sd.get("t_1_lag_best_mm") if vis_dd_lag_prikker else None
+                        (sd.get("t_1_lag_best_eksakt_mm") or sd.get("t_1_lag_best_mm"))
+                        if vis_dd_lag_prikker else None
                     ),
                     t_2_lag_best_mm=(
-                        sd.get("t_2_lag_best_mm") if vis_dd_lag_prikker else None
+                        (sd.get("t_2_lag_best_eksakt_mm") or sd.get("t_2_lag_best_mm"))
+                        if vis_dd_lag_prikker else None
                     ),
                     skala=float(sd.get("skala", 1.0)),
+                    phi_kurver=_phi_kurver(
+                        res_1 if t_1 is not None else None,
+                        res_2 if t_2 is not None else None,
+                    ),
                 )
                 diagram_p1 = {
                     **res_1,
                     "t_armeret_mm_min": sd.get("t_1_lag_best_mm"),
+                    "t_armeret_eksakt_mm_min": sd.get("t_1_lag_best_eksakt_mm"),
                 } if t_1 is not None else None
                 diagram_p2 = {
                     **res_2,
                     "t_armeret_mm_min": sd.get("t_2_lag_best_mm"),
+                    "t_armeret_eksakt_mm_min": sd.get("t_2_lag_best_eksakt_mm"),
                 } if t_2 is not None else None
                 with ui.kort(
                     "Designdiagram",
@@ -8158,7 +9139,10 @@ def render_rapport() -> None:
             "tekster": dict(tekster_state),
             "visualisering_png": visu_png,
             "designdiagram_png": designdiagram_png,
-            "valg": {},
+            # Er den indtastede opbygning fravalgt, udelades dens samlede
+            # tykkelse også af resultattabellen, jf.
+            # rapport.formatér_dimensioneringsresultat.
+            "valg": {"vis_indtastet": bool(vis_indtastet_aktiv)},
         }
 
         filnavn_base = (
@@ -8282,6 +9266,865 @@ def render_rapport() -> None:
                     )
         t4.opsummering = ""
 
+
+# ===========================================================================
+# Indstillinger
+# ===========================================================================
+#
+# Værktøjets faste indstillinger. Hvert afsnit står i sit trin-kort, og
+# ændringer gemmes straks til indstillinger_brugerdefineret.json, jf.
+# gem_indstillinger(), så de huskes mellem sessioner. Afsnittene er:
+# 1 oprundingen til indbygningstrin, jf. core.afrunding; 2 opbygningssøjlernes
+# påskrift; 3 fordelingen på materialelag og minimumstykkelsen; 4 tynde
+# underliggende lag; 5 friktionsvinklen i opbygningerne; 6 Standard-
+# beregningen; 7 placeringen af det øverste geonet ved 2 lag, jf.
+# core.lagfordeling og core.placement. Hvert afsnit angiver med _gaelder(),
+# hvilken tilstand det gælder.
+# ===========================================================================
+
+_AFRUNDING_REDUKTION_VALG = (
+    "Af de oprundede lagtykkelser",
+    "Af de beregnede lagtykkelser",
+)
+
+
+def _afrunding_trin_tekst(trin: int) -> str:
+    return "1 mm (ingen oprunding)" if trin <= 1 else f"{trin} mm"
+
+
+def render_indstillinger() -> None:
+    """Siden Indstillinger: afrunding af lagtykkelser, opbygningssøjler og
+    fordelingen på materialelag."""
+    ui.sidehoved(
+        "Indstillinger",
+        "Værktøjets faste indstillinger. Ændringer gemmes straks og gælder "
+        "alle sider, også ved næste start af værktøjet.",
+    )
+
+    ind = st.session_state.get("indstillinger") or _standard_indstillinger()
+    afr = afrunding_mod.normaliser(ind.get("afrunding"))
+
+    with ui.trin_kort(1, "Afrunding") as t1:
+        st.markdown(
+            "De beregnede lagtykkelser er mindstetykkelser. Ved indbygning "
+            "anvendes lagtykkelser i hele trin, og den dimensionerede "
+            "lagtykkelse oprundes derfor til nærmeste hele trin. Der rundes "
+            "ikke ned.\n\n"
+            "Oprundingen gælder den ustabiliserede og de stabiliserede "
+            "lagtykkelser i resultatkortet, opbygningssøjlerne, "
+            "produkttabellen og rapporten. Materialelagene i en opbygning "
+            "fordeles i samme trin, så de tilsammen giver den oprundede "
+            "tykkelse. Mellemregningerne føres med de beregnede værdier, og "
+            "oprundingen står som sidste led, så regnestykket kan efterregnes."
+        )
+        _gaelder(standard=True, brugerdefineret=True, ignorer_klassisk=True)
+        kol_trin, kol_red = st.columns([1, 1.4])
+        with kol_trin:
+            trin = st.selectbox(
+                "Oprundingstrin",
+                afrunding_mod.TRIN_VALG,
+                index=afrunding_mod.TRIN_VALG.index(afr["trin_mm"]),
+                format_func=_afrunding_trin_tekst,
+                key="ind_afr_trin",
+                help=(
+                    "Lagtykkelsen oprundes til nærmeste hele multiplum af "
+                    "trinnet. Ved 1 mm angives lagtykkelsen som beregnet."
+                ),
+            )
+        with kol_red:
+            reduktion_valg = st.radio(
+                "Reduktion i mm og %",
+                _AFRUNDING_REDUKTION_VALG,
+                index=1 if afr["reduktion_eksakt"] else 0,
+                key="ind_afr_reduktion",
+                help=(
+                    "Reduktionen er forskellen mellem den ustabiliserede og "
+                    "den stabiliserede lagtykkelse. Opgøres den af de "
+                    "oprundede lagtykkelser, stemmer den med de viste tal; "
+                    "opgøres den af de beregnede, svarer den til "
+                    "designdiagrammets aflæsning."
+                ),
+            )
+        vis_eksakt = st.checkbox(
+            "Anfør den beregnede lagtykkelse i parentes efter den oprundede",
+            value=afr["vis_eksakt"],
+            key="ind_afr_vis_eksakt",
+            help=(
+                "Gælder resultatkortet, mellemregningerne, produkttabellen og "
+                "rapportens resultattabel. Parentesen udelades, når "
+                "oprundingen ikke ændrer værdien."
+            ),
+        )
+
+        ny_afr = afrunding_mod.normaliser({
+            "trin_mm": int(trin),
+            "reduktion_eksakt": reduktion_valg == _AFRUNDING_REDUKTION_VALG[1],
+            "vis_eksakt": bool(vis_eksakt),
+        })
+        if ny_afr != afr:
+            ind = {**ind, "afrunding": ny_afr}
+            st.session_state["indstillinger"] = ind
+            gem_indstillinger(ind)
+            afr = ny_afr
+
+        # Eksemplet viser oprundingens virkning på en beregnet lagtykkelse.
+        eks_beregnet = 532.0
+        eks_oprundet = afrunding_mod.rund_op(eks_beregnet, afr["trin_mm"])
+        if afrunding_mod.er_oprundet(eks_oprundet, eks_beregnet):
+            eks = (
+                f"Eksempel: en beregnet lagtykkelse på {ui.mm(eks_beregnet)} "
+                f"angives som {ui.mm(eks_oprundet)}"
+                + (f" ({ui.mm(eks_beregnet)})" if afr["vis_eksakt"] else "")
+                + "."
+            )
+        else:
+            eks = (
+                f"Eksempel: en beregnet lagtykkelse på {ui.mm(eks_beregnet)} "
+                "angives uændret."
+            )
+        st.caption(eks)
+
+        opsum = [
+            _afrunding_trin_tekst(afr["trin_mm"]),
+            "reduktion af beregnede tykkelser" if afr["reduktion_eksakt"]
+            else "reduktion af oprundede tykkelser",
+        ]
+        if afr["vis_eksakt"]:
+            opsum.append("beregnet værdi i parentes")
+        t1.opsummering = " · ".join(opsum)
+
+    opb = _normaliser_opbygning(ind.get("opbygning"))
+    with ui.trin_kort(2, "Opbygningssøjler") as t2:
+        st.markdown(
+            "Geonettets placering markeres med røde linjer i "
+            "opbygningssøjlerne, og den samlede tykkelse målsættes til højre "
+            "for hver søjle. Nettets navn kan skrives ud for hver linje; "
+            "ellers fremgår det alene af signaturen under figuren. Valgene "
+            "gælder både dimensioneringssiden og rapportens figur."
+        )
+        _gaelder(standard=True, brugerdefineret=True, ignorer_klassisk=True)
+        paaskrift = st.checkbox(
+            "Skriv geonettets navn ud for geonetlinjerne",
+            value=opb["geonet_paaskrift"],
+            key="ind_opb_paaskrift",
+            help=(
+                "Navnet står lige til venstre for søjlen ud for hver rød "
+                "linje. For de tre referencenet skrives »Referencenet«."
+            ),
+        )
+        maal_streg = st.checkbox(
+            "Vis målsætningsstreg ved den samlede tykkelse",
+            value=opb["maal_streg"],
+            key="ind_opb_maal_streg",
+            help=(
+                "Stregen går fra underbundens overkant til opbygningens top "
+                "og angiver, hvilken højde målet gælder."
+            ),
+        )
+        maal_tal = st.checkbox(
+            "Vis den samlede tykkelse som mål",
+            value=opb["maal_tal"],
+            key="ind_opb_maal_tal",
+            help="Målet i mm ud for målsætningsstregen.",
+        )
+        ny_opb = _normaliser_opbygning({
+            "geonet_paaskrift": bool(paaskrift),
+            "maal_streg": bool(maal_streg),
+            "maal_tal": bool(maal_tal),
+        })
+        if ny_opb != opb:
+            ind = {**ind, "opbygning": ny_opb}
+            st.session_state["indstillinger"] = ind
+            gem_indstillinger(ind)
+            opb = ny_opb
+        opsum = [
+            "navn ud for geonetlinjerne" if opb["geonet_paaskrift"]
+            else "navn alene i signaturen",
+        ]
+        if opb["maal_streg"] and opb["maal_tal"]:
+            opsum.append("målsætning med streg og mål")
+        elif opb["maal_streg"]:
+            opsum.append("målsætningsstreg uden mål")
+        elif opb["maal_tal"]:
+            opsum.append("mål uden målsætningsstreg")
+        else:
+            opsum.append("ingen målsætning")
+        t2.opsummering = " · ".join(opsum)
+
+    _render_indstilling_lagfordeling(ind, afr)
+    _render_indstilling_phi()
+    _render_indstilling_standard()
+    _render_indstilling_netplacering()
+
+
+def _gaelder(
+    *,
+    standard: bool = False,
+    brugerdefineret: bool = False,
+    standard_forudsaetning: str | None = None,
+    ignorer_klassisk: bool = False,
+) -> None:
+    """Angiv under et afsnit eller valg på indstillingssiden, hvilken
+    tilstand det gælder.
+
+    Er klassisk standardberegning valgt, gælder valg for Standard ikke
+    Standard, og det anføres; afsnit 6 selv sætter ignorer_klassisk.
+    Afbryderens tilstand læses af widgetten, når den findes, så markeringen
+    følger et nyt valg straks.
+    """
+    klassisk = st.session_state.get(
+        "ind_std_klassisk", _aktiv_lagfordeling()["standard_klassisk"],
+    )
+    if ignorer_klassisk:
+        klassisk = False
+    dele: list[str] = []
+    if standard and not klassisk:
+        dele.append(
+            f"Standard ({standard_forudsaetning})" if standard_forudsaetning
+            else "Standard"
+        )
+    if brugerdefineret:
+        dele.append("Brugerdefineret")
+    tekst = "Gælder: " + " og ".join(dele) if dele else "Gælder: ingen tilstand"
+    if standard and klassisk:
+        tekst += (
+            " · gælder ikke Standard, da klassisk standardberegning er valgt "
+            "i afsnit 6"
+        )
+    st.caption(tekst)
+
+
+# Afslutning på tooltips for valgene i afsnit 3–5. Stjernen markerer det
+# valg, hvor appen regner som før minimumstykkelse, regler for underliggende
+# lag og φᵥ pr. opbygning blev indført; den er escapet, så markdown ikke
+# opfatter den som kursiv.
+_TIDLIGERE_NOTE = "\\* Appen regner som før disse indstillinger blev indført."
+
+_FORDELING_TEKST: dict[str, str] = {
+    lagfordeling_mod.FORDELING_PROPORTIONAL:
+        "Proportionalt — alle lag reduceres i samme forhold",
+    lagfordeling_mod.FORDELING_MINIMUM:
+        "Proportionalt, dog mindst minimumstykkelsen for det øverste lag",
+    lagfordeling_mod.FORDELING_FASTHOLDT:
+        "Det øverste lag fastholdes på den indtastede tykkelse",
+}
+
+_FORDELING_KORT: dict[str, str] = {
+    lagfordeling_mod.FORDELING_PROPORTIONAL: "proportional fordeling",
+    lagfordeling_mod.FORDELING_MINIMUM: "øverste lag mindst minimumstykkelsen",
+    lagfordeling_mod.FORDELING_FASTHOLDT: "øverste lag fastholdt",
+}
+
+_MINIMUM_KOLONNE = "Minimumstykkelse [mm]"
+
+
+def _render_indstilling_lagfordeling(ind: dict, afr: dict) -> None:
+    """Afsnit 3 på siden Indstillinger: fordelingen af bærelagstykkelsen på
+    materialelagene og minimumstykkelsen for det øverste lag, jf.
+    core.lagfordeling."""
+    import pandas as pd
+
+    lf = lagfordeling_mod.normaliser(ind.get("lagfordeling"))
+    with ui.trin_kort(3, "Øverste bærelag") as t3:
+        st.markdown(
+            "Designdiagrammerne giver én samlet ubunden lagtykkelse. I "
+            "Brugerdefineret fordeles den på de indtastede materialelag. "
+            "Fordelingen indgår ikke i diagramopslaget. Den samlede tykkelse "
+            "og reduktionen kan dog ændres af reglerne i afsnit 4 og 5.\n\n"
+            "Ved proportional fordeling reduceres alle lag i samme forhold, "
+            "og det øverste lag kan derved blive tyndt. Der kan i stedet "
+            "fastsættes en minimumstykkelse for det øverste lag pr. "
+            "belastningsklasse, eller det øverste lag kan fastholdes på den "
+            "indtastede tykkelse, så ændringer af den samlede tykkelse alene "
+            "tages i de underliggende lag."
+        )
+        fordeling = st.radio(
+            "Fordeling af lagtykkelsen på materialelagene",
+            lagfordeling_mod.FORDELING_VALG,
+            index=lagfordeling_mod.FORDELING_VALG.index(lf["fordeling"]),
+            format_func=lambda v: _FORDELING_TEKST[v],
+            key="ind_lf_fordeling",
+            help=(
+                "Proportionalt\\*: lagforholdet er det indtastede i alle "
+                "beregnede opbygninger.\n\n"
+                "Mindst minimumstykkelsen (standard): det øverste lag "
+                "fordeles proportionalt, men gøres ikke tyndere end "
+                "minimumstykkelsen for klassen. Resten fordeles "
+                "proportionalt på de underliggende lag.\n\n"
+                "Fastholdt: det øverste lag har den indtastede tykkelse i "
+                "alle beregnede opbygninger, dog mindst minimumstykkelsen. "
+                "De underliggende "
+                "lag optager både forøgelsen til den ustabiliserede tykkelse "
+                "og geonettets reduktion. Er lagene angivet i procent, "
+                "fastholdes det øverste lag på sin tykkelse i den "
+                "ustabiliserede opbygning.\n\n"
+                + _TIDLIGERE_NOTE
+            ),
+        )
+        _gaelder(brugerdefineret=True)
+        samlet = st.checkbox(
+            "Den samlede bærelagstykkelse sættes mindst til minimumstykkelsen",
+            value=lf["samlet_minimum"],
+            key="ind_lf_samlet",
+            help=(
+                "Er den beregnede og oprundede lagtykkelse mindre end "
+                "minimumstykkelsen for klassen, angives minimumstykkelsen, "
+                "og reduktionen mindskes tilsvarende. Tillægget står som eget "
+                "led i mellemregningerne. Er fluebenet fjernet, fastlægger "
+                "afsnit 6, hvordan Standard-opdelingen behandler en "
+                "opbygning under stabilgrusminimum.\n\n"
+                "Valgt som standard. Uden flueben opfører appen sig som "
+                "tidligere."
+            ),
+        )
+        _gaelder(standard=True, brugerdefineret=True)
+
+        kol_tabel, kol_note = st.columns([1.5, 1], gap="large")
+        with kol_tabel:
+            tabel = pd.DataFrame([
+                {
+                    "Belastningsklasse": klasse,
+                    "Eₒ [MPa]": BELASTNINGSKLASSER[klasse]["eo"],
+                    "Belastning": BELASTNINGSKLASSER[klasse]["belastning"],
+                    _MINIMUM_KOLONNE: lf["minimum_mm"][klasse],
+                }
+                for klasse in sorted(BELASTNINGSKLASSER)
+            ])
+            redigeret = st.data_editor(
+                tabel,
+                hide_index=True,
+                width="stretch",
+                disabled=["Belastningsklasse", "Eₒ [MPa]", "Belastning"],
+                column_config={
+                    "Belastningsklasse": st.column_config.NumberColumn(
+                        "Klasse", format="%d", width="small"),
+                    "Eₒ [MPa]": st.column_config.NumberColumn(
+                        "Eₒ [MPa]", format="%d", width="small"),
+                    _MINIMUM_KOLONNE: st.column_config.NumberColumn(
+                        _MINIMUM_KOLONNE,
+                        min_value=lagfordeling_mod.MIN_MINIMUM_MM,
+                        max_value=lagfordeling_mod.MAKS_MINIMUM_MM,
+                        step=5.0, format="%.0f",
+                        help=(
+                            "Mindste tykkelse af det øverste lag ved "
+                            "fordelingen på materialelagene, stabilgruset i "
+                            "Standard-opdelingen og, når det er tilvalgt, "
+                            "den samlede bærelagstykkelse. Mindst 100 mm, "
+                            "VD's mindste lagtykkelse for stabilgrus, "
+                            "Figur 6.5."
+                        ),
+                    ),
+                },
+                key="ind_lf_minimum",
+            )
+            if st.button(
+                "Nulstil minimumstykkelser",
+                key="ind_lf_nulstil",
+                help="Gendanner de oprindelige minimumstykkelser.",
+            ):
+                ny_ind = {
+                    **ind,
+                    "lagfordeling": {
+                        **lf,
+                        "minimum_mm": dict(lagfordeling_mod.STANDARD_MINIMUM_MM),
+                    },
+                }
+                st.session_state["indstillinger"] = ny_ind
+                gem_indstillinger(ny_ind)
+                st.session_state.pop("ind_lf_minimum", None)
+                st.rerun()
+        with kol_note:
+            st.caption(
+                "Ved dimensionering efter trafikklasse anvendes "
+                "minimumstykkelsen for den højeste af de to "
+                "belastningsklasser, som opslagspunktet Eₒ,ækv ligger "
+                "imellem."
+            )
+            _gaelder(standard=True, brugerdefineret=True)
+            st.caption(
+                "I Brugerdefineret er tabellen minimum for det øverste lag. "
+                "I Standard er den stabilgruset i opdelingen, uanset "
+                "fordelingsvalget ovenfor. I begge tilstande er den minimum "
+                "for den samlede tykkelse, når fluebenet er sat."
+            )
+            st.caption(
+                "Der gøres opmærksom på, at lagforholdet i de beregnede "
+                "opbygninger ændres, når det øverste lag holdes på "
+                "minimumstykkelsen eller fastholdes. Om φᵥ regnes af den "
+                "indtastede opbygning eller af opbygningernes egne lag, "
+                "fastlægges i afsnit 5."
+            )
+
+        ny_minimum = {
+            int(r["Belastningsklasse"]): (
+                float(r[_MINIMUM_KOLONNE])
+                if r[_MINIMUM_KOLONNE] is not None else None
+            )
+            for r in redigeret.to_dict("records")
+        }
+        ny_lf = lagfordeling_mod.normaliser({
+            **lf,
+            "fordeling": fordeling,
+            "samlet_minimum": bool(samlet),
+            "minimum_mm": ny_minimum,
+        })
+        if ny_lf != lf:
+            ind = {**ind, "lagfordeling": ny_lf}
+            st.session_state["indstillinger"] = ind
+            gem_indstillinger(ind)
+            lf = ny_lf
+
+        # Minimumstykkelserne oprundes til trinnet ved beregningen. Går en
+        # værdi ikke op i trinnet, gøres der opmærksom på det, så tabellen
+        # og de viste tykkelser ikke ser ud til at modsige hinanden.
+        trin = afr["trin_mm"]
+        ikke_hele = [
+            (klasse, mm) for klasse, mm in sorted(lf["minimum_mm"].items())
+            if trin > 1 and abs(afrunding_mod.rund_op(mm, trin) - mm) >= 0.5
+        ]
+        if ikke_hele:
+            liste = ", ".join(
+                f"klasse {klasse}: {ui.mm(mm)} anvendes som "
+                f"{ui.mm(afrunding_mod.rund_op(mm, trin))}"
+                for klasse, mm in ikke_hele
+            )
+            ui.besked(
+                "<b>Minimumstykkelser, der ikke går op i oprundingstrinnet på "
+                f"{trin} mm.</b> De oprundes til trinnet ved beregningen: "
+                f"{html.escape(liste)}. Tabellen kan tilpasses trinnet, eller "
+                "trinnet kan ændres i afsnit 1.",
+                "advarsel",
+            )
+
+        opsum = [_FORDELING_KORT[lf["fordeling"]]]
+        if lf["samlet_minimum"]:
+            opsum.append("samlet tykkelse mindst minimum")
+        mm_liste = "/".join(
+            f"{lf['minimum_mm'][k]:.0f}" for k in sorted(lf["minimum_mm"])
+        )
+        opsum.append(f"{mm_liste} mm")
+        t3.opsummering = " · ".join(opsum)
+
+    _render_indstilling_restlag(ind, lf)
+
+
+_PHI_TEKST: dict[str, str] = {
+    lagfordeling_mod.PHI_INDTASTET:
+        "φᵥ for den indtastede opbygning i alle beregnede opbygninger",
+    lagfordeling_mod.PHI_LAVESTE:
+        "Den laveste af φᵥ for den indtastede opbygning og for "
+        "opbygningens egne lag",
+    lagfordeling_mod.PHI_SOEJLE:
+        "φᵥ for opbygningens egne lag",
+}
+
+_PHI_KORT: dict[str, str] = {
+    lagfordeling_mod.PHI_INDTASTET: "φᵥ for den indtastede opbygning",
+    lagfordeling_mod.PHI_LAVESTE: "laveste φᵥ pr. opbygning",
+    lagfordeling_mod.PHI_SOEJLE: "φᵥ for opbygningens egne lag",
+}
+
+
+def _render_indstilling_phi() -> None:
+    """Afsnit 5 på siden Indstillinger: friktionsvinklen i de beregnede
+    opbygninger, jf. core.lagfordeling og core.calculator.beregn()."""
+    ind = st.session_state.get("indstillinger") or _standard_indstillinger()
+    lf = lagfordeling_mod.normaliser(ind.get("lagfordeling"))
+    with ui.trin_kort(5, "Friktionsvinkel i opbygningerne") as t5:
+        st.markdown(
+            "Den vægtede friktionsvinkel φᵥ bestemmes af den indtastede "
+            "opbygning. Ved proportional fordeling har alle beregnede "
+            "opbygninger samme lagforhold, og φᵥ svarer til deres "
+            "materialer. Holdes det øverste lag på minimumstykkelsen, eller "
+            "fastholdes det, indeholder de stabiliserede opbygninger "
+            "relativt mere af det øverste lags materiale, og opbygningens "
+            "egen φᵥ afviger fra den indtastede opbygnings.\n\n"
+            "Har det underliggende lag den højeste friktionsvinkel, som ved "
+            "stabilgrus over skærver, er opbygningens egen φᵥ lavere end den "
+            "indtastede opbygnings, og en beregning med den indtastede φᵥ "
+            "ligger på den usikre side."
+        )
+        phi_regel = st.radio(
+            "Friktionsvinkel i opbygningerne",
+            lagfordeling_mod.PHI_VALG,
+            index=lagfordeling_mod.PHI_VALG.index(lf["phi_regel"]),
+            format_func=lambda v: _PHI_TEKST[v],
+            key="ind_lf_phi_regel",
+            help=(
+                "Den indtastede opbygning\\*: samme φᵥ i alle beregnede "
+                "opbygninger. Reduktionen afspejler da alene geonettet.\n\n"
+                "Den laveste (standard): hver opbygning regnes med den "
+                "laveste af de to værdier. Ingen opbygning regnes dermed med "
+                "en højere φᵥ, end dens egne lag giver.\n\n"
+                "Opbygningens egne lag: hver opbygning regnes med φᵥ for "
+                "sine egne lag, også når det giver en tyndere opbygning.\n\n"
+                "Ved de to sidste gentages beregningen, til φᵥ er stabil, "
+                "og reduktionen omfatter også forskellen i materialer "
+                "mellem den ustabiliserede og den stabiliserede "
+                "opbygning.\n\n"
+                + _TIDLIGERE_NOTE
+            ),
+        )
+        _gaelder(brugerdefineret=True)
+        st.caption(
+            "Reglen gælder Brugerdefineret med mindst to materialelag. Er "
+            "φᵥ overskrevet manuelt, anvendes den manuelle værdi i alle "
+            "opbygninger. Standard-tilstanden regnes med φᵥ = 37°."
+        )
+        ny_lf = lagfordeling_mod.normaliser({**lf, "phi_regel": phi_regel})
+        if ny_lf != lf:
+            ind = {**ind, "lagfordeling": ny_lf}
+            st.session_state["indstillinger"] = ind
+            gem_indstillinger(ind)
+            lf = ny_lf
+        t5.opsummering = _PHI_KORT[lf["phi_regel"]]
+
+
+_RESTLAG_TEKST: dict[str, str] = {
+    lagfordeling_mod.RESTLAG_VIS: "Lagene vises som fordelt",
+    lagfordeling_mod.RESTLAG_FLET:
+        "Et lag tyndere end grænsen lægges til laget ovenover",
+    lagfordeling_mod.RESTLAG_VD:
+        "Lagene gøres mindst så tykke som VD's mindste lagtykkelse",
+}
+
+
+def _render_indstilling_restlag(ind: dict, lf: dict) -> None:
+    """Afsnit 4 på siden Indstillinger: reglen for underliggende lag, der
+    bliver tynde, når det øverste lag holdes på minimumstykkelsen, jf.
+    core.lagfordeling. Reglen gælder også Standard-opdelingen i stabilgrus
+    og bundsikring, jf. afsnit 6."""
+    with ui.trin_kort(4, "Underliggende lag") as t4:
+        st.markdown(
+            "Holdes det øverste lag på minimumstykkelsen, eller fastholdes "
+            "det, bliver der mindre tilbage til de underliggende lag, og "
+            "bundsikringslaget kan blive tyndere, end det kan indbygges. For "
+            "300 mm stabilgrus over 400 mm bundsikringssand ved "
+            "belastningsklasse 4 og Eᵤ = 27 MPa er opbygningen med 1 lag "
+            "geonet 300 mm, hvoraf 250 mm er stabilgrus og 50 mm "
+            "bundsikring. I Standard gælder det samme for opdelingen i "
+            "stabilgrus og bundsikring, jf. afsnit 6.\n\n"
+            "Der kan vælges mellem at vise lagene som fordelt, at lægge et "
+            "tyndt lag til laget ovenover — ved to lag stabilgruset — eller "
+            "at gøre lagene mindst så tykke som den mindste lagtykkelse i "
+            "Vejdirektoratets håndbog, Figur 6.5. Ved det sidste øges den "
+            "samlede lagtykkelse, og reduktionen mindskes tilsvarende."
+        )
+        restlag = st.radio(
+            "Underliggende lag",
+            lagfordeling_mod.RESTLAG_VALG,
+            index=lagfordeling_mod.RESTLAG_VALG.index(lf["restlag"]),
+            format_func=lambda v: _RESTLAG_TEKST[v],
+            key="ind_lf_restlag",
+            help=(
+                "Som fordelt (standard)\\*: lagene vises, som fordelingen "
+                "giver dem, også når et lag er tyndt.\n\n"
+                "Lægges til laget ovenover: et underliggende lag, der er "
+                "tyndere end grænsen, indgår i laget ovenover. Den samlede "
+                "tykkelse er uændret.\n\n"
+                "VD's mindste lagtykkelse: den samlede tykkelse øges i hele "
+                "trin, til hvert underliggende lag mindst har den mindste "
+                "lagtykkelse for sin lagtype. Tillægget står som eget led i "
+                "mellemregningerne.\n\n"
+                "I Standard gælder reglen, når opbygningen opdeles i "
+                "stabilgrus og bundsikring, jf. afsnit 6.\n\n"
+                + _TIDLIGERE_NOTE
+            ),
+        )
+        _gaelder(
+            standard=True, brugerdefineret=True,
+            standard_forudsaetning="når opbygningen opdeles",
+        )
+        kol_graense, kol_baere, kol_bunds = st.columns(3)
+        with kol_graense:
+            graense = st.number_input(
+                "Grænse for sammenlægning [mm]",
+                min_value=0.0, max_value=lagfordeling_mod.MAKS_MINIMUM_MM,
+                value=float(lf["restlag_graense_mm"]), step=10.0,
+                format="%.0f",
+                key="ind_lf_restlag_graense",
+                disabled=restlag != lagfordeling_mod.RESTLAG_FLET,
+                help=(
+                    "Et underliggende lag, der er tyndere end grænsen, lægges "
+                    "til laget ovenover."
+                ),
+            )
+        vd = lf["vd_minimum_mm"]
+        with kol_baere:
+            vd_baere = st.number_input(
+                "Mindste tykkelse, bærelag [mm]",
+                min_value=0.0, max_value=lagfordeling_mod.MAKS_MINIMUM_MM,
+                value=float(vd["Bærelag"]), step=10.0, format="%.0f",
+                key="ind_lf_vd_baerelag",
+                disabled=restlag != lagfordeling_mod.RESTLAG_VD,
+                help=(
+                    "Gælder materialer med lagtypen Bærelag. VD, Figur 6.5: "
+                    "100 mm for SG, KB, KBT, KAS, KBA og FS."
+                ),
+            )
+        with kol_bunds:
+            vd_bunds = st.number_input(
+                "Mindste tykkelse, bundsikringslag [mm]",
+                min_value=0.0, max_value=lagfordeling_mod.MAKS_MINIMUM_MM,
+                value=float(vd["Bundsikring"]), step=10.0, format="%.0f",
+                key="ind_lf_vd_bundsikring",
+                disabled=restlag != lagfordeling_mod.RESTLAG_VD,
+                help=(
+                    "Gælder materialer med lagtypen Bundsikring og "
+                    "bundsikringen i Standard-opdelingen. VD, Figur 6.5: "
+                    "200 mm for bundsikringssand og -grus BL I og BL II."
+                ),
+            )
+        kraev = st.checkbox(
+            "Kræv altid et bundsikringslag",
+            value=lf["kraev_bundsikring"],
+            key="ind_lf_kraev_bundsikring",
+            disabled=restlag != lagfordeling_mod.RESTLAG_VD,
+            help=(
+                "Gælder valget »VD's mindste lagtykkelse«. Uden flueben "
+                "(standard)\\* godtages en opbygning, hvor det øverste lag "
+                "udgør hele tykkelsen, idet der da ikke er noget "
+                "underliggende lag at vurdere. Med flueben øges opbygningen, "
+                "til også de underliggende lag har deres mindste tykkelse.\n\n"
+                "Eksempel, belastningsklasse 4, 1 lag geonet, stabilgrus "
+                "mindst 250 mm: Ved Eᵤ = 28 MPa er opbygningen med geonet "
+                "300 mm med 50 mm bundsikring. Den øges til 450 mm, og "
+                "reduktionen bliver 0. Ved Eᵤ = 30 MPa er opbygningen med "
+                "geonet 250 mm uden bundsikring. Uden flueben godtages den, "
+                "mens den ustabiliserede opbygning øges til 450 mm, og "
+                "reduktionen bliver 200 mm. Med flueben øges også "
+                "opbygningen med geonet til 450 mm, og reduktionen er 0 i "
+                "begge tilfælde.\n\n"
+                + _TIDLIGERE_NOTE
+            ),
+        )
+        st.caption(
+            "Lagtypen fremgår af materialetabellen under Materialer. Det "
+            "øverste lag er omfattet af minimumstykkelsen i afsnit 3 og "
+            "vurderes ikke her."
+        )
+
+        ny_lf = lagfordeling_mod.normaliser({
+            **lf,
+            "restlag": restlag,
+            "restlag_graense_mm": float(graense),
+            "vd_minimum_mm": {
+                "Bærelag": float(vd_baere),
+                "Bundsikring": float(vd_bunds),
+            },
+            "kraev_bundsikring": bool(kraev),
+        })
+        if ny_lf != lf:
+            ind = {**ind, "lagfordeling": ny_lf}
+            st.session_state["indstillinger"] = ind
+            gem_indstillinger(ind)
+            lf = ny_lf
+
+        if lf["restlag"] == lagfordeling_mod.RESTLAG_FLET:
+            t4.opsummering = (
+                f"lag under {lf['restlag_graense_mm']:.0f} mm lægges til "
+                "laget ovenover"
+            )
+        elif lf["restlag"] == lagfordeling_mod.RESTLAG_VD:
+            t4.opsummering = (
+                f"VD's mindste lagtykkelse · bærelag "
+                f"{lf['vd_minimum_mm']['Bærelag']:.0f} mm · bundsikring "
+                f"{lf['vd_minimum_mm']['Bundsikring']:.0f} mm"
+            )
+            if lf["kraev_bundsikring"]:
+                t4.opsummering += " · bundsikringslag kræves"
+        else:
+            t4.opsummering = "lagene vises som fordelt"
+
+
+_UNDER_MIN_TEKST: dict[str, str] = {
+    lagfordeling_mod.UNDER_MIN_STABILGRUS: "Hele tykkelsen vises som stabilgrus",
+    lagfordeling_mod.UNDER_MIN_LOEFT: "Tykkelsen øges til stabilgrusminimum",
+    lagfordeling_mod.UNDER_MIN_UBUNDET: "Opbygningen vises som ét samlet ubundet lag",
+}
+
+_UNDER_MIN_EKSEMPEL = """\
+Belastningsklasse 4, Eᵤ = 33 MPa, 1 lag referencenet. Designdiagrammet giver
+343 mm uden geonet og 200 mm med 1 lag geonet. Oprundet til 50 mm bliver
+tykkelserne 350 mm og 200 mm. Stabilgrusminimum er 250 mm.
+
+Er fluebenet for samlet minimum i afsnit 3 sat, øges opbygningen med geonet
+til 250 mm stabilgrus, og reduktionen er 100 mm. Er fluebenet fjernet, er
+opbygningen med geonet 200 mm, altså tyndere end stabilgrusminimum:
+
+| Valg | Opbygning med 1 lag geonet | Reduktion |
+| --- | --- | ---: |
+| Hele tykkelsen vises som stabilgrus | 200 mm stabilgrus | 150 mm |
+| Tykkelsen øges til stabilgrusminimum | 250 mm stabilgrus | 100 mm |
+| Ét samlet ubundet lag | 200 mm ubunden opbygning | 150 mm |
+
+Den ustabiliserede opbygning er i alle tilfælde 350 mm, fordelt med 250 mm
+stabilgrus og 100 mm bundsikring.
+"""
+
+
+def _render_indstilling_standard() -> None:
+    """Afsnit 6 på siden Indstillinger: Standard-beregningens minimum og
+    opdeling i stabilgrus og bundsikring, jf. app._standard_opdeling()."""
+    ind = st.session_state.get("indstillinger") or _standard_indstillinger()
+    lf = lagfordeling_mod.normaliser(ind.get("lagfordeling"))
+    with ui.trin_kort(6, "Standard-beregning") as t6:
+        st.markdown(
+            "I Standard regnes med designdiagrammernes referencemateriale, "
+            "φ = 37°, og den samlede tykkelse fastlægges af "
+            "designdiagrammet. Indstillingerne herunder fastlægger, om "
+            "tykkelsen sættes mindst til minimumstykkelsen i afsnit 3, og om "
+            "opbygningen vises som stabilgrus og bundsikring."
+        )
+        _gaelder(standard=True, ignorer_klassisk=True)
+        klassisk = st.checkbox(
+            "Klassisk standardberegning",
+            value=lf["standard_klassisk"],
+            key="ind_std_klassisk",
+            help=(
+                "Standard regnes direkte efter designdiagrammerne. Den "
+                "samlede tykkelse oprundes alene til indbygningstrin. Der "
+                "anvendes ingen minimumstykkelse, heller ikke når fluebenet "
+                "i afsnit 3 er sat; opbygningen vises som ét samlet ubundet "
+                "lag, og det øverste geonet ved 2 lag placeres ved nettets "
+                "mindste dæklag. Brugerdefineret berøres ikke.\n\n"
+                "Slået fra som standard."
+            ),
+        )
+        if klassisk:
+            ui.besked(
+                "<b>Klassisk standardberegning er valgt.</b> "
+                "Minimumstykkelsen i afsnit 3, reglerne for underliggende lag "
+                "i afsnit 4 og placeringen af geonet i afsnit 7 gælder ikke "
+                "Standard. De gælder fortsat Brugerdefineret.",
+                "info",
+            )
+        opdeling = st.checkbox(
+            "Opdel opbygningen i stabilgrus og bundsikring",
+            value=lf["standard_opdeling"],
+            key="ind_std_opdeling",
+            disabled=klassisk,
+            help=(
+                "Stabilgruset sættes til minimumstykkelsen for klassen i "
+                "afsnit 3, oprundet til indbygningstrin, og bundsikringen "
+                "udgør resten. Tynde bundsikringslag behandles efter afsnit "
+                "4. Opdelingen viser en typisk opbygning; beregningen er "
+                "fortsat ført med referencematerialet φ = 37°. En "
+                "materialespecifik beregning foretages i Brugerdefineret.\n\n"
+                "Slået til som standard."
+            ),
+        )
+        samlet = lf["samlet_minimum"]
+        under_aktiv = (not klassisk) and bool(opdeling) and not samlet
+        under = st.radio(
+            "Opbygning tyndere end stabilgrusminimum",
+            lagfordeling_mod.UNDER_MIN_VALG,
+            index=lagfordeling_mod.UNDER_MIN_VALG.index(lf["standard_under_minimum"]),
+            format_func=lambda v: _UNDER_MIN_TEKST[v],
+            key="ind_std_under_minimum",
+            disabled=not under_aktiv,
+            help=(
+                "Hele tykkelsen vises som stabilgrus (standard): opbygningen "
+                "angives med den beregnede tykkelse uden bundsikring.\n\n"
+                "Tykkelsen øges til stabilgrusminimum: opbygningen øges, "
+                "som om fluebenet for samlet minimum var sat.\n\n"
+                "Ét samlet ubundet lag: opbygningen angives med den "
+                "beregnede tykkelse uden opdeling."
+            ),
+        )
+        st.caption(
+            "Valget gælder kun, når fluebenet »Den samlede "
+            "bærelagstykkelse sættes mindst til minimumstykkelsen« i afsnit "
+            "3 er fjernet. Situationen er et ydertilfælde ved stiv "
+            "underbund og forekommer sjældent, idet geonet typisk anvendes "
+            "ved lave E-moduler i planum."
+        )
+        with st.expander("Eksempel"):
+            st.markdown(_UNDER_MIN_EKSEMPEL)
+
+        ny_lf = lagfordeling_mod.normaliser({
+            **lf,
+            "standard_klassisk": bool(klassisk),
+            "standard_opdeling": bool(opdeling),
+            "standard_under_minimum": under,
+        })
+        if ny_lf != lf:
+            ind = {**ind, "lagfordeling": ny_lf}
+            st.session_state["indstillinger"] = ind
+            gem_indstillinger(ind)
+            lf = ny_lf
+
+        if lf["standard_klassisk"]:
+            t6.opsummering = "klassisk standardberegning"
+        elif lf["standard_opdeling"]:
+            t6.opsummering = "opdeling i stabilgrus og bundsikring"
+        else:
+            t6.opsummering = "ét samlet ubundet lag"
+
+
+_NETPLACERING_TEKST: dict[str, str] = {
+    PLACERING_LAGGRAENSE: "Ved laggrænsen mellem det øverste og det næste lag",
+    PLACERING_DAEKLAG: "Ved nettets mindste dæklag",
+    PLACERING_LAGGRAENSE_MIN: "Ved laggrænsen, dog mindst nettets mindste dæklag",
+}
+
+_NETPLACERING_KORT: dict[str, str] = {
+    PLACERING_LAGGRAENSE: "ved laggrænsen",
+    PLACERING_DAEKLAG: "ved mindste dæklag",
+    PLACERING_LAGGRAENSE_MIN: "ved laggrænsen, dog mindst dæklaget",
+}
+
+
+def _render_indstilling_netplacering() -> None:
+    """Afsnit 7 på siden Indstillinger: placeringen af det øverste geonet ved
+    2 lag, når opbygningen består af flere lag, jf. core.placement."""
+    ind = st.session_state.get("indstillinger") or _standard_indstillinger()
+    lf = lagfordeling_mod.normaliser(ind.get("lagfordeling"))
+    with ui.trin_kort(7, "Geonet ved 2 lag") as t7:
+        st.markdown(
+            "Ved 2 lag geonet ligger det nederste net i bunden af "
+            "opbygningen. Består opbygningen af flere lag, fastlægges her, "
+            "hvor det øverste net placeres. Uden lag placeres det øverste net "
+            "ved nettets mindste dæklag."
+        )
+        placering = st.radio(
+            "Placering af det øverste geonet",
+            PLACERING_VALG,
+            index=PLACERING_VALG.index(lf["netplacering"]),
+            format_func=lambda v: _NETPLACERING_TEKST[v],
+            key="ind_lf_netplacering",
+            help=(
+                "Ved laggrænsen (standard)\\*: nettet ligger ved "
+                "materialeskiftet. Er det øverste lag tyndere end nettets "
+                "mindste dæklag, gives en placeringsadvarsel.\n\n"
+                "Ved mindste dæklag: nettet ligger ved nettets mindste "
+                "dæklag, uafhængigt af lagene.\n\n"
+                "Ved laggrænsen, dog mindst dæklaget: nettet ligger ved "
+                "materialeskiftet, eller dybere, når nettets dæklag kræver "
+                "det.\n\n"
+                + _TIDLIGERE_NOTE
+            ),
+        )
+        _gaelder(
+            standard=True, brugerdefineret=True,
+            standard_forudsaetning="når opbygningen opdeles",
+        )
+        st.caption(
+            "Eksempel: 600 mm = 250 mm stabilgrus + 350 mm bundsikring, net "
+            "med mindste dæklag 400 mm. Ved laggrænsen ligger nettet 250 mm "
+            "under oversiden, og der gives advarsel om dæklaget. Ved mindste "
+            "dæklag og ved laggrænsen, dog mindst dæklaget, ligger det "
+            "400 mm under oversiden."
+        )
+        ny_lf = lagfordeling_mod.normaliser({**lf, "netplacering": placering})
+        if ny_lf != lf:
+            ind = {**ind, "lagfordeling": ny_lf}
+            st.session_state["indstillinger"] = ind
+            gem_indstillinger(ind)
+            lf = ny_lf
+        t7.opsummering = _NETPLACERING_KORT[lf["netplacering"]]
+
+
 # ===========================================================================
 # Top-level layout — sidebar + routing
 # ===========================================================================
@@ -8385,3 +10228,6 @@ elif aktiv_side == "hjaelp":
 
 elif aktiv_side == "rapport":
     render_rapport()
+
+elif aktiv_side == "indstillinger":
+    render_indstillinger()

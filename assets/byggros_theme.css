@@ -813,6 +813,9 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 }
 .dd-tabel-raekke:hover{ background:var(--bg-canvas); }
 .dd-tabel-eu{ font-weight:600; color:var(--bg-ink); }
+/* En værdi, der ligger i et aflæst punkt på kurven og dermed ikke er
+   interpoleret, jf. DESIGNDIAGRAM_AFLAESTE_CELLER. */
+.dd-tabel-aflaest{ font-weight:700; color:var(--bg-ink); }
 /* En værdi, der er rettet i forhold til designmanualen, jf.
    _diagram_afvigelser(). Cellen får både farve og udfyldning, så
    afvigelsen kan ses uden at tallene skal holdes op mod manualen. En

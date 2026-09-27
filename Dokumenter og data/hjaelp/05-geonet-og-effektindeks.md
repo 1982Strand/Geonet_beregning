@@ -47,16 +47,16 @@ NX850 er i tabellen vist med den konservative ende af sit effektindeksinterval.
 :::figur Bærelagstykkelse i mm ved Eᵤ = 8 MPa, T4, 1 lag geonet.
 | Produkt | Indeks | 1 lag |
 | --- | --- | --- |
-| TX160 (ref.) | 100 | 738 |
-| TX150 | 90 | 812 |
-| NX850 | 115 | 627 |
+| TX160 (ref.) | 100 | 728 |
+| TX150 | 90 | 800 |
+| NX850 | 115 | 619 |
 :::
 
 ## 3 To lag geonet, placering og afstand
 
 Ved to lag anvendes som standard samme produkt i begge lag. Reduktionen for
 2 lag er ikke den dobbelte af 1 lag — den aflæses som sin egen kurve i
-designdiagrammet, idet samspillet mellem to armeringslag ikke er lineært.
+designdiagrammet, idet samspillet mellem to lag geonet ikke er lineært.
 
 Placeringen kontrolleres i forhold til den beregnede stabiliserede
 bærelagstykkelse. Det øverste net skal have det krævede minimumsdæklag over

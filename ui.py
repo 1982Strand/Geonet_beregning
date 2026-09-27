@@ -315,8 +315,10 @@ def resultatkort(kort: list[dict], badge_tekst: str = "ANBEFALET") -> None:
     """Rækken af resultattal.
 
     Hvert kort: {"etiket", "vaerdi", "enhed", "note", "delta", "delta_note",
-                 "anbefalet": bool}
-    Første kort er referencetallet uden delta.
+                 "beregnet", "anbefalet": bool}
+    Første kort er referencetallet uden delta. "beregnet" er en valgfri
+    note, der sættes nedtonet efter enheden — den beregnede tykkelse bag
+    en oprundet værdi.
 
     badge_tekst er mærket på det fremhævede kort. I standardtilstanden er der
     ingen indtastet opbygning at holde mod, og det tyndeste alternativ mærkes
@@ -353,6 +355,12 @@ def resultatkort(kort: list[dict], badge_tekst: str = "ANBEFALET") -> None:
                 f'<div style="font:400 11.5px/1.5 {SANS};color:{FARVE["ink_45"]};'
                 f'margin-top:9px">{escape(k["note"])}</div>'
             )
+        beregnet = ""
+        if k.get("beregnet"):
+            beregnet = (
+                f'<div style="font:400 11.5px/1 {SANS};color:{FARVE["ink_45"]};'
+                f'margin-left:4px;white-space:nowrap">({escape(k["beregnet"])})</div>'
+            )
         celler.append(
             f"""
             <div style="background:{flade};padding:18px 20px 17px;{kant}">
@@ -360,10 +368,10 @@ def resultatkort(kort: list[dict], badge_tekst: str = "ANBEFALET") -> None:
                 <div style="font:600 9.5px/1 {MONO};letter-spacing:.1em;color:{etiket_farve}">
                   {escape(k['etiket'].upper())}</div>{badge}
               </div>
-              <div style="display:flex;align-items:baseline;gap:6px">
+              <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
                 <div style="font:600 40px/1 {MONO};color:{tal_farve};
                             font-variant-numeric:tabular-nums;letter-spacing:-.02em">{escape(k['vaerdi'])}</div>
-                <div style="font:500 15px/1 {SANS};color:{FARVE['ink_70']}">{escape(k.get('enhed','mm'))}</div>
+                <div style="font:500 15px/1 {SANS};color:{FARVE['ink_70']}">{escape(k.get('enhed','mm'))}</div>{beregnet}
               </div>
               {delta}
             </div>
@@ -384,6 +392,10 @@ def snit(
     hoejde_px: int = 340,
     jord_px: int = 26,
     geonet_navn: str | None = None,
+    geonet_paaskrift: bool = False,
+    geonet_maerkat: str | None = None,
+    vis_maal_streg: bool = True,
+    vis_maal_tal: bool = True,
 ) -> None:
     """Viser opbygningssnittene.
 
@@ -391,7 +403,9 @@ def snit(
     eksporterer til PNG af. Skærm og rapport viser derfor samme figur.
 
     jord_px bevares i signaturen af hensyn til kaldere; jordbåndets højde
-    følger nu søjlernes skala.
+    følger nu søjlernes skala. geonet_paaskrift, geonet_maerkat,
+    vis_maal_streg og vis_maal_tal føres videre til byg_snit(), jf. dennes
+    docstring.
     """
     from core.diagram import byg_snit
 
@@ -400,6 +414,10 @@ def snit(
         reference_mm=reference_mm,
         geonet_navn=geonet_navn,
         hoejde_px=hoejde_px,
+        geonet_paaskrift=geonet_paaskrift,
+        geonet_maerkat=geonet_maerkat,
+        vis_maal_streg=vis_maal_streg,
+        vis_maal_tal=vis_maal_tal,
     )
     if fig is None:
         st.html(

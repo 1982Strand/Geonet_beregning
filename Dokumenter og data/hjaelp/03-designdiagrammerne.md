@@ -1,6 +1,6 @@
 ---
 titel: Designdiagrammerne
-resume: De tre kurver i hvert af de seks diagrammer, hvordan der interpoleres i de aflæste punkter, og hvad der sker uden for diagrammets område.
+resume: De tre kurver i hvert af de seks diagrammer, hvordan tabellerne er dannet af de aflæste punkter, og hvad der sker uden for diagrammets område.
 ---
 
 ## 1 De tre kurver
@@ -22,15 +22,38 @@ tre opbygninger er tilgængelige.
 | Eᵤ [MPa] | Ustabiliseret [mm] | 1 lag [mm] | 2 lag [mm] |
 | ---: | ---: | ---: | ---: |
 | 3 | 1.400 | 1.000 | 900 |
-| 4 | 1.245 | 935 | 800 |
-| 5 | 1.145 | 847 | 745 |
+| 4 | 1.267 | 900 | 800 |
+| 5 | 1.200 | 833 | 750 |
 :::
 
 ## 2 Aflæsning og interpolation
 
-Der slås ikke op i kurverne som grafiske objekter, men i de aflæste datapunkter,
-som ligger i tabellen ved hvert diagram. Interpolationen mellem datapunkterne
-er foretaget på forhånd, og beregningen anvender tabellen direkte som opslag.
+Der slås ikke op i kurverne som grafiske objekter, men i en tabel ved hvert
+diagram, som angiver lagtykkelsen for hele værdier af Eᵤ. Tabellen er dannet af
+de punkter, der er markeret på kurverne i designmanualens diagrammer, og
+beregningen anvender tabellen direkte som opslag.
+
+Punkterne er aflæst af designmanualens vektorgrafik. Hvert punkt ligger ved en
+bærelagstykkelse på et helt antal gange 10 cm, og Eᵤ er afrundet til nærmeste
+0,5 MPa. Mellem to nabopunkter på samme kurve bestemmes lagtykkelsen ved
+lineær interpolation. Kurverne er i manualen tegnet som rette linjestykker
+mellem punkterne, og interpolationen gengiver dermed den tegnede kurve.
+
+:::formel
+t  =  t_1  +  (Eᵤ − Eᵤ,1) / (Eᵤ,2 − Eᵤ,1) × (t_2 − t_1)
+--
+Eᵤ,1, Eᵤ,2   er Eᵤ i de to aflæste punkter, der omslutter Eᵤ [MPa]
+t_1, t_2     er lagtykkelserne i de to punkter [cm]
+:::
+
+Lagtykkelsen afrundes til 0,1 cm. Der ekstrapoleres ikke: ligger Eᵤ uden for
+kurvens første eller sidste punkt, har kurven ikke data i rækken, jf. afsnit 3.
+På siden Designdiagrammer står de værdier, der ligger i et aflæst punkt, med
+fed skrift.
+
+Der gøres opmærksom på, at manualens tegning er afrundet til et fast raster på
+0,2–0,3 MPa, og at kurverne er flade ved små værdier af Eᵤ. En usikkerhed på få
+tiendedele MPa svarer her til flere cm lagtykkelse.
 
 Ved dimensionering efter belastningsklasse svarer opslaget til en af
 diagrammernes egne Eₒ-kolonner — 30, 45, 60, 80, 120 eller 150 MPa — og

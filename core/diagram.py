@@ -37,6 +37,7 @@ def byg_designdiagram(
     t_1_lag_best_mm: float | None = None,
     t_2_lag_best_mm: float | None = None,
     skala: float = 1.0,
+    phi_kurver: dict | None = None,
 ):
     """Designdiagrammet som Plotly-figur.
 
@@ -55,11 +56,23 @@ def byg_designdiagram(
     Figuren bruges både af skærmen og af rapporten: app.py viser den med
     st.plotly_chart, og rapport.designdiagram_png() eksporterer den samme
     figur til PNG. De to visninger kan derfor ikke divergere.
+
+    phi_kurver er φᵥ for hver kurve som {"uarmeret", "1_lag", "2_lag"}, når
+    søjlerne er regnet med φᵥ for deres egne lag, jf.
+    core.calculator.beregn(). Kurven tegnes da med søjlens φᵥ, så punktet
+    ligger på kurven; φᵥ gælder ved det aktuelle Eᵤ. Mangler en kurve,
+    anvendes phi.
     """
 
     import plotly.graph_objects as go
 
-    phi_kor = K_PHI * (phi - PHI_BASIS)
+    phi_kurver = phi_kurver or {}
+
+    def _phi_kor(kurve: str) -> float:
+        v = phi_kurver.get(kurve)
+        return K_PHI * ((v if v is not None else phi) - PHI_BASIS)
+
+    phi_kor = _phi_kor("uarmeret")
     net_kor_kons = float(geonet.get("korrektion", 0.0)) if geonet else 0.0
     interval = geonet.get("korrektion_interval") if geonet else None
     net_kor_best = float(interval[0]) if interval else None
@@ -95,11 +108,12 @@ def byg_designdiagram(
         ))
 
     def _armeret(lag_mode: str, farve: str, navn: str) -> None:
-        xs_k, ys_k = _kurve(lag_mode, 1.0 + phi_kor + net_kor_kons)
+        phi_kor_lag = _phi_kor(lag_mode)
+        xs_k, ys_k = _kurve(lag_mode, 1.0 + phi_kor_lag + net_kor_kons)
         if not xs_k:
             return
         if net_kor_best is not None:
-            xs_b, ys_b = _kurve(lag_mode, 1.0 + phi_kor + net_kor_best)
+            xs_b, ys_b = _kurve(lag_mode, 1.0 + phi_kor_lag + net_kor_best)
             if xs_b and ys_b == ys_k:
                 # Båndet mellem den optimale og den konservative kurve.
                 fig.add_trace(go.Scatter(
@@ -211,8 +225,8 @@ def byg_designdiagram(
 # felterne i diagramdataens rækker.
 _RAA_KURVER = (
     ("t_uarmeret_cm", "Ustabiliseret", FARVE_UARM),
-    ("t_1_lag_cm", "1 lag armering", FARVE_1LAG),
-    ("t_2_lag_cm", "2 lag armering", FARVE_2LAG),
+    ("t_1_lag_cm", "1 lag geonet", FARVE_1LAG),
+    ("t_2_lag_cm", "2 lag geonet", FARVE_2LAG),
 )
 
 
@@ -334,12 +348,37 @@ _STATUS_BASIS_LINJER = 3
 _TOM_TEKST_PX = 110
 _TOM_TEKST_TEGN = 18
 
+# X-området i aksens enheder. Søjlen går fra −0,31 til 0,31 og geonetlinjen
+# fra −0,36 til 0,36. Til højre rækker fladen ud til målsætningen; til venstre
+# til påskriften ved geonetlinjerne, når den vises, jf. byg_snit().
+_X_MIN = -0.62
+_X_MAX = 0.92
+
+# Målsætningsstregen til højre for søjlen. Stregen står lige uden for
+# geonetlinjen, og tværstregerne i enderne er halvt så brede som afstanden
+# til søjlen.
+_MAAL_X = 0.42
+_MAAL_TVAER = 0.035
+
+# Påskriften ved geonetlinjerne står højrestillet ud for linjens venstre ende.
+# Den ombrydes til _PAASKRIFT_TEGN pr. linje, og fladen udvides til venstre
+# med _PAASKRIFT_TEGN_BREDDE pr. tegn i den længste linje, ved skriftstørrelse
+# 8,5 og en søjlebredde på omkring 120 billedpunkter.
+_PAASKRIFT_X = 0.40
+_PAASKRIFT_TEGN = 14
+_PAASKRIFT_TEGN_BREDDE = 0.032
+
 
 def byg_snit(
     kolonner: list[dict],
     reference_mm: float | None = None,
     geonet_navn: str | None = None,
     hoejde_px: int = 340,
+    *,
+    geonet_paaskrift: bool = False,
+    geonet_maerkat: str | None = None,
+    vis_maal_streg: bool = True,
+    vis_maal_tal: bool = True,
 ):
     """Opbygningssnittene som Plotly-figur.
 
@@ -359,6 +398,16 @@ def byg_snit(
     reference_mm tegnes som en fælles stiplet linje ved den indtastede
     tykkelse; None i standardtilstanden, hvor der ikke indtastes lag.
 
+    Den samlede tykkelse målsættes til højre for hver søjle: vis_maal_streg
+    tegner en målsætningsstreg fra underbundens overkant til opbygningens
+    top, og vis_maal_tal skriver målet ved siden af. Begge kan fravælges.
+
+    geonet_navn er nettets navn i signaturen. Med geonet_paaskrift sat
+    skrives navnet desuden ud for hver geonetlinje, lige til venstre for
+    søjlen; geonet_maerkat er den kortere form, der da anvendes, og udelades
+    den, anvendes geonet_navn. Figuren udvides til venstre, så navnet får
+    plads.
+
     Figuren bruges både af skærmen (ui.snit) og af rapporten
     (rapport.render_opbygning_png), så de to visninger ikke kan divergere.
     """
@@ -373,6 +422,26 @@ def byg_snit(
         return None
     maks = max(hoejder)
     jord = maks * _JORD_ANDEL
+
+    # Påskriften ved geonetlinjerne står til venstre for søjlen og ombrydes,
+    # så lange produktnavne ikke skubber søjlerne unødigt sammen. X-området
+    # udvides til venstre efter den længste linje; uden påskrift beholder
+    # figuren sin sædvanlige bredde.
+    paaskrift = (geonet_maerkat or geonet_navn) if geonet_paaskrift else None
+    har_geonet = any(k.get("geonet_mm") for k in kolonner)
+    x_min = _X_MIN
+    if paaskrift and har_geonet:
+        paaskrift = ombryd_tekst(paaskrift, _PAASKRIFT_TEGN)
+        laengste = max(len(l) for l in paaskrift.split("<br>"))
+        x_min = min(_X_MIN, -_PAASKRIFT_X - _PAASKRIFT_TEGN_BREDDE * laengste)
+    # Til højre rækker fladen ud til målsætningen; vises hverken streg eller
+    # tal, indskrænkes den til geonetlinjens ende.
+    if vis_maal_tal:
+        x_max = _X_MAX
+    elif vis_maal_streg:
+        x_max = _MAAL_X + _MAAL_TVAER + 0.08
+    else:
+        x_max = 0.46
 
     # Lagteksten sættes efter, hvor mange linjer der er plads til i laget.
     # Omregningen fra mm til billedpunkter følger y-området og plotfladens
@@ -473,21 +542,52 @@ def byg_snit(
                 )
                 bund += tykkelse
 
-            # Målsætningen står til højre for søjlen.
-            fig.add_annotation(
-                xref=f"x{i}" if i > 1 else "x", yref="y",
-                x=0.4, y=total / 2,
-                text=f"{total:,.0f} mm".replace(",", "."),
-                showarrow=False, xanchor="left",
-                font=dict(size=10.5, color=FARVE_INK),
-            )
+            # Målsætningen står til højre for søjlen: en målsætningsstreg fra
+            # underbundens overkant til opbygningens top med tværstreger i
+            # enderne, og målet ved siden af, så det fremgår, hvilken højde
+            # tallet angiver. Vises alene stregen, står den samme sted; vises
+            # alene tallet, står det, hvor stregen ellers ville stå.
+            xref = f"x{i}" if i > 1 else "x"
+            if vis_maal_streg:
+                fig.add_shape(
+                    type="line", xref=xref, yref="y",
+                    x0=_MAAL_X, x1=_MAAL_X, y0=0, y1=total,
+                    line=dict(color=FARVE_INK_45, width=1),
+                )
+                for y in (0, total):
+                    fig.add_shape(
+                        type="line", xref=xref, yref="y",
+                        x0=_MAAL_X - _MAAL_TVAER, x1=_MAAL_X + _MAAL_TVAER,
+                        y0=y, y1=y,
+                        line=dict(color=FARVE_INK_45, width=1),
+                    )
+            if vis_maal_tal:
+                fig.add_annotation(
+                    xref=xref, yref="y",
+                    x=(_MAAL_X + _MAAL_TVAER + 0.02) if vis_maal_streg
+                    else _MAAL_X - _MAAL_TVAER,
+                    y=total / 2,
+                    text=f"{total:,.0f} mm".replace(",", "."),
+                    showarrow=False, xanchor="left",
+                    font=dict(size=10.5, color=FARVE_INK),
+                )
 
             for kote in k.get("geonet_mm", []):
                 fig.add_shape(
-                    type="line", xref=f"x{i}" if i > 1 else "x", yref="y",
+                    type="line", xref=xref, yref="y",
                     x0=-0.36, x1=0.36, y0=kote, y1=kote,
                     line=dict(color=FARVE_KRITISK, width=2),
                 )
+                # Nettets navn står ud for linjen, lige til venstre for
+                # søjlen, højrestillet mod linjens ende.
+                if paaskrift:
+                    fig.add_annotation(
+                        xref=xref, yref="y",
+                        x=-_PAASKRIFT_X, y=kote,
+                        text=paaskrift, showarrow=False,
+                        xanchor="right", yanchor="middle", align="right",
+                        font=dict(size=8.5, color=FARVE_KRITISK),
+                    )
 
             best = k.get("best_case_mm")
             if best and best < total:
@@ -518,7 +618,7 @@ def byg_snit(
         if reference_mm:
             fig.add_shape(
                 type="line", xref=f"x{i}" if i > 1 else "x", yref="y",
-                x0=-0.62, x1=0.92, y0=reference_mm, y1=reference_mm,
+                x0=x_min, x1=x_max, y0=reference_mm, y1=reference_mm,
                 line=dict(color=FARVE_INK_25, width=1.5, dash="dash"),
             )
 
@@ -548,10 +648,11 @@ def byg_snit(
         showgrid=False, zeroline=False, showticklabels=False,
         showline=False,
     )
-    # X-området rækker ud over søjlen, så målsætningen til højre får plads.
+    # X-området rækker ud over søjlen, så målsætningen til højre og
+    # påskriften ved geonetlinjerne til venstre får plads, jf. x_min/x_max.
     fig.update_xaxes(
         showgrid=False, zeroline=False, showticklabels=False, showline=False,
-        range=[-0.62, 0.92],
+        range=[x_min, x_max],
     )
     # Søjletitlerne sættes af make_subplots midt over subplot-fladen. Fladen
     # rækker ud til højre for at give plads til målsætningen, og titlen ville
@@ -701,8 +802,13 @@ def _lagtekst(navn: str, tykkelse: float, px_pr_mm: float) -> str:
             break
         linjer = betegnelse.count("<br>") + 2  # betegnelse + tykkelse
         if lag_px >= linjer * _LINJE_PX + 4:
-            return f"{betegnelse}<br>{tykkelse:.0f}"
-    return f"{tykkelse:.0f}" if lag_px >= _LINJE_PX + 4 else ""
+            return f"{betegnelse}<br>{_mm_tekst(tykkelse)}"
+    return _mm_tekst(tykkelse) if lag_px >= _LINJE_PX + 4 else ""
+
+
+def _mm_tekst(tykkelse: float) -> str:
+    """Lagtykkelsen med enhed og dansk tusindtalsseparator: 1038 → '1.038 mm'."""
+    return f"{tykkelse:,.0f} mm".replace(",", ".")
 
 
 def lagtype_for_navn(navn: str, materialer: list[dict] | None) -> str:

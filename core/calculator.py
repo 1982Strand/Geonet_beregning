@@ -23,6 +23,35 @@ from .data import (
     PHI_BASIS,
 )
 from .placement import check_geonet_placement
+from .afrunding import (
+    anvend_paa_resultat, eksakt_navn, lagminimum_navn, minimum_navn,
+)
+from .afrunding import normaliser as normaliser_afrunding
+from .lagfordeling import (
+    PHI_LAVESTE, PHI_SOEJLE, fordel_soejle, vaegtet_phi,
+)
+
+# Felter med de beregnede værdier bag oprundingen samt minimumstykkelsen,
+# jf. core.afrunding.
+_EKSAKT_FELTER: tuple[str, ...] = (
+    eksakt_navn("t_armeret_mm"),
+    eksakt_navn("t_uarmeret_mm"),
+    eksakt_navn("t_uarmeret_phi_kor_mm"),
+    "reduktion_mm_eksakt",
+    "reduktion_pct_eksakt",
+    "afrunding_trin_mm",
+    "t_min_mm",
+    minimum_navn("t_armeret_mm"),
+    minimum_navn("t_uarmeret_mm"),
+    minimum_navn("t_uarmeret_phi_kor_mm"),
+    lagminimum_navn("t_armeret_mm"),
+    lagminimum_navn("t_uarmeret_phi_kor_mm"),
+    "t_armeret_lagtillaeg_lag",
+    "phi",
+    "phi_uarmeret",
+    "phi_indtastet",
+    "phi_regel",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +167,18 @@ def beregn(
     lag_mode: str,
     t_basis_table: dict | None = None,
     skala: float = 1.0,
+    afrunding: dict | None = None,
 ) -> dict:
     """
     Beregn bærelagstykkelse med og uden armering.
+
+    phi er den vægtede friktionsvinkel for den indtastede opbygning. Bærer
+    afrunding en lagopbygning med phi_regel »laveste« eller »soejle«, regnes
+    den ustabiliserede og den armerede opbygning hver med φᵥ for sine egne
+    lag, jf. core.lagfordeling — ved »laveste« dog højst phi. Da lagene
+    afhænger af tykkelsen, gentages opslaget, til φᵥ er stabil. Resultatet
+    bærer da φᵥ for hver opbygning i »phi« og »phi_uarmeret« samt den
+    indtastede φᵥ i »phi_indtastet«.
 
     Parametre
     ---------
@@ -158,12 +196,128 @@ def beregn(
                     tykkelse, mens reduktionen forbliver diagrammets egen.
                     Faktoren rammer begge tykkelser ens og lader derfor
                     reduktionsprocenten være uændret.
+    afrunding       Indstilling for oprunding til indbygningstrin, jf.
+                    core.afrunding. None: tykkelserne returneres i hele mm
+                    uden oprunding. Ellers oprundes t_armeret_mm,
+                    t_uarmeret_mm og t_uarmeret_phi_kor_mm til trinnet, de
+                    beregnede værdier bevares i *_eksakt_mm, og reduktionen
+                    opgøres efter indstillingen. Bærer indstillingen
+                    t_min_mm, sættes tykkelserne mindst til denne
+                    minimumstykkelse; bærer den lagopbygning, øges de
+                    desuden, så de underliggende lag kan indbygges, jf.
+                    core.lagfordeling.
 
     Returnerer
     ----------
     dict med alle mellemresultater og slutresultater.
     Ved fejl indeholder dict'en nøglen "fejl" med en tekstbesked.
     """
+    resultat = _beregn_opslag(
+        eu, eo, phi, net_korrektion, lag_mode,
+        t_basis_table=t_basis_table, skala=skala, afrunding=afrunding,
+    )
+    spec = (afrunding or {}).get("lagopbygning")
+    if (
+        resultat.get("fejl") is None
+        and isinstance(spec, dict)
+        and spec.get("phi_regel") in (PHI_LAVESTE, PHI_SOEJLE)
+    ):
+        resultat = _beregn_med_soejle_phi(
+            eu, eo, phi, net_korrektion, lag_mode,
+            t_basis_table=t_basis_table, skala=skala, afrunding=afrunding,
+            spec=spec, foerste=resultat,
+        )
+    return resultat
+
+
+# Øvre grænse for gentagelserne i _beregn_med_soejle_phi(). φᵥ er normalt
+# stabil efter to–tre gentagelser.
+_MAKS_GENTAGELSER = 12
+
+
+def _beregn_med_soejle_phi(
+    eu: float,
+    eo: float,
+    phi_ind: float,
+    net_korrektion: float,
+    lag_mode: str,
+    *,
+    t_basis_table: dict | None,
+    skala: float,
+    afrunding: dict,
+    spec: dict,
+    foerste: dict,
+) -> dict:
+    """Regn hver opbygning med φᵥ for sine egne lag, jf. beregn().
+
+    Lagene i hver søjle dannes af lagfordeling.fordel_soejle() af den
+    angivne (oprundede) tykkelse, så φᵥ svarer til de viste lag. Opslaget
+    gentages, til φᵥ for begge opbygninger er stabil. Skifter φᵥ mellem to
+    tilstande uden at blive stabil, anvendes den laveste φᵥ, der er mødt for
+    hver opbygning, hvilket giver den tykkeste opbygning.
+    """
+    regel = spec.get("phi_regel")
+    trin = normaliser_afrunding(afrunding)["trin_mm"]
+
+    def _ny_phi(fordelt: list[dict]) -> float:
+        v = vaegtet_phi(fordelt)
+        if v is None:
+            return phi_ind
+        return min(phi_ind, v) if regel == PHI_LAVESTE else v
+
+    phi_u = phi_a = phi_ind
+    resultat = foerste
+    mødt: list[tuple[float, float]] = []
+    stabil = False
+    for _ in range(_MAKS_GENTAGELSER):
+        t_u = resultat.get("t_uarmeret_phi_kor_mm")
+        t_a = resultat.get("t_armeret_mm")
+        ny_u = _ny_phi(fordel_soejle(spec, t_u, trin)) if t_u else phi_ind
+        ny_a = _ny_phi(fordel_soejle(spec, t_a, trin, t_uarm_mm=t_u))
+        if abs(ny_u - phi_u) < 1e-9 and abs(ny_a - phi_a) < 1e-9:
+            stabil = True
+            break
+        mødt.append((phi_u, phi_a))
+        phi_u, phi_a = ny_u, ny_a
+        resultat = _beregn_opslag(
+            eu, eo, phi_a, net_korrektion, lag_mode,
+            t_basis_table=t_basis_table, skala=skala, afrunding=afrunding,
+            phi_uarmeret=phi_u,
+        )
+        if resultat.get("fejl") is not None:
+            return resultat
+    if not stabil:
+        mødt.append((phi_u, phi_a))
+        phi_u = min(u for u, _ in mødt)
+        phi_a = min(a for _, a in mødt)
+        resultat = _beregn_opslag(
+            eu, eo, phi_a, net_korrektion, lag_mode,
+            t_basis_table=t_basis_table, skala=skala, afrunding=afrunding,
+            phi_uarmeret=phi_u,
+        )
+    resultat["phi_indtastet"] = phi_ind
+    resultat["phi_regel"] = regel
+    return resultat
+
+
+def _beregn_opslag(
+    eu: float,
+    eo: float,
+    phi: float,
+    net_korrektion: float,
+    lag_mode: str,
+    t_basis_table: dict | None = None,
+    skala: float = 1.0,
+    afrunding: dict | None = None,
+    phi_uarmeret: float | None = None,
+) -> dict:
+    """Ét opslag i designdiagrammet, jf. beregn().
+
+    phi anvendes på den armerede opbygning og phi_uarmeret på den
+    ustabiliserede; uden phi_uarmeret anvendes phi på begge.
+    """
+    if phi_uarmeret is None:
+        phi_uarmeret = phi
     # -- Validér Eo ligger i tabellens interval --
     # Belastningsklasse-tilstand sender altid en præcis kolonne (30–150).
     # Trafikklasse-tilstand sender en ækvivalent Eo, der kan ligge mellem
@@ -180,6 +334,7 @@ def beregn(
 
     # -- Trin 3: Fastlæg φᵥ-korrektion --
     phi_korrektion = K_PHI * (phi - PHI_BASIS)
+    phi_korrektion_uarm = K_PHI * (phi_uarmeret - PHI_BASIS)
 
     # -- Trin 4: Opslag i designdiagram --
     eu_raekker = _aktive_eu_raekker(t_basis_table)
@@ -244,7 +399,7 @@ def beregn(
     # afspejler så net-effekten alene (diagram-forskel + net_korrektion).
     t_uarmeret_mm = t_basis_uarm_mm
     t_uarmeret_phi_kor_mm = (
-        t_basis_uarm_mm * (1.0 + phi_korrektion)
+        t_basis_uarm_mm * (1.0 + phi_korrektion_uarm)
         if t_basis_uarm_mm is not None
         else None
     )
@@ -259,11 +414,12 @@ def beregn(
         else None
     )
 
-    return {
+    resultat = {
         # Inputs (til forklaringsvisning)
         "eu": eu,
         "eo": eo,
         "phi": phi,
+        "phi_uarmeret": phi_uarmeret,
         "lag_mode": lag_mode,
         "net_korrektion": net_korrektion,
         # Mellemresultater — til "Sådan beregnes det"-visning
@@ -278,6 +434,7 @@ def beregn(
         "t_basis_uarm_cm": round(t_basis_uarm_cm, 1) if t_basis_uarm_cm is not None else None,
         "t_basis_uarm_mm": round(t_basis_uarm_mm, 0) if t_basis_uarm_mm is not None else None,
         "phi_korrektion": round(phi_korrektion, 4),
+        "phi_korrektion_uarmeret": round(phi_korrektion_uarm, 4),
         "samlet_faktor": round(samlet_faktor, 4),
         "skala": skala,
         # Slutresultater
@@ -299,6 +456,12 @@ def beregn(
         # Ingen fejl
         "fejl": None,
     }
+    # Oprunding til indbygningstrin sker her, så alle kaldere — resultatkort,
+    # opbygning, produkttabel og rapport — hviler på samme tykkelser. De
+    # beregnede værdier bevares i *_eksakt_mm, jf. core.afrunding.
+    if afrunding is not None:
+        resultat = anvend_paa_resultat(resultat, afrunding)
+    return resultat
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +476,7 @@ def beregn_alle_produkter(
     t_basis_table: dict | None = None,
     klasse_for_anbefaling: int | None = None,
     skala: float = 1.0,
+    afrunding: dict | None = None,
 ) -> list[dict]:
     """
     Beregn T_armeret for alle geonet-produkter med en given friktionsvinkel.
@@ -326,7 +490,9 @@ def beregn_alle_produkter(
     rammer en klasse — her sendes den nærmeste belastningsklasse ind. None =
     udled klassen af Eo som hidtil (belastningsklasse-tilstand, uændret).
 
-    skala føres uændret videre til beregn() — se dennes docstring.
+    skala og afrunding føres uændret videre til beregn() — se dennes
+    docstring. Med afrunding sat bærer rækkerne desuden de beregnede
+    tykkelser i t_armeret_eksakt_mm m.fl.
 
     Returnerer liste af dicts med:
         navn, serie, korrektion, t_armeret_mm, reduktion_mm, reduktion_pct,
@@ -355,6 +521,7 @@ def beregn_alle_produkter(
             lag_mode=lag_mode,
             t_basis_table=t_basis_table,
             skala=skala,
+            afrunding=afrunding,
         )
 
         klasse_ok = (
@@ -378,6 +545,10 @@ def beregn_alle_produkter(
             "max_korn": geonet["max_korn"],
             "fejl": resultat.get("fejl"),
         }
+        # De beregnede værdier bag oprundingen følger med, når de findes.
+        for felt in _EKSAKT_FELTER:
+            if felt in resultat:
+                række[felt] = resultat[felt]
         if resultat.get("fejl") is None and resultat.get("t_armeret_mm") is not None:
             række.update(check_geonet_placement(
                 lag_mode=lag_mode,
@@ -398,12 +569,15 @@ def beregn_alle_produkter(
                 lag_mode=lag_mode,
                 t_basis_table=t_basis_table,
                 skala=skala,
+                afrunding=afrunding,
             )
             if res_best.get("fejl") is None:
                 række["korrektion_min"] = kor_best
                 række["korrektion_max"] = kor_kons
                 række["t_armeret_mm_min"] = res_best.get("t_armeret_mm")
                 række["t_armeret_mm_max"] = resultat.get("t_armeret_mm")
+                række["t_armeret_eksakt_mm_min"] = res_best.get("t_armeret_eksakt_mm")
+                række["phi_min"] = res_best.get("phi")
                 række["reduktion_mm_min"] = resultat.get("reduktion_mm")
                 række["reduktion_mm_max"] = res_best.get("reduktion_mm")
                 række["reduktion_pct_min"] = resultat.get("reduktion_pct")
@@ -423,6 +597,38 @@ def beregn_alle_produkter(
     ))
 
     return resultater
+
+
+def _gruppe_reduktion_pct(produkter: list[dict], t_rep: float) -> float | None:
+    """Gruppens reduktion i procent.
+
+    Bærer produkterne en reduktion_pct fra beregn(), anvendes gennemsnittet
+    af dem, så oprundingsindstillingen — reduktion af oprundede eller af
+    beregnede tykkelser — følger med i grupperingen. Ellers opgøres
+    reduktionen af den repræsentative tykkelse mod den φᵥ-korrigerede
+    ustabiliserede reference som hidtil.
+    """
+    pcts = [p.get("reduktion_pct") for p in produkter]
+    if pcts and all(v is not None for v in pcts):
+        return sum(pcts) / len(pcts)
+    t_uarm = (
+        produkter[0].get("t_uarmeret_phi_kor_mm")
+        or produkter[0].get("t_uarmeret_mm")
+    )
+    if t_uarm is None or t_uarm <= 0:
+        return None
+    return (t_uarm - t_rep) / t_uarm
+
+
+def _gruppe_eksakt(produkter: list[dict], felt: str, ellers):
+    """Gennemsnit af produkternes beregnede værdi i felt, eller ellers."""
+    vaerdier = [p.get(felt) for p in produkter]
+    if vaerdier and all(v is not None for v in vaerdier):
+        gns = sum(vaerdier) / len(vaerdier)
+        return round(gns, 0) if felt.endswith("_mm") else round(gns, 4)
+    if ellers is None:
+        return None
+    return round(ellers, 0) if felt.endswith("_mm") else round(ellers, 4)
 
 
 def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[dict]:
@@ -456,20 +662,12 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
             t = produkt["t_armeret_mm"]
             # Reduktion sammenlignes mod φᵥ-korrigeret reference, så net-effekten
             # alene afspejles i procentdelen (se beregn() for begrundelse).
-            t_uarm = (
-                produkt.get("t_uarmeret_phi_kor_mm")
-                or produkt.get("t_uarmeret_mm")
-            )
-            red_pct = (
-                (t_uarm - t) / t_uarm
-                if t_uarm is not None and t_uarm > 0
-                else None
-            )
+            red_pct = _gruppe_reduktion_pct([produkt], t)
             grupper.append({
                 "t_armeret_mm": round(t, 0),
-                "t_armeret_eksakt_mm": round(t, 0),
+                "t_armeret_eksakt_mm": _gruppe_eksakt([produkt], "t_armeret_eksakt_mm", round(t, 0)),
                 "reduktion_pct": round(red_pct, 4) if red_pct is not None else None,
-                "reduktion_pct_eksakt": round(red_pct, 4) if red_pct is not None else None,
+                "reduktion_pct_eksakt": _gruppe_eksakt([produkt], "reduktion_pct_eksakt", red_pct),
                 "t_basis_arm_mm": produkt.get("t_basis_arm_mm"),
                 "produkter": [produkt],
                 "placering_ok": produkt.get("placering_ok", True),
@@ -489,19 +687,13 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
             and abs(p["t_armeret_mm"] - t) <= tolerance_mm
         ]
 
-        # Gennemsnitlig tykkelse for gruppen — eksakt beregnede værdi uden afrunding.
+        # Gennemsnitlig tykkelse for gruppen. Er produkterne oprundet til
+        # indbygningstrin, er tykkelserne i gruppen ens, og gennemsnittet
+        # er trinnet selv.
         t_repræsentativ = sum(p["t_armeret_mm"] for p in gruppe_produkter) / len(gruppe_produkter)
 
         # Reduktion mod φᵥ-korrigeret reference (se beregn()).
-        t_uarm = (
-            produkt.get("t_uarmeret_phi_kor_mm")
-            or produkt.get("t_uarmeret_mm")
-        )
-        red_pct = (
-            (t_uarm - t_repræsentativ) / t_uarm
-            if t_uarm is not None and t_uarm > 0
-            else None
-        )
+        red_pct = _gruppe_reduktion_pct(gruppe_produkter, t_repræsentativ)
 
         # t_basis_arm_mm er identisk for alle produkter i gruppen
         # (afhænger kun af eu/eo/lag_mode, ikke af produktets korrektion)
@@ -509,9 +701,13 @@ def grupper_produkter(produkter: list[dict], tolerance_mm: float = 5.0) -> list[
 
         grupper.append({
             "t_armeret_mm": round(t_repræsentativ, 0),
-            "t_armeret_eksakt_mm": round(t_repræsentativ, 0),
+            "t_armeret_eksakt_mm": _gruppe_eksakt(
+                gruppe_produkter, "t_armeret_eksakt_mm", round(t_repræsentativ, 0)
+            ),
             "reduktion_pct": round(red_pct, 4) if red_pct is not None else None,
-            "reduktion_pct_eksakt": round(red_pct, 4) if red_pct is not None else None,
+            "reduktion_pct_eksakt": _gruppe_eksakt(
+                gruppe_produkter, "reduktion_pct_eksakt", red_pct
+            ),
             "t_basis_arm_mm": t_basis_arm,
             "produkter": gruppe_produkter,
             "placering_ok": all(p.get("placering_ok", True) for p in gruppe_produkter),

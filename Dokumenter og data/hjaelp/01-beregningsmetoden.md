@@ -156,10 +156,10 @@ udvidelse er beskrevet nærmere i kapitel 2, afsnit 3.
 :::figur Eₒ,ækv for T4 ved fire underbunds-E-værdier. Samme trafikklasse kan derfor ligge mellem forskellige diagramkurver.
 | Eᵤ [MPa] | Eₒ,ækv [MPa] | Nærmeste Eₒ-kurver [MPa] |
 | ---: | ---: | --- |
-| 5 | 90 | 80 og 120 |
+| 5 | 77 | 60 og 80 |
 | 10 | 108 | 80 og 120 |
 | 15 | 135 | 120 og 150 |
-| 20 | 148 | 120 og 150 |
+| 20 | 147 | 120 og 150 |
 :::
 
 Forholdet skyldes, at de to klassesystemer beskriver forskellige størrelser:
@@ -193,9 +193,9 @@ lagtykkelsen og reduktionen ikke bestemmes for den pågældende kombination.
 Reduktionsprocenten bestemmes ikke ved direkte interpolation af kurvernes
 reduktionsprocenter. Den beregnes efterfølgende ud fra den ustabiliserede og den
 tilsvarende armerede, interpolerede lagtykkelse. For T4 ved Eᵤ = 8 MPa, hvor
-f = 0,382, fås en reduktion på 28,9 % ved 1 lag geonet og 38,5 % ved 2 lag.
+f = 0,382, fås en reduktion på 29,9 % ved 1 lag geonet og 38,5 % ved 2 lag.
 Reduktionen ved 1 lag ligger dermed mellem reduktionerne på de to nærmeste
-kurver: 30,0 % ved Eₒ = 80 MPa og 27,3 % ved Eₒ = 120 MPa.
+kurver: 31,7 % ved Eₒ = 80 MPa og 27,3 % ved Eₒ = 120 MPa.
 
 Figur 1.4 viser de tre lagtykkelser ved Eₒ,ækv = 95,3 MPa. Den samme
 interpolationsfaktor, f = 0,382, anvendes på alle tre kurver og på hver kurves
@@ -205,7 +205,7 @@ egne lagtykkelser ved Eₒ = 80 MPa og Eₒ = 120 MPa.
 | Ved Eᵤ = 8 MPa | 80 MPa | 120 MPa | Eₒ,ækv |
 | --- | ---: | ---: | ---: |
 | Ustabiliseret | 1.000 | 1.100 | 1.038 |
-| 1 lag geonet | 700 | 800 | 738 |
+| 1 lag geonet | 683 | 800 | 728 |
 | 2 lag geonet | 600 | 700 | 638 |
 :::
 
@@ -242,7 +242,9 @@ k_net   er korrektionen for det valgte geonet, jf. kapitel 5
 T_basis er den aflæste eller interpolerede lagtykkelse fra afsnit 5 [mm]
 :::
 
-Korrektionen for friktionsvinklen anvendes på samtlige tre kurver. Korrektionen
+Korrektionen for friktionsvinklen anvendes på samtlige tre kurver. Under
+Indstillinger kan det vælges, at hver beregnet opbygning i stedet korrigeres
+med φᵥ for sine egne materialelag, jf. kapitel 6, afsnit 4. Korrektionen
 for geonet anvendes alene på de armerede kurver, idet den ustabiliserede
 opbygning ikke indeholder geonet; her er k_net = 0. Reduktionen opgøres derfor
 i forhold til den korrigerede ustabiliserede lagtykkelse, således at begge
@@ -250,3 +252,48 @@ lagtykkelser er korrigeret på samme grundlag.
 
 Beregningen omfatter alene bæreevnen. Krav til frostsikring og koblingshøjde,
 jf. Vejdirektoratets dimensioneringsvejledninger, er ikke omfattet.
+
+## 7 Oprunding til indbygningstrin
+
+De lagtykkelser, der bestemmes efter afsnit 6, er mindstetykkelser. Ved
+indbygning anvendes lagtykkelser i hele trin, og den dimensionerede
+lagtykkelse oprundes derfor til nærmeste hele trin. Der rundes ikke ned, idet
+en nedrundet lagtykkelse ville ligge under den beregnede mindstetykkelse.
+
+:::formel
+T_ind = ⌈T / t⌉ × t
+--
+T_ind er den lagtykkelse, der angives i resultatet [mm]
+T     er den beregnede lagtykkelse efter afsnit 6 [mm]
+t     er oprundingstrinnet: 1, 10, 50 eller 100 mm
+:::
+
+Trinnet fastlægges under Indstillinger; standardværdien er 50 mm. Ved 1 mm
+angives lagtykkelsen som beregnet. Er det tilvalgt under Indstillinger,
+sættes den oprundede lagtykkelse desuden mindst til minimumstykkelsen for
+klassen, jf. kapitel 6, afsnit 2, og den kan øges, så de underliggende lag
+kan indbygges, jf. kapitel 6, afsnit 3. Ved klassisk standardberegning
+anvendes alene oprundingen, jf. kapitel 6, afsnit 5. Oprundingen gælder den ustabiliserede og
+de stabiliserede lagtykkelser og anvendes ens i resultatkortet,
+opbygningssøjlerne, produkttabellen og rapporten. Produkter, der efter
+oprundingen giver samme lagtykkelse, samles i produkttabellen i én gruppe.
+
+Reduktionen i mm og procent opgøres af de oprundede lagtykkelser, så den
+stemmer med de viste tal. Under Indstillinger kan reduktionen i stedet
+opgøres af de beregnede lagtykkelser; den svarer da til designdiagrammets
+aflæsning, men afviger fra forskellen mellem de viste tal.
+
+Mellemregningerne føres med de beregnede lagtykkelser, og oprundingen står som
+sidste led, så regnestykket kan efterregnes. Markeringerne i designdiagrammet
+sættes ved de beregnede lagtykkelser, idet de angiver aflæsningen på kurverne.
+Den beregnede lagtykkelse kan anføres i parentes efter den oprundede; valget
+træffes under Indstillinger.
+
+:::figur Oprunding ved forskellige trin. Beregnet lagtykkelse 532 mm.
+| Trin | Angivet lagtykkelse |
+| --- | --- |
+| 1 mm | 532 mm |
+| 10 mm | 540 mm |
+| 50 mm | 550 mm |
+| 100 mm | 600 mm |
+:::

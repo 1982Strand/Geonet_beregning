@@ -312,6 +312,10 @@ def render_opbygning_png(
     reference_mm: float | None = None,
     dpi: int = 200,
     figsize: tuple[float, float] = (10.0, 3.4),
+    geonet_paaskrift: bool = False,
+    geonet_maerkat: str | None = None,
+    vis_maal_streg: bool = True,
+    vis_maal_tal: bool = True,
 ) -> bytes:
     """Opbygningssnittene som PNG til rapporten.
 
@@ -321,6 +325,8 @@ def render_opbygning_png(
 
     reference_mm er den indtastede tykkelse, der tegnes som fælles stiplet
     linje. Udelades den, aflæses den af snittenes t_indtastet_mm.
+    geonet_paaskrift, geonet_maerkat, vis_maal_streg og vis_maal_tal føres
+    videre til byg_snit().
     """
     from .diagram import byg_snit, snit_til_kolonner
 
@@ -336,6 +342,10 @@ def render_opbygning_png(
         reference_mm=reference_mm,
         geonet_navn=geonet_label,
         hoejde_px=int(figsize[1] * 100),
+        geonet_paaskrift=geonet_paaskrift,
+        geonet_maerkat=geonet_maerkat,
+        vis_maal_streg=vis_maal_streg,
+        vis_maal_tal=vis_maal_tal,
     )
     if fig is None:
         return b""
@@ -375,6 +385,7 @@ def render_personligt_designdiagram_png(
     skala: float = 1.0,
     dpi: int = 300,
     figsize: tuple[float, float] = (9.0, 5.5),
+    phi_kurver: dict | None = None,
 ) -> bytes:
     """Designdiagrammet som PNG til rapporten.
 
@@ -402,6 +413,7 @@ def render_personligt_designdiagram_png(
         t_1_lag_best_mm=t_1_lag_best_mm,
         t_2_lag_best_mm=t_2_lag_best_mm,
         skala=skala,
+        phi_kurver=phi_kurver,
     )
 
     if grundlag_label:
@@ -505,42 +517,81 @@ def formatér_dimensioneringsgrundlag(
             ))
     else:
         rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
-    rows.append(("Materialeopbygning", _materiale_resume(materialer)))
+    if dim.get("tilstand") == "Standard":
+        # Standard har ingen indtastede materialelag og regnes med
+        # designdiagrammernes referencemateriale, jf. app._standard_til_rapport.
+        opdeling = dim.get("standard_opdeling") or {}
+        tekst = "Standard-beregning med designdiagrammernes referencemateriale."
+        if opdeling.get("spec") is not None:
+            tekst += " Opbygningen er vist som stabilgrus og bundsikring."
+        rows.append(("Materialeopbygning", tekst))
+    else:
+        rows.append(("Materialeopbygning", _materiale_resume(materialer)))
     rows.append(("Vægtet friktionsvinkel (φᵥ)", f"{dim.get('phi', PHI_BASIS):.1f}°"))
     return rows
 
 
-def formatér_dimensioneringsresultat(dim: dict) -> list[tuple[str, str]]:
-    """Nøgle/værdi-rækker til Dimensioneringsresultat-tabellen."""
+def formatér_dimensioneringsresultat(
+    dim: dict, valg: dict | None = None
+) -> list[tuple[str, str]]:
+    """Nøgle/værdi-rækker til Dimensioneringsresultat-tabellen.
+
+    Tykkelserne er de oprundede fra beregningen. Er indstillingen vis_eksakt
+    sat, anføres den beregnede tykkelse i parentes efter den oprundede.
+
+    valg er brugerens rapportvalg fra appen. Er den indtastede opbygning
+    fravalgt (vis_indtastet False), udelades den samlede tykkelse af den
+    valgte opbygning, idet opbygningen da heller ikke vises i figuren.
+    """
+    from .afrunding import eksakt_navn, er_oprundet, normaliser
+
+    valg = valg or {}
+
     res_1 = dim.get("res_1") or {}
     res_2 = dim.get("res_2") or {}
     geonet = dim.get("geonet") or {}
     materialer = dim.get("materialer") or []
+    vis_eksakt = normaliser(dim.get("afrunding"))["vis_eksakt"]
 
     def _mm(v):
         return f"{v:.0f} mm" if isinstance(v, (int, float)) else "—"
 
+    def _mm_res(res: dict, felt: str) -> str:
+        v = res.get(felt)
+        tekst = _mm(v)
+        if vis_eksakt and isinstance(v, (int, float)):
+            e = res.get(eksakt_navn(felt))
+            if er_oprundet(v, e):
+                tekst += f" ({_mm(e)})"
+        return tekst
+
     # Uarmeret reference vises som φᵥ-korrigeret værdi (konsistent med
     # resultat-bannerne og snittene i visualiseringen).
-    t_uarm_ref = (
-        res_1.get("t_uarmeret_phi_kor_mm")
-        or res_2.get("t_uarmeret_phi_kor_mm")
-        or res_1.get("t_uarmeret_mm")
-        or res_2.get("t_uarmeret_mm")
-    )
+    t_uarm_tekst = "—"
+    for res, felt in (
+        (res_1, "t_uarmeret_phi_kor_mm"), (res_2, "t_uarmeret_phi_kor_mm"),
+        (res_1, "t_uarmeret_mm"), (res_2, "t_uarmeret_mm"),
+    ):
+        if res.get(felt):
+            t_uarm_tekst = _mm_res(res, felt)
+            break
 
     # Samlet tykkelse af brugerens indtastede opbygning (sum af lagene).
     t_indtastet = sum(
         float(m.get("tykkelse_mm") or 0) for m in materialer
     ) or None
 
-    return [
+    rows = [
         ("Valgt geonet", geonet.get("navn", "—")),
-        ("Ustabiliseret referenceopbygning", _mm(t_uarm_ref)),
-        ("Samlet tykkelse af valgt opbygning", _mm(t_indtastet)),
-        ("Stabiliseret tykkelse — 1 lag", _mm(res_1.get("t_armeret_mm"))),
-        ("Stabiliseret tykkelse — 2 lag", _mm(res_2.get("t_armeret_mm"))),
+        ("Ustabiliseret referenceopbygning", t_uarm_tekst),
     ]
+    if valg.get("vis_indtastet", True):
+        rows.append(("Samlet tykkelse af valgt opbygning", _mm(t_indtastet)))
+    rows += [
+        ("Stabiliseret tykkelse — 1 lag", _mm_res(res_1, "t_armeret_mm")),
+        ("Stabiliseret tykkelse — 2 lag", _mm_res(res_2, "t_armeret_mm")),
+    ]
+    return rows
 
 
 # ---------------------------------------------------------------------------

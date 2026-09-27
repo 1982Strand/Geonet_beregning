@@ -15,9 +15,16 @@ EO_KOLONNER = [30, 45, 60, 80, 120, 150]
 
 # ---------------------------------------------------------------------------
 # 1. Diagramdata og opslagstabel
-#    Kilde: diagrambilleder/geonet_interpolerede_diagrammer.xlsx.
-#    Hver række er et færdigt opslagspunkt for Eu. Tykkelserne er i cm og
-#    indeholder både aflæste og allerede interpolerede værdier.
+#    Kilde: designdiagram 1–6 i designmanualerne for Tensar og GS-GRID
+#    (side 10), aflæst af manualernes vektorgrafik, jf.
+#    diagrambilleder/kontrol_aflaesning.md.
+#
+#    DESIGNDIAGRAM_AFLAESTE_PUNKTER er de markerede punkter på kurverne som
+#    (t [cm], Eu [MPa]). Tykkelserne ligger på hele 10 cm, og Eu er afrundet
+#    til nærmeste 0,5 MPa. Diagramtabellerne dannes heraf ved lineær
+#    interpolation til hele Eu, jf. _interpoler_kurve(). Kurverne er i
+#    manualen tegnet som rette linjestykker mellem punkterne, så
+#    interpolationen gengiver den tegnede kurve. Der ekstrapoleres ikke.
 #
 #    Diagramdataene er eneste grundlag; opslagstabellen T_BASIS_TABLE dannes
 #    af dem nedenfor, jf. _t_basis_table_from_designdiagrammer(). Redigeres
@@ -25,285 +32,111 @@ EO_KOLONNER = [30, 45, 60, 80, 120, 150]
 #    jf. generer_t_basis_table_fra_diagrammer() i app.py.
 # ---------------------------------------------------------------------------
 
-DESIGNDIAGRAM_RAW_TABLES = [{'diagram_nr': 1,
-  'eo': 30,
-  'klasse': 1,
-  'image_name': 'Diagram 1.png',
-  'rows': [{'eu': 1, 't_uarmeret_cm': None, 't_1_lag_cm': 87.3, 't_2_lag_cm': None},
-           {'eu': 2, 't_uarmeret_cm': None, 't_1_lag_cm': 80, 't_2_lag_cm': None},
-           {'eu': 3, 't_uarmeret_cm': 110, 't_1_lag_cm': 70, 't_2_lag_cm': None},
-           {'eu': 4, 't_uarmeret_cm': 95.9, 't_1_lag_cm': 64.7, 't_2_lag_cm': None},
-           {'eu': 5, 't_uarmeret_cm': 90, 't_1_lag_cm': 60, 't_2_lag_cm': None},
-           {'eu': 6, 't_uarmeret_cm': 80, 't_1_lag_cm': 53.1, 't_2_lag_cm': None},
-           {'eu': 7, 't_uarmeret_cm': 74.5, 't_1_lag_cm': 47.6, 't_2_lag_cm': None},
-           {'eu': 8, 't_uarmeret_cm': 70, 't_1_lag_cm': 43.7, 't_2_lag_cm': None},
-           {'eu': 9, 't_uarmeret_cm': 65, 't_1_lag_cm': 40, 't_2_lag_cm': None},
-           {'eu': 10, 't_uarmeret_cm': 60, 't_1_lag_cm': 35.8, 't_2_lag_cm': None},
-           {'eu': 11, 't_uarmeret_cm': 54.9, 't_1_lag_cm': 31.8, 't_2_lag_cm': None},
-           {'eu': 12, 't_uarmeret_cm': 50, 't_1_lag_cm': 28.3, 't_2_lag_cm': None},
-           {'eu': 13, 't_uarmeret_cm': 45.7, 't_1_lag_cm': 25.2, 't_2_lag_cm': None},
-           {'eu': 14, 't_uarmeret_cm': 41.8, 't_1_lag_cm': 22.4, 't_2_lag_cm': None},
-           {'eu': 15, 't_uarmeret_cm': 38.4, 't_1_lag_cm': 20, 't_2_lag_cm': None},
-           {'eu': 16, 't_uarmeret_cm': 35.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 17, 't_uarmeret_cm': 32.9, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 18, 't_uarmeret_cm': 30, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 19, 't_uarmeret_cm': 26.7, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 20, 't_uarmeret_cm': 23.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 21, 't_uarmeret_cm': 20, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 22, 't_uarmeret_cm': 17.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 23, 't_uarmeret_cm': 14.7, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 24, 't_uarmeret_cm': 12.3, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 25, 't_uarmeret_cm': 10, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 26, 't_uarmeret_cm': 7.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 27, 't_uarmeret_cm': 5.7, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 28, 't_uarmeret_cm': 3.7, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 29, 't_uarmeret_cm': 1.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 30, 't_uarmeret_cm': 0, 't_1_lag_cm': None, 't_2_lag_cm': None}]},
- {'diagram_nr': 2,
-  'eo': 45,
-  'klasse': 2,
-  'image_name': 'Diagram 2.png',
-  'rows': [{'eu': 1, 't_uarmeret_cm': None, 't_1_lag_cm': 100, 't_2_lag_cm': 90},
-           {'eu': 2, 't_uarmeret_cm': None, 't_1_lag_cm': 90, 't_2_lag_cm': 80},
-           {'eu': 3, 't_uarmeret_cm': 120, 't_1_lag_cm': 83.5, 't_2_lag_cm': 70},
-           {'eu': 4, 't_uarmeret_cm': 105.9, 't_1_lag_cm': 75, 't_2_lag_cm': 63},
-           {'eu': 5, 't_uarmeret_cm': 100, 't_1_lag_cm': 66.1, 't_2_lag_cm': 57.2},
-           {'eu': 6, 't_uarmeret_cm': 90, 't_1_lag_cm': 60, 't_2_lag_cm': 52.2},
-           {'eu': 7, 't_uarmeret_cm': 84.5, 't_1_lag_cm': 56.1, 't_2_lag_cm': None},
-           {'eu': 8, 't_uarmeret_cm': 80, 't_1_lag_cm': 53, 't_2_lag_cm': None},
-           {'eu': 9, 't_uarmeret_cm': 75, 't_1_lag_cm': 50, 't_2_lag_cm': None},
-           {'eu': 10, 't_uarmeret_cm': 70, 't_1_lag_cm': 46.6, 't_2_lag_cm': None},
-           {'eu': 11, 't_uarmeret_cm': 64.8, 't_1_lag_cm': 43.2, 't_2_lag_cm': None},
-           {'eu': 12, 't_uarmeret_cm': 60, 't_1_lag_cm': 40, 't_2_lag_cm': None},
-           {'eu': 13, 't_uarmeret_cm': 56.3, 't_1_lag_cm': 37, 't_2_lag_cm': None},
-           {'eu': 14, 't_uarmeret_cm': 53.2, 't_1_lag_cm': 34, 't_2_lag_cm': None},
-           {'eu': 15, 't_uarmeret_cm': 50, 't_1_lag_cm': 31.3, 't_2_lag_cm': None},
-           {'eu': 16, 't_uarmeret_cm': 46.5, 't_1_lag_cm': 28.8, 't_2_lag_cm': None},
-           {'eu': 17, 't_uarmeret_cm': 43, 't_1_lag_cm': 26.4, 't_2_lag_cm': None},
-           {'eu': 18, 't_uarmeret_cm': 40, 't_1_lag_cm': 24.1, 't_2_lag_cm': None},
-           {'eu': 19, 't_uarmeret_cm': 37.6, 't_1_lag_cm': 22, 't_2_lag_cm': None},
-           {'eu': 20, 't_uarmeret_cm': 35.5, 't_1_lag_cm': 20, 't_2_lag_cm': None},
-           {'eu': 21, 't_uarmeret_cm': 33.6, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 22, 't_uarmeret_cm': 31.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 23, 't_uarmeret_cm': 30, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 24, 't_uarmeret_cm': 28.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 25, 't_uarmeret_cm': 26.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 26, 't_uarmeret_cm': 24.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 27, 't_uarmeret_cm': 23.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 28, 't_uarmeret_cm': 21.6, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 29, 't_uarmeret_cm': 20, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 30, 't_uarmeret_cm': 18.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 31, 't_uarmeret_cm': 17, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 32, 't_uarmeret_cm': 15.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 33, 't_uarmeret_cm': 14, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 34, 't_uarmeret_cm': 12.6, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 35, 't_uarmeret_cm': 11.3, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 36, 't_uarmeret_cm': 10, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 37, 't_uarmeret_cm': 8.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 38, 't_uarmeret_cm': 7.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 39, 't_uarmeret_cm': 6.4, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 40, 't_uarmeret_cm': 5.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 41, 't_uarmeret_cm': 4.1, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 42, 't_uarmeret_cm': 3, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 43, 't_uarmeret_cm': 2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 44, 't_uarmeret_cm': 1, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 45, 't_uarmeret_cm': 0, 't_1_lag_cm': None, 't_2_lag_cm': None}]},
- {'diagram_nr': 3,
-  'eo': 60,
-  'klasse': 3,
-  'image_name': 'Diagram 3.png',
-  'rows': [{'eu': 1, 't_uarmeret_cm': None, 't_1_lag_cm': 110, 't_2_lag_cm': 94.6},
-           {'eu': 2, 't_uarmeret_cm': None, 't_1_lag_cm': 95.7, 't_2_lag_cm': 86.3},
-           {'eu': 3, 't_uarmeret_cm': 130, 't_1_lag_cm': 90, 't_2_lag_cm': 80},
-           {'eu': 4, 't_uarmeret_cm': 115.9, 't_1_lag_cm': 83.1, 't_2_lag_cm': 73.1},
-           {'eu': 5, 't_uarmeret_cm': 110, 't_1_lag_cm': 77.2, 't_2_lag_cm': 67.2},
-           {'eu': 6, 't_uarmeret_cm': 100, 't_1_lag_cm': 72.3, 't_2_lag_cm': 62.3},
-           {'eu': 7, 't_uarmeret_cm': 92.8, 't_1_lag_cm': 67.8, 't_2_lag_cm': 57.8},
-           {'eu': 8, 't_uarmeret_cm': 87.7, 't_1_lag_cm': 63.8, 't_2_lag_cm': 53.7},
-           {'eu': 9, 't_uarmeret_cm': 83.9, 't_1_lag_cm': 60, 't_2_lag_cm': 50},
-           {'eu': 10, 't_uarmeret_cm': 80, 't_1_lag_cm': 56.4, 't_2_lag_cm': None},
-           {'eu': 11, 't_uarmeret_cm': 74.9, 't_1_lag_cm': 53.1, 't_2_lag_cm': None},
-           {'eu': 12, 't_uarmeret_cm': 70, 't_1_lag_cm': 50, 't_2_lag_cm': None},
-           {'eu': 13, 't_uarmeret_cm': 66.3, 't_1_lag_cm': 47.3, 't_2_lag_cm': None},
-           {'eu': 14, 't_uarmeret_cm': 63.1, 't_1_lag_cm': 44.8, 't_2_lag_cm': None},
-           {'eu': 15, 't_uarmeret_cm': 60, 't_1_lag_cm': 42.4, 't_2_lag_cm': None},
-           {'eu': 16, 't_uarmeret_cm': 57, 't_1_lag_cm': 40, 't_2_lag_cm': None},
-           {'eu': 17, 't_uarmeret_cm': 54, 't_1_lag_cm': 37.4, 't_2_lag_cm': None},
-           {'eu': 18, 't_uarmeret_cm': 51.3, 't_1_lag_cm': 34.7, 't_2_lag_cm': None},
-           {'eu': 19, 't_uarmeret_cm': 48.8, 't_1_lag_cm': 32.1, 't_2_lag_cm': None},
-           {'eu': 20, 't_uarmeret_cm': 46.4, 't_1_lag_cm': 30, 't_2_lag_cm': None},
-           {'eu': 21, 't_uarmeret_cm': 44.1, 't_1_lag_cm': 28.2, 't_2_lag_cm': None},
-           {'eu': 22, 't_uarmeret_cm': 42, 't_1_lag_cm': 26.4, 't_2_lag_cm': None},
-           {'eu': 23, 't_uarmeret_cm': 40, 't_1_lag_cm': 24.8, 't_2_lag_cm': None},
-           {'eu': 24, 't_uarmeret_cm': 38.1, 't_1_lag_cm': 23.3, 't_2_lag_cm': None},
-           {'eu': 25, 't_uarmeret_cm': 36.4, 't_1_lag_cm': 22, 't_2_lag_cm': None},
-           {'eu': 26, 't_uarmeret_cm': 34.7, 't_1_lag_cm': 20.9, 't_2_lag_cm': None},
-           {'eu': 27, 't_uarmeret_cm': 33.1, 't_1_lag_cm': 20, 't_2_lag_cm': None},
-           {'eu': 28, 't_uarmeret_cm': 31.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 29, 't_uarmeret_cm': 30, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 30, 't_uarmeret_cm': 28.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 31, 't_uarmeret_cm': 27, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 32, 't_uarmeret_cm': 25.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 33, 't_uarmeret_cm': 24, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 34, 't_uarmeret_cm': 22.6, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 35, 't_uarmeret_cm': 21.3, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 36, 't_uarmeret_cm': 20, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 37, 't_uarmeret_cm': 18.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 38, 't_uarmeret_cm': 17.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 39, 't_uarmeret_cm': 16.4, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 40, 't_uarmeret_cm': 15.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 41, 't_uarmeret_cm': 14.1, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 42, 't_uarmeret_cm': 13, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 43, 't_uarmeret_cm': 12, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 44, 't_uarmeret_cm': 11, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 45, 't_uarmeret_cm': 10, 't_1_lag_cm': None, 't_2_lag_cm': None}]},
- {'diagram_nr': 4,
-  'eo': 80,
-  'klasse': 4,
-  'image_name': 'Diagram 4.png',
-  'rows': [{'eu': 1, 't_uarmeret_cm': None, 't_1_lag_cm': 120, 't_2_lag_cm': 110},
-           {'eu': 2, 't_uarmeret_cm': None, 't_1_lag_cm': 110, 't_2_lag_cm': 100},
-           {'eu': 3, 't_uarmeret_cm': 140, 't_1_lag_cm': 100, 't_2_lag_cm': 90},
-           {'eu': 4, 't_uarmeret_cm': 124.5, 't_1_lag_cm': 93.5, 't_2_lag_cm': 80},
-           {'eu': 5, 't_uarmeret_cm': 114.5, 't_1_lag_cm': 84.7, 't_2_lag_cm': 74.5},
-           {'eu': 6, 't_uarmeret_cm': 107.4, 't_1_lag_cm': 77.3, 't_2_lag_cm': 70},
-           {'eu': 7, 't_uarmeret_cm': 103.7, 't_1_lag_cm': 73.5, 't_2_lag_cm': 65},
-           {'eu': 8, 't_uarmeret_cm': 100, 't_1_lag_cm': 70, 't_2_lag_cm': 60},
-           {'eu': 9, 't_uarmeret_cm': 95.1, 't_1_lag_cm': 65.8, 't_2_lag_cm': None},
-           {'eu': 10, 't_uarmeret_cm': 90, 't_1_lag_cm': 61.8, 't_2_lag_cm': None},
-           {'eu': 11, 't_uarmeret_cm': 84.8, 't_1_lag_cm': 58.3, 't_2_lag_cm': None},
-           {'eu': 12, 't_uarmeret_cm': 80, 't_1_lag_cm': 55.2, 't_2_lag_cm': None},
-           {'eu': 13, 't_uarmeret_cm': 76.3, 't_1_lag_cm': 52.4, 't_2_lag_cm': None},
-           {'eu': 14, 't_uarmeret_cm': 73.1, 't_1_lag_cm': 50, 't_2_lag_cm': None},
-           {'eu': 15, 't_uarmeret_cm': 70, 't_1_lag_cm': 48, 't_2_lag_cm': None},
-           {'eu': 16, 't_uarmeret_cm': 67, 't_1_lag_cm': 46.2, 't_2_lag_cm': None},
-           {'eu': 17, 't_uarmeret_cm': 64, 't_1_lag_cm': 44.6, 't_2_lag_cm': None},
-           {'eu': 18, 't_uarmeret_cm': 61.3, 't_1_lag_cm': 43.1, 't_2_lag_cm': None},
-           {'eu': 19, 't_uarmeret_cm': 58.8, 't_1_lag_cm': 41.6, 't_2_lag_cm': None},
-           {'eu': 20, 't_uarmeret_cm': 56.4, 't_1_lag_cm': 40, 't_2_lag_cm': None},
-           {'eu': 21, 't_uarmeret_cm': 54.1, 't_1_lag_cm': 38.3, 't_2_lag_cm': None},
-           {'eu': 22, 't_uarmeret_cm': 52, 't_1_lag_cm': 36.6, 't_2_lag_cm': None},
-           {'eu': 23, 't_uarmeret_cm': 50, 't_1_lag_cm': 34.9, 't_2_lag_cm': None},
-           {'eu': 24, 't_uarmeret_cm': 48.1, 't_1_lag_cm': 33.2, 't_2_lag_cm': None},
-           {'eu': 25, 't_uarmeret_cm': 46.4, 't_1_lag_cm': 31.6, 't_2_lag_cm': None},
-           {'eu': 26, 't_uarmeret_cm': 44.7, 't_1_lag_cm': 30, 't_2_lag_cm': None},
-           {'eu': 27, 't_uarmeret_cm': 43.1, 't_1_lag_cm': 28.5, 't_2_lag_cm': None},
-           {'eu': 28, 't_uarmeret_cm': 41.5, 't_1_lag_cm': 27, 't_2_lag_cm': None},
-           {'eu': 29, 't_uarmeret_cm': 40, 't_1_lag_cm': 25.5, 't_2_lag_cm': None},
-           {'eu': 30, 't_uarmeret_cm': 38.5, 't_1_lag_cm': 24.1, 't_2_lag_cm': None},
-           {'eu': 31, 't_uarmeret_cm': 37, 't_1_lag_cm': 22.7, 't_2_lag_cm': None},
-           {'eu': 32, 't_uarmeret_cm': 35.5, 't_1_lag_cm': 21.3, 't_2_lag_cm': None},
-           {'eu': 33, 't_uarmeret_cm': 34, 't_1_lag_cm': 20, 't_2_lag_cm': None},
-           {'eu': 34, 't_uarmeret_cm': 32.6, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 35, 't_uarmeret_cm': 31.3, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 36, 't_uarmeret_cm': 30, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 37, 't_uarmeret_cm': 28.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 38, 't_uarmeret_cm': 27.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 39, 't_uarmeret_cm': 26.4, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 40, 't_uarmeret_cm': 25.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 41, 't_uarmeret_cm': 24.1, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 42, 't_uarmeret_cm': 23, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 43, 't_uarmeret_cm': 22, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 44, 't_uarmeret_cm': 21, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 45, 't_uarmeret_cm': 20, 't_1_lag_cm': None, 't_2_lag_cm': None}]},
- {'diagram_nr': 5,
-  'eo': 120,
-  'klasse': 5,
-  'image_name': 'Diagram 5.png',
-  'rows': [{'eu': 1, 't_uarmeret_cm': None, 't_1_lag_cm': 130, 't_2_lag_cm': 120},
-           {'eu': 2, 't_uarmeret_cm': None, 't_1_lag_cm': 120, 't_2_lag_cm': 105.9},
-           {'eu': 3, 't_uarmeret_cm': 150, 't_1_lag_cm': 110, 't_2_lag_cm': 100},
-           {'eu': 4, 't_uarmeret_cm': 135.9, 't_1_lag_cm': 103.2, 't_2_lag_cm': 90},
-           {'eu': 5, 't_uarmeret_cm': 130, 't_1_lag_cm': 96.6, 't_2_lag_cm': 82.8},
-           {'eu': 6, 't_uarmeret_cm': 120, 't_1_lag_cm': 90, 't_2_lag_cm': 77.7},
-           {'eu': 7, 't_uarmeret_cm': 114.5, 't_1_lag_cm': 84.8, 't_2_lag_cm': 73.9},
-           {'eu': 8, 't_uarmeret_cm': 110, 't_1_lag_cm': 80, 't_2_lag_cm': 70},
-           {'eu': 9, 't_uarmeret_cm': 105, 't_1_lag_cm': 74.7, 't_2_lag_cm': 64.7},
-           {'eu': 10, 't_uarmeret_cm': 100, 't_1_lag_cm': 70, 't_2_lag_cm': 60},
-           {'eu': 11, 't_uarmeret_cm': 94.8, 't_1_lag_cm': 66.6, 't_2_lag_cm': 56.6},
-           {'eu': 12, 't_uarmeret_cm': 90, 't_1_lag_cm': 63.7, 't_2_lag_cm': 53.7},
-           {'eu': 13, 't_uarmeret_cm': 86.3, 't_1_lag_cm': 61.2, 't_2_lag_cm': 51.4},
-           {'eu': 14, 't_uarmeret_cm': 83.1, 't_1_lag_cm': 58.9, 't_2_lag_cm': 50},
-           {'eu': 15, 't_uarmeret_cm': 80, 't_1_lag_cm': 56.9, 't_2_lag_cm': None},
-           {'eu': 16, 't_uarmeret_cm': 77, 't_1_lag_cm': 55.1, 't_2_lag_cm': None},
-           {'eu': 17, 't_uarmeret_cm': 74, 't_1_lag_cm': 53.4, 't_2_lag_cm': None},
-           {'eu': 18, 't_uarmeret_cm': 71.3, 't_1_lag_cm': 51.7, 't_2_lag_cm': None},
-           {'eu': 19, 't_uarmeret_cm': 68.8, 't_1_lag_cm': 50, 't_2_lag_cm': None},
-           {'eu': 20, 't_uarmeret_cm': 66.4, 't_1_lag_cm': 48.3, 't_2_lag_cm': None},
-           {'eu': 21, 't_uarmeret_cm': 64.1, 't_1_lag_cm': 46.5, 't_2_lag_cm': None},
-           {'eu': 22, 't_uarmeret_cm': 62, 't_1_lag_cm': 44.8, 't_2_lag_cm': None},
-           {'eu': 23, 't_uarmeret_cm': 60, 't_1_lag_cm': 43.1, 't_2_lag_cm': None},
-           {'eu': 24, 't_uarmeret_cm': 58.1, 't_1_lag_cm': 41.5, 't_2_lag_cm': None},
-           {'eu': 25, 't_uarmeret_cm': 56.4, 't_1_lag_cm': 40, 't_2_lag_cm': None},
-           {'eu': 26, 't_uarmeret_cm': 54.7, 't_1_lag_cm': 38.6, 't_2_lag_cm': None},
-           {'eu': 27, 't_uarmeret_cm': 53.1, 't_1_lag_cm': 37.2, 't_2_lag_cm': None},
-           {'eu': 28, 't_uarmeret_cm': 51.5, 't_1_lag_cm': 35.9, 't_2_lag_cm': None},
-           {'eu': 29, 't_uarmeret_cm': 50, 't_1_lag_cm': 34.6, 't_2_lag_cm': None},
-           {'eu': 30, 't_uarmeret_cm': 48.5, 't_1_lag_cm': 33.3, 't_2_lag_cm': None},
-           {'eu': 31, 't_uarmeret_cm': 47, 't_1_lag_cm': 32.2, 't_2_lag_cm': None},
-           {'eu': 32, 't_uarmeret_cm': 45.5, 't_1_lag_cm': 31, 't_2_lag_cm': None},
-           {'eu': 33, 't_uarmeret_cm': 44, 't_1_lag_cm': 30, 't_2_lag_cm': None},
-           {'eu': 34, 't_uarmeret_cm': 42.6, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 35, 't_uarmeret_cm': 41.3, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 36, 't_uarmeret_cm': 40, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 37, 't_uarmeret_cm': 38.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 38, 't_uarmeret_cm': 37.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 39, 't_uarmeret_cm': 36.4, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 40, 't_uarmeret_cm': 35.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 41, 't_uarmeret_cm': 34.1, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 42, 't_uarmeret_cm': 33, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 43, 't_uarmeret_cm': 32, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 44, 't_uarmeret_cm': 31, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 45, 't_uarmeret_cm': 30, 't_1_lag_cm': None, 't_2_lag_cm': None}]},
- {'diagram_nr': 6,
-  'eo': 150,
-  'klasse': 6,
-  'image_name': 'Diagram 6.png',
-  'rows': [{'eu': 1, 't_uarmeret_cm': None, 't_1_lag_cm': 140, 't_2_lag_cm': 120},
-           {'eu': 2, 't_uarmeret_cm': None, 't_1_lag_cm': 124.5, 't_2_lag_cm': 110},
-           {'eu': 3, 't_uarmeret_cm': 160, 't_1_lag_cm': 115, 't_2_lag_cm': 100},
-           {'eu': 4, 't_uarmeret_cm': 145.9, 't_1_lag_cm': 104.8, 't_2_lag_cm': 93},
-           {'eu': 5, 't_uarmeret_cm': 140, 't_1_lag_cm': 96.2, 't_2_lag_cm': 87.2},
-           {'eu': 6, 't_uarmeret_cm': 130, 't_1_lag_cm': 90, 't_2_lag_cm': 82.3},
-           {'eu': 7, 't_uarmeret_cm': 124.5, 't_1_lag_cm': 85.4, 't_2_lag_cm': 77.8},
-           {'eu': 8, 't_uarmeret_cm': 120, 't_1_lag_cm': 81.7, 't_2_lag_cm': 73.8},
-           {'eu': 9, 't_uarmeret_cm': 115, 't_1_lag_cm': 78.4, 't_2_lag_cm': 70},
-           {'eu': 10, 't_uarmeret_cm': 110, 't_1_lag_cm': 75.3, 't_2_lag_cm': 66.3},
-           {'eu': 11, 't_uarmeret_cm': 104.8, 't_1_lag_cm': 72.5, 't_2_lag_cm': 62.8},
-           {'eu': 12, 't_uarmeret_cm': 100, 't_1_lag_cm': 70, 't_2_lag_cm': 60},
-           {'eu': 13, 't_uarmeret_cm': 96.3, 't_1_lag_cm': 67.7, 't_2_lag_cm': 57.7},
-           {'eu': 14, 't_uarmeret_cm': 93.1, 't_1_lag_cm': 65.6, 't_2_lag_cm': 55.6},
-           {'eu': 15, 't_uarmeret_cm': 90, 't_1_lag_cm': 63.6, 't_2_lag_cm': 53.7},
-           {'eu': 16, 't_uarmeret_cm': 87, 't_1_lag_cm': 61.7, 't_2_lag_cm': 52.1},
-           {'eu': 17, 't_uarmeret_cm': 84, 't_1_lag_cm': 60, 't_2_lag_cm': 50.8},
-           {'eu': 18, 't_uarmeret_cm': 81.3, 't_1_lag_cm': 58.4, 't_2_lag_cm': 50},
-           {'eu': 19, 't_uarmeret_cm': 78.8, 't_1_lag_cm': 56.8, 't_2_lag_cm': None},
-           {'eu': 20, 't_uarmeret_cm': 76.4, 't_1_lag_cm': 55.4, 't_2_lag_cm': None},
-           {'eu': 21, 't_uarmeret_cm': 74.1, 't_1_lag_cm': 54, 't_2_lag_cm': None},
-           {'eu': 22, 't_uarmeret_cm': 72, 't_1_lag_cm': 52.7, 't_2_lag_cm': None},
-           {'eu': 23, 't_uarmeret_cm': 70, 't_1_lag_cm': 51.3, 't_2_lag_cm': None},
-           {'eu': 24, 't_uarmeret_cm': 68.1, 't_1_lag_cm': 50, 't_2_lag_cm': None},
-           {'eu': 25, 't_uarmeret_cm': 66.4, 't_1_lag_cm': 48.7, 't_2_lag_cm': None},
-           {'eu': 26, 't_uarmeret_cm': 64.7, 't_1_lag_cm': 47.4, 't_2_lag_cm': None},
-           {'eu': 27, 't_uarmeret_cm': 63.1, 't_1_lag_cm': 46.1, 't_2_lag_cm': None},
-           {'eu': 28, 't_uarmeret_cm': 61.5, 't_1_lag_cm': 44.8, 't_2_lag_cm': None},
-           {'eu': 29, 't_uarmeret_cm': 60, 't_1_lag_cm': 43.6, 't_2_lag_cm': None},
-           {'eu': 30, 't_uarmeret_cm': 58.5, 't_1_lag_cm': 42.4, 't_2_lag_cm': None},
-           {'eu': 31, 't_uarmeret_cm': 57, 't_1_lag_cm': 41.2, 't_2_lag_cm': None},
-           {'eu': 32, 't_uarmeret_cm': 55.5, 't_1_lag_cm': 40, 't_2_lag_cm': None},
-           {'eu': 33, 't_uarmeret_cm': 54, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 34, 't_uarmeret_cm': 52.6, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 35, 't_uarmeret_cm': 51.3, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 36, 't_uarmeret_cm': 50, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 37, 't_uarmeret_cm': 48.8, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 38, 't_uarmeret_cm': 47.5, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 39, 't_uarmeret_cm': 46.4, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 40, 't_uarmeret_cm': 45.2, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 41, 't_uarmeret_cm': 44.1, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 42, 't_uarmeret_cm': 43, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 43, 't_uarmeret_cm': 42, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 44, 't_uarmeret_cm': 41, 't_1_lag_cm': None, 't_2_lag_cm': None},
-           {'eu': 45, 't_uarmeret_cm': 40, 't_1_lag_cm': None, 't_2_lag_cm': None}]}]
+DESIGNDIAGRAM_AFLAESTE_PUNKTER = {
+    1: {
+        # Punktet ved 100 cm er ved gennemsyn fastsat til Eu = 4 MPa;
+        # vektorgrafikken giver 3,42 MPa, jf. kontrolfilens afsnit 7.
+        "t_uarmeret_cm": [(0, 30), (10, 25), (20, 21), (30, 18), (40, 14.5), (50, 12),
+                          (60, 9.5), (70, 8), (80, 6), (90, 5), (100, 4), (110, 3)],
+        "t_1_lag_cm": [(20, 15), (30, 11.5), (40, 9), (50, 6.5), (60, 5), (70, 3),
+                       (80, 2), (90, 0.5)],
+        "t_2_lag_cm": [],
+    },
+    2: {
+        "t_uarmeret_cm": [(0, 45), (10, 36), (20, 29), (30, 23), (40, 18.5), (50, 15),
+                          (60, 12), (70, 10), (80, 8), (90, 6), (100, 5), (110, 3.5),
+                          (120, 3), (130, 2.5)],
+        "t_1_lag_cm": [(20, 20), (30, 16), (40, 12), (50, 9), (60, 6), (70, 4.5),
+                       (80, 3), (90, 2), (100, 1)],
+        "t_2_lag_cm": [(50, 6.5), (60, 4.5), (70, 3), (80, 2), (90, 1)],
+    },
+    3: {
+        "t_uarmeret_cm": [(10, 45), (20, 36), (30, 29), (40, 23), (50, 18.5), (60, 15),
+                          (70, 12), (80, 10), (90, 8), (100, 6), (110, 5), (120, 3.5),
+                          (130, 3), (140, 2.5)],
+        "t_1_lag_cm": [(20, 27), (30, 20), (40, 16), (50, 12), (60, 9), (70, 6.5),
+                       (80, 4.5), (90, 3), (100, 1.5), (110, 1)],
+        "t_2_lag_cm": [(50, 9), (60, 6.5), (70, 4.5), (80, 2.5), (90, 1.5), (100, 1)],
+    },
+    4: {
+        "t_uarmeret_cm": [(20, 45), (30, 36), (40, 29), (50, 23), (60, 18.5), (70, 15),
+                          (80, 12), (90, 10), (100, 8), (110, 6), (120, 5), (130, 3.5),
+                          (140, 3), (150, 2.5)],
+        "t_1_lag_cm": [(20, 33), (30, 26), (40, 20), (50, 14), (60, 10.5), (70, 7.5),
+                       (80, 5.5), (90, 4), (100, 3), (110, 2), (120, 1)],
+        "t_2_lag_cm": [(60, 8), (70, 6), (80, 4), (90, 3), (100, 2), (110, 1)],
+    },
+    5: {
+        "t_uarmeret_cm": [(30, 45), (40, 36), (50, 29), (60, 23), (70, 18.5), (80, 15),
+                          (90, 12), (100, 10), (110, 8), (120, 6), (130, 5), (140, 3.5),
+                          (150, 3), (160, 2.5)],
+        "t_1_lag_cm": [(30, 33), (40, 25), (50, 19), (60, 13.5), (70, 9.5), (80, 8),
+                       (90, 6), (100, 4.5), (110, 2.5), (120, 2), (130, 1)],
+        "t_2_lag_cm": [(50, 14), (60, 10), (70, 8), (80, 6), (90, 4.5), (100, 3),
+                       (110, 2), (120, 1)],
+    },
+    6: {
+        "t_uarmeret_cm": [(40, 45), (50, 36), (60, 29), (70, 23), (80, 18.5), (90, 15),
+                          (100, 12), (110, 10), (120, 8), (130, 6), (140, 5), (150, 3.5),
+                          (160, 3), (170, 2.5)],
+        "t_1_lag_cm": [(40, 32), (50, 24), (60, 17), (70, 12), (80, 8.5), (90, 6),
+                       (100, 4.5), (110, 3.5), (120, 2.5), (130, 1.5), (140, 1)],
+        "t_2_lag_cm": [(50, 18), (60, 12), (70, 9), (80, 6.5), (90, 4.5), (100, 3),
+                       (110, 2.5), (120, 1.5), (130, 0.5)],
+    },
+}
+
+# Diagrammets Eo [MPa] og den største Eu [MPa], tabellen opstilles for.
+_DIAGRAM_AKSER = {1: (30, 30), 2: (45, 45), 3: (60, 45), 4: (80, 45),
+                  5: (120, 45), 6: (150, 45)}
+_DIAGRAM_FELTER = ("t_uarmeret_cm", "t_1_lag_cm", "t_2_lag_cm")
+
+
+def _interpoler_kurve(punkter: list[tuple[float, float]], eu: float) -> float | None:
+    """Kurvens tykkelse [cm] ved eu, afrundet til én decimal.
+
+    Tykkelsen bestemmes ved lineær interpolation mellem de to aflæste
+    punkter, der omslutter eu. Ligger eu uden for kurvens første eller
+    sidste punkt, returneres None.
+    """
+    pts = sorted((e, t) for t, e in punkter)
+    if not pts or not pts[0][0] <= eu <= pts[-1][0]:
+        return None
+    for (e1, t1), (e2, t2) in zip(pts, pts[1:]):
+        if e1 <= eu <= e2:
+            t = t1 + (eu - e1) / (e2 - e1) * (t2 - t1)
+            return math.floor(round(t * 10, 6) + 0.5) / 10
+    return float(pts[0][1])
+
+
+DESIGNDIAGRAM_RAW_TABLES = [
+    {
+        "diagram_nr": nr,
+        "eo": eo,
+        "klasse": nr,
+        "image_name": f"Diagram {nr}.png",
+        "rows": [
+            {"eu": eu, **{
+                felt: _interpoler_kurve(DESIGNDIAGRAM_AFLAESTE_PUNKTER[nr][felt], eu)
+                for felt in _DIAGRAM_FELTER
+            }}
+            for eu in range(1, eu_max + 1)
+        ],
+    }
+    for nr, (eo, eu_max) in _DIAGRAM_AKSER.items()
+]
+
+# Tabelcellerne, der ligger i et aflæst punkt og derfor ikke er interpoleret:
+#    DESIGNDIAGRAM_AFLAESTE_CELLER[diagram_nr] → {(eu, felt), ...}
+DESIGNDIAGRAM_AFLAESTE_CELLER = {
+    nr: {
+        (int(e), felt)
+        for felt, punkter in kurver.items()
+        for _, e in punkter
+        if e == int(e) and 1 <= e <= _DIAGRAM_AKSER[nr][1]
+    }
+    for nr, kurver in DESIGNDIAGRAM_AFLAESTE_PUNKTER.items()
+}
 
 
 def _t_basis_table_from_designdiagrammer(diagrammer: list[dict]) -> dict:
@@ -650,7 +483,8 @@ def korrelation_fra_koersler(
 
 
 # Standard-korrelationen, tilbageberegnet fra VEJDIM_KOERSLER mod diagrammet.
-# (Reproducerer de dokumenterede Eo_ækv-værdier i notatets §4.)
+# Notatets §4 er beregnet mod den hidtidige diagramtabel; efter rettelsen af
+# diagramtabellerne 24.09.2026 afviger enkelte celler fra notatet.
 KORRELATION_T_EO = korrelation_fra_koersler(VEJDIM_KOERSLER, T_BASIS_TABLE)
 
 # Metadata pr. trafikklasse. naae10_mio_20aar = NÆ10 over 20 års
