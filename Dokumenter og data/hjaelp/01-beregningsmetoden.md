@@ -148,10 +148,11 @@ Eₒ,ækv-værdier, når underbundens E-modul ændres.
 Så længe lagtykkelsen ligger mellem diagrammernes yderste ustabiliserede
 kurver, bestemmes Eₒ,ækv ved interpolation inden for diagramområdet. Ligger
 lagtykkelsen uden for dette område, findes der ikke et egentligt opslagspunkt.
-Hvis tilvalget **Anvend VejDims tal uden for diagrammet** er aktiveret, anvendes
-VejDims tykkelse dog uændret, mens reduktionen hentes fra den nærmeste
-randkurve. Reduktionen er dermed ikke bestemt i det faktiske driftspunkt. Denne
-udvidelse er beskrevet nærmere i kapitel 2, afsnit 3.
+Afvigelsen fra den nærmeste kurve holdes da op mod en tolerance, og efter
+reglerne under Indstillinger regnes der med VejDims tykkelse eller med
+diagrammets laveste kurve, eller beregningen afvises. Ved VejDims tykkelse
+hentes reduktionen fra den nærmeste randkurve og er dermed ikke bestemt i det
+faktiske driftspunkt. Håndteringen er beskrevet nærmere i kapitel 2, afsnit 3.
 
 :::figur Eₒ,ækv for T4 ved fire underbunds-E-værdier. Samme trafikklasse kan derfor ligge mellem forskellige diagramkurver.
 | Eᵤ [MPa] | Eₒ,ækv [MPa] | Nærmeste Eₒ-kurver [MPa] |

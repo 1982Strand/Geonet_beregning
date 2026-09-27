@@ -1,6 +1,6 @@
 ---
 titel: Trafikklasse-korrelationen
-resume: Hvad Eₒ-matricen på korrelationssiden viser, hvad zonerne under og over betyder, hvordan de kan dimensioneres på VejDims tal, og hvad der sker, når en kørsel rettes.
+resume: Hvad Eₒ-matricen på korrelationssiden viser, hvad zonerne under og over betyder, hvordan de behandles efter tolerancer og regler, og hvad der sker, når en kørsel rettes.
 ---
 
 ## 1 Hvad tabellen viser
@@ -50,18 +50,16 @@ på 31 %, hvilket svarer til niveauet ved dimensionering efter
 belastningsklasse. Antallet af celler i de tre zoner følger det aktive
 kørsels- og diagramgrundlag og kan derfor ændre sig, hvis dataene ændres.
 
-Vælges en celle i zonen under eller over, vises zonebeskeden i stedet for
-resultater. Dimensioneringen kan dog gennemføres på VejDims tal, jf. afsnit 3.
+Hvordan en celle i zonen under eller over behandles, fastlægges af
+tolerancerne og reglerne i afsnit 3.
 
-## 3 Når dimensioneringen sker på VejDims tal uden for diagrammet
+## 3 Opslag uden for diagrammets kurver
 
 Opslaget i designdiagrammerne sker i de ustabiliserede tykkelser: ved
 underbundens E-modul giver de seks diagrammer hver sin tykkelse, og VejDims
 krav henføres til det sted, hvor tykkelsen passer, jf. kapitel 1, afsnit 4.
 I kernezonen aflæses reduktionen derefter i det samme opslagspunkt. Eₒ er
 alene betegnelsen for opslagspunktet og indgår ikke som en fysisk størrelse.
-Uden for kernezonen findes der ikke et egentligt opslagspunkt; her kan
-randkurve-tilvalget anvendes efter beskrivelsen nedenfor.
 
 Figur 2.2 sammenholder VejDims krav med de seks ustabiliserede diagramkurver
 ved samme Eᵤ og viser, hvorfor T1 ligger uden for diagramområdet i eksemplet.
@@ -78,36 +76,76 @@ ved samme Eᵤ og viser, hvorfor T1 ligger uden for diagramområdet i eksemplet.
 :::
 
 Falder VejDims krav uden for de seks tykkelser, findes der intet opslagssted i
-diagrammerne. Diagrammerne dækker ikke en så tynd henholdsvis tyk opbygning ved
-den pågældende underbund. Kun hvis tilvalget **Anvend VejDims tal uden for
-diagrammet** er aktiveret, gennemføres beregningen alligevel. VejDims ubundne
-lagtykkelse anvendes som den ustabiliserede reference. For det aktuelle
-underbunds-E-modul aflæses geonettets reduktionsprocent på den relevante
-yderste kurve i designdiagrammerne — den tyndeste kurve i zonen **under** og
-den tykkeste kurve i zonen **over**. Den aflæste reduktion overføres derefter
-til VejDims lagtykkelse. Reduktionen er derfor bestemt ved diagrammets
-randkurve og ikke i det faktiske driftspunkt; beregningen forudsætter, at
-reduktionen også kan anvendes uden for diagramområdet.
+diagrammerne. Afvigelsen fra den nærmeste kurve, randkurven, måles da i
+procent af randkurvens tykkelse og holdes op mod en tolerance for hver
+retning. Tolerancerne og håndteringen fastlægges under Indstillinger,
+afsnittet Trafikklasse uden for diagrammet, og gælder både Standard og
+Brugerdefineret.
 
-Feltet står både i dimensioneringens trin 1 og på korrelationssiden; de to
-felter er ét og samme tilvalg, og det er fravalgt ved opstart.
+:::formel
+a_over   =  (t_VejDim − t_rand) / t_rand
+a_under  =  (t_rand − t_VejDim) / t_rand
+--
+t_VejDim  er VejDims krævede ubundne tykkelse, SG + BL [mm]
+t_rand    er randkurvens ustabiliserede tykkelse ved samme Eᵤ [mm]
+:::
 
-Det er et væsentligt forbehold, at hele geonettets reduktion uden for
-diagramområdet bygger på antagelsen om, at geonettet giver præcis den samme
-procentvise reduktion som ved den valgte randkurve ved samme underbunds-E-modul.
-Der foreligger dermed ikke en særskilt aflæsning i det faktiske driftspunkt.
-Resultater, der beregnes med dette tilvalg, må derfor forventes at være
-behæftet med større usikkerhed end resultater inden for diagramområdet.
+Der er tre måder at behandle et opslag uden for kurverne på:
 
-Fremgangsmåden hviler på én forudsætning. Lagtykkelsen fastlægges uændret af
-VejDim og er dermed lige så veldokumenteret som i de øvrige celler, og
-reduktionsprocenten er ligeledes en aflæst værdi fra feltforsøgene — blot
-aflæst ved randkurven og ikke i driftspunktet. Det forudsættes alene, at
-reduktionsprocenten holder, når opbygningen bliver tyndere henholdsvis tykkere
-end den, diagrammet dækker.
+- **VejDims tykkelse.** VejDims ubundne lagtykkelse anvendes som den
+  ustabiliserede reference. Randkurvens tykkelser skaleres med
+  t_VejDim / t_rand, så geonettets reduktion i procent er randkurvens.
+- **Diagrammets laveste kurve.** Anvendes alene under. Der regnes med
+  kurven Eₒ = 30 MPa uændret. Den er tykkere end VejDims krav, og resultatet
+  er konservativt.
+- **Afvis.** Der er intet driftspunkt, og opbygningen kræver en konkret
+  vurdering. Der kan i stedet dimensioneres efter belastningsklasse.
 
-Figur 2.3 viser beregningen for T1 ved Eᵤ = 8 MPa, hvor VejDims tykkelse
-skaleres med reduktionen fra randkurven, fordi tilvalget er aktiveret.
+:::figur Reglerne uden for diagrammets kurver. Standardtolerancen er 5 % i begge retninger.
+| Situation | Standard | Kan i stedet vælges |
+| --- | --- | --- |
+| Over, inden for tolerancen | VejDims tykkelse | – |
+| Over, uden for tolerancen | Afvis | VejDims tykkelse |
+| Under, inden for tolerancen | Laveste kurve | VejDims tykkelse |
+| Under, uden for tolerancen | Afvis | Laveste kurve eller VejDims tykkelse |
+:::
+
+Reglen er ikke symmetrisk. Over følges VejDims krav opad, idet det er
+konservativt at regne fra den tykkere opbygning. T5 ved Eᵤ = 15 MPa kræver
+939 mm, 4,3 % over randkurvens 900 mm, og den ustabiliserede tykkelse løftes
+til 939 mm. Under følges VejDim som udgangspunkt ikke nedad, idet VejDim ved
+lave E-moduler giver markant tyndere opbygninger end diagrammerne. T2 ved
+Eᵤ = 3 MPa kræver 1.046 mm, 4,9 % under randkurvens 1.100 mm, og der regnes
+med 1.100 mm.
+
+Figur 2.4 viser afvigelserne for de 18 standardkørsler uden for kurverne.
+
+:::figur Afvigelse fra randkurven for standardkørslerne uden for diagrammets kurver. Eᵤ i MPa i parentes.
+| Trafikklasse | Under [%] | Over [%] |
+| --- | --- | --- |
+| T1 | 43,8 (3) · 41,0 (4) · 37,8 (5) · 21,4 (10) | – |
+| T2 | 4,9 (3) · 2,3 (4) | – |
+| T3 | – | – |
+| T4 | – | 6,1 (30) · 16,4 (40) |
+| T5 | – | 4,3 (15) · 9,5 (20) · 19,3 (30) · 31,6 (40) |
+| T6 | – | 0,8 (4) · 4,2 (10) · 10,3 (15) · 15,9 (20) · 25,9 (30) · 38,2 (40) |
+:::
+
+Afvigelserne under er enten små (T2) eller store (T1), mens afvigelserne over
+vokser jævnt med Eᵤ. Med standardtolerancen regnes T6 ved Eᵤ = 4 og 10 MPa og
+T5 ved Eᵤ = 15 MPa med VejDims tykkelse, og T2 ved Eᵤ = 3 og 4 MPa med
+diagrammets laveste kurve. De øvrige 13 kørsler afvises. Under Indstillinger
+vises de aktuelle afvigelser og den håndtering, de gældende regler giver.
+
+Opmærksomheden henledes på, at geonettets reduktion ved VejDims tykkelse
+bygger på antagelsen om, at geonettet giver samme procentvise reduktion som
+ved randkurven ved samme underbunds-E-modul. Lagtykkelsen fastlægges af
+VejDim, og reduktionsprocenten er en aflæst værdi fra feltforsøgene, men
+aflæst ved randkurven og ikke i driftspunktet. Uden for tolerancen må
+resultatet derfor forventes at være behæftet med større usikkerhed, og der
+vises en advarsel.
+
+Figur 2.5 viser beregningen med VejDims tykkelse for T1 ved Eᵤ = 8 MPa.
 
 :::formel
 t_armeret = t_VejDim × (1 − r_rand) × (1 + k_φ + k_net)
@@ -118,7 +156,7 @@ k_φ       er korrektionen for friktionsvinklen
 k_net     er korrektionen for det valgte geonet
 :::
 
-:::figur Trafikklasse T1 ved Eᵤ = 8 MPa med tilvalget aktiveret. Cellen ligger i zonen under.
+:::figur Trafikklasse T1 ved Eᵤ = 8 MPa, beregnet med VejDims tykkelse. Afvigelsen er 30,1 % under randkurven; med standardreglerne afvises beregningen.
 | Trin | Værdi |
 | --- | --- |
 | VejDims krav, interpoleret | 489 mm |
@@ -129,11 +167,10 @@ k_net     er korrektionen for det valgte geonet
 | Resultat 489 × (1 − 0,371) | 308 mm |
 :::
 
-Inden for diagrammernes område er randkurven og opslagsstedet det samme, og
-tilvalget ændrer derfor intet i kernezonens 30 celler. Uden for området
-angives forholdet mellem VejDims krav og randkurvens tykkelse sammen med
-resultatet. For de celler, der kan beregnes, ligger det mellem 0,562 og 1,259.
-I matricen mærkes cellerne med `*`.
+I matricen mærkes celler, der ligger uden for kurverne, men regnes inden for
+tolerancen, med `*`, og celler, der regnes uden for tolerancen, med `†`.
+Afviste celler bærer zonebetegnelsen. Inden for kurverne har reglerne ingen
+betydning.
 
 Forbeholdet ved fremgangsmåden er beskrevet i kapitel 7, afsnit 2.
 

@@ -86,12 +86,13 @@ ligger 30 af 48 opslagspunkter inden for designdiagrammernes område. De øvrige
 punkter ligger under eller over diagramområdet. Fordelingen afhænger af de
 aktive VejDim-kørsler og designdiagrammer og kan derfor ændre sig.
 
-Som udgangspunkt afviser værktøjet opslagspunkter uden for diagramområdet. Hvis
-tilvalget **Anvend VejDims tal uden for diagrammet** aktiveres, anvendes
-VejDims ubundne tykkelse uændret, mens reduktionen hentes fra den nærmeste
-randkurve. Reduktionen er dermed ikke bestemt i det faktiske driftspunkt, men
-er baseret på en ekstrapolation og må forventes at være behæftet med større
-usikkerhed. Se også kapitel 2, afsnit 3.
+Opslagspunkter uden for diagramområdet behandles efter tolerancerne og
+reglerne under Indstillinger. Med standardindstillingerne godtages afvigelser
+op til 5 %, mens større afvigelser afvises. Regnes der med VejDims tykkelse,
+hentes reduktionen fra den nærmeste randkurve; den er dermed ikke bestemt i
+det faktiske driftspunkt. Uden for tolerancen er den baseret på en
+ekstrapolation og må forventes at være behæftet med større usikkerhed. Se
+også kapitel 2, afsnit 3.
 
 **Manglende armerede kurver.** Nogle kombinationer af Eᵤ og Eₒ kan ikke
 beregnes, fordi designdiagrammet ikke indeholder en armeret kurve i det

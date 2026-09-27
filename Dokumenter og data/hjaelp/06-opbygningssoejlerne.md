@@ -363,7 +363,8 @@ Standard direkte efter designdiagrammerne. Den samlede tykkelse oprundes
 alene til indbygningstrin; der anvendes ingen minimumstykkelse, heller ikke
 når fluebenet for samlet minimum er sat, og opbygningen vises som ét samlet
 ubundet lag. Det øverste geonet ved 2 lag placeres ved nettets mindste
-dæklag. Valget gælder alene Standard.
+dæklag. Valget gælder alene Standard og omfatter ikke håndteringen af
+trafikklasser uden for diagrammets kurver, jf. kapitel 2, afsnit 3.
 
 ## 6 Placering af geonet ved 2 lag
 

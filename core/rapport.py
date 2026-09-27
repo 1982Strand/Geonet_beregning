@@ -502,19 +502,9 @@ def formatér_dimensioneringsgrundlag(
         # den ubundne tykkelse på VejDims krav, mens reduktionen er aflæst på
         # randkurven. Forudsætningen anføres, da den ikke kan udledes af de
         # øvrige rækker.
-        zone = dim.get("zone")
-        skala = dim.get("skala", 1.0)
-        if zone in ("under", "over") and isinstance(skala, (int, float)):
-            afvigelse = abs(skala - 1.0) * 100
-            skala_txt = f"{skala:.3f}".replace(".", ",")
-            afv_txt = f"{afvigelse:.1f}".replace(".", ",")
-            rows.append((
-                "Uden for diagrammets område",
-                f"Zone {zone} — dimensioneret på VejDims ubundne tykkelse; "
-                f"randkurven Eₒ = {eo_aekv:.0f} MPa skaleret med "
-                f"{skala_txt} ({afv_txt} %). Reduktionen er aflæst på "
-                f"randkurven og dermed ekstrapoleret."
-            ))
+        yder_tekst = _yderomraade_tekst(dim)
+        if yder_tekst and valg.get("vis_yderomraade", True):
+            rows.append(("Uden for diagrammets område", yder_tekst))
     else:
         rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
     if dim.get("tilstand") == "Standard":
@@ -529,6 +519,62 @@ def formatér_dimensioneringsgrundlag(
         rows.append(("Materialeopbygning", _materiale_resume(materialer)))
     rows.append(("Vægtet friktionsvinkel (φᵥ)", f"{dim.get('phi', PHI_BASIS):.1f}°"))
     return rows
+
+
+def _yderomraade_tekst(dim: dict) -> str | None:
+    """Håndteringen uden for diagrammets kurver som konstaterende tekst til
+    rapporten, eller None inden for kurverne.
+
+    Bygger på feltet »yder« fra dimensioneringen, jf. app._yder_resume().
+    Ældre gemte dimensioneringer uden feltet beskrives ud fra zone og skala.
+    """
+    zone = dim.get("zone")
+    if zone not in ("under", "over"):
+        return None
+
+    def _tal(v: float, dec: int = 0) -> str:
+        return f"{v:,.{dec}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    retning = (
+        "over diagrammets øverste kurve" if zone == "over"
+        else "under diagrammets laveste kurve"
+    )
+    yder = dim.get("yder") or {}
+    afv = yder.get("afvigelse_pct")
+    if afv is None:
+        skala = dim.get("skala", 1.0)
+        if not isinstance(skala, (int, float)):
+            return None
+        afv = abs(skala - 1.0) * 100
+        return (
+            f"VejDims krav ligger {_tal(afv, 1)} % {retning}. Den "
+            "ustabiliserede tykkelse er VejDims, og reduktionen er aflæst på "
+            "randkurven."
+        )
+    tekst = f"VejDims krav ligger {_tal(afv, 1)} % {retning}, "
+    tol = yder.get("tolerance_pct")
+    tekst += (
+        f"{'inden for' if yder.get('inden_tolerance') else 'uden for'} "
+        f"tolerancen på {_tal(tol or 0, 1)} %. "
+    )
+    eo_rand = yder.get("eo_rand")
+    if yder.get("handling") == "vejdim":
+        tekst += (
+            f"Den ustabiliserede tykkelse er sat til VejDims "
+            f"{_tal(yder.get('t_vejdim_mm') or 0)} mm, og reduktionen er "
+            f"aflæst på kurven Eₒ = {_tal(eo_rand or 0)} MPa"
+        )
+        tekst += (
+            "." if yder.get("inden_tolerance")
+            else " og dermed ekstrapoleret."
+        )
+    elif yder.get("handling") == "laveste":
+        tekst += (
+            f"Der er regnet med diagrammets laveste kurve, "
+            f"Eₒ = {_tal(eo_rand or 0)} MPa, på "
+            f"{_tal(yder.get('t_rand_mm') or 0)} mm."
+        )
+    return tekst
 
 
 def formatér_dimensioneringsresultat(
