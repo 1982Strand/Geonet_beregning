@@ -27,3 +27,7 @@ indstillinger_brugerdefineret.json
 /Screenshots/
 /Streamlit app design review.zip
 /handover/nyt design/
+
+# Midlertidige arbejdsfiler og lokal konfiguration af kodeværktøjet Serena.
+/tmp/
+/.serena/
