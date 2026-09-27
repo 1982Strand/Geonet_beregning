@@ -17,6 +17,8 @@ Offentlig API:
 
 from __future__ import annotations
 
+from . import enhed as enhed_mod
+
 import io
 import os
 import platform
@@ -317,6 +319,7 @@ def render_opbygning_png(
     vis_maal_streg: bool = True,
     vis_maal_tal: bool = True,
     vis_signatur: bool = True,
+    enhed: str = enhed_mod.ENHED_MM,
 ) -> bytes:
     """Opbygningssnittene som PNG til rapporten.
 
@@ -326,8 +329,8 @@ def render_opbygning_png(
 
     reference_mm er den indtastede tykkelse, der tegnes som fælles stiplet
     linje. Udelades den, aflæses den af snittenes t_indtastet_mm.
-    geonet_paaskrift, geonet_maerkat, vis_maal_streg, vis_maal_tal og
-    vis_signatur føres videre til byg_snit().
+    geonet_paaskrift, geonet_maerkat, vis_maal_streg, vis_maal_tal,
+    vis_signatur og enhed føres videre til byg_snit().
     """
     from .diagram import byg_snit, snit_til_kolonner
 
@@ -348,6 +351,7 @@ def render_opbygning_png(
         vis_maal_streg=vis_maal_streg,
         vis_maal_tal=vis_maal_tal,
         vis_signatur=vis_signatur,
+        enhed=enhed,
     )
     if fig is None:
         return b""
@@ -456,8 +460,11 @@ def render_personligt_designdiagram_png(
 # 3. Formatering — dimensioneringsgrundlag og resultat
 # ---------------------------------------------------------------------------
 
-def _materiale_resume(materialer: list[dict]) -> str:
-    """Linjebrudt resume af materialelagene til dimensioneringsgrundlag."""
+def _materiale_resume(
+    materialer: list[dict], enhed: str = enhed_mod.ENHED_MM,
+) -> str:
+    """Linjebrudt resume af materialelagene til dimensioneringsgrundlag.
+    Lagtykkelserne angives i enhed, jf. core.enhed."""
     if not materialer:
         return "—"
     linjer = []
@@ -468,13 +475,18 @@ def _materiale_resume(materialer: list[dict]) -> str:
         pct = m.get("pct")
         dele = [f"Lag {i}: {navn}"]
         if phi is not None:
-            dele.append(f"φᵢ = {phi}°")
+            dele.append(f"φᵢ = {_grader(phi)}")
         if tyk is not None:
-            dele.append(f"{tyk:.0f} mm")
+            dele.append(enhed_mod.laengde(tyk, enhed))
         elif pct is not None:
             dele.append(f"{pct:.0f} %")
         linjer.append(" · ".join(dele))
     return "\n".join(linjer)
+
+
+def _grader(v: float, decimaler: int = 1) -> str:
+    """Vinkel med dansk decimalkomma: 38.25 → '38,3°'."""
+    return f"{float(v):.{decimaler}f}°".replace(".", ",")
 
 
 # Materialenavnene i linjen »Materialeopbygning« ved Standard-beregning.
@@ -492,9 +504,11 @@ def grundlag_linjer(
     Rapportsiden lader brugeren vælge blandt linjerne, jf.
     formatér_dimensioneringsgrundlag(). valg["standard_materialer"] er
     materialenavnene i linjen »Materialeopbygning« ved Standard-beregning;
-    udelades de, anvendes STANDARD_MATERIALER_RAPPORT.
+    udelades de, anvendes STANDARD_MATERIALER_RAPPORT. valg["enhed"] er
+    enheden for lagtykkelserne, jf. core.enhed.
     """
     valg = valg or {}
+    enhed = enhed_mod.normaliser(valg.get("enhed"))
     from .data import PHI_BASIS
     materialer = dim.get("materialer") or []
     er_trafikklasse = dim.get("grundlag_type") == "trafikklasse"
@@ -519,7 +533,7 @@ def grundlag_linjer(
         # den ubundne tykkelse på VejDims krav, mens reduktionen er aflæst på
         # randkurven. Forudsætningen anføres, da den ikke kan udledes af de
         # øvrige rækker.
-        yder_tekst = _yderomraade_tekst(dim)
+        yder_tekst = _yderomraade_tekst(dim, enhed)
         if yder_tekst:
             rows.append((
                 "yderomraade", "Uden for diagrammets område", yder_tekst,
@@ -543,11 +557,18 @@ def grundlag_linjer(
         rows.append(("materialer", "Materialeopbygning", tekst))
     else:
         rows.append((
-            "materialer", "Materialeopbygning", _materiale_resume(materialer),
+            "materialer", "Materialeopbygning",
+            _materiale_resume(materialer, enhed),
         ))
+    # Er φᵥ afrundet til hele grader, jf. core.afrunding, angives den uden
+    # decimal.
+    from .afrunding import PHI_AFRUNDING_INGEN, normaliser as _afr_norm
+    phi_afrundet = (
+        _afr_norm(dim.get("afrunding"))["phi_afrunding"] != PHI_AFRUNDING_INGEN
+    )
     rows.append((
         "phi", "Vægtet friktionsvinkel (φᵥ)",
-        f"{dim.get('phi', PHI_BASIS):.1f}°",
+        _grader(dim.get("phi", PHI_BASIS), 0 if phi_afrundet else 1),
     ))
     return rows
 
@@ -573,7 +594,9 @@ def formatér_dimensioneringsgrundlag(
     return rows
 
 
-def _yderomraade_tekst(dim: dict) -> str | None:
+def _yderomraade_tekst(
+    dim: dict, enhed: str = enhed_mod.ENHED_MM,
+) -> str | None:
     """Håndteringen uden for diagrammets kurver som konstaterende tekst til
     rapporten, eller None inden for kurverne.
 
@@ -613,7 +636,8 @@ def _yderomraade_tekst(dim: dict) -> str | None:
     if yder.get("handling") == "vejdim":
         tekst += (
             f"Den ustabiliserede tykkelse er sat til VejDims "
-            f"{_tal(yder.get('t_vejdim_mm') or 0)} mm, og reduktionen er "
+            f"{enhed_mod.laengde(yder.get('t_vejdim_mm') or 0, enhed)}, og "
+            "reduktionen er "
             f"aflæst på kurven Eₒ = {_tal(eo_rand or 0)} MPa"
         )
         tekst += (
@@ -624,7 +648,7 @@ def _yderomraade_tekst(dim: dict) -> str | None:
         tekst += (
             f"Der er regnet med diagrammets laveste kurve, "
             f"Eₒ = {_tal(eo_rand or 0)} MPa, på "
-            f"{_tal(yder.get('t_rand_mm') or 0)} mm."
+            f"{enhed_mod.laengde(yder.get('t_rand_mm') or 0, enhed)}."
         )
     return tekst
 
@@ -640,6 +664,7 @@ def formatér_dimensioneringsresultat(
     valg er brugerens rapportvalg fra appen. Er den indtastede opbygning
     fravalgt (vis_indtastet False), udelades den samlede tykkelse af den
     valgte opbygning, idet opbygningen da heller ikke vises i figuren.
+    valg["enhed"] er enheden for tykkelserne, jf. core.enhed.
     """
     from .afrunding import eksakt_navn, er_oprundet, normaliser
 
@@ -651,8 +676,13 @@ def formatér_dimensioneringsresultat(
     materialer = dim.get("materialer") or []
     vis_eksakt = normaliser(dim.get("afrunding"))["vis_eksakt"]
 
+    enhed = enhed_mod.normaliser(valg.get("enhed"))
+
     def _mm(v):
-        return f"{v:.0f} mm" if isinstance(v, (int, float)) else "—"
+        return (
+            enhed_mod.laengde(v, enhed) if isinstance(v, (int, float))
+            else "—"
+        )
 
     def _mm_res(res: dict, felt: str) -> str:
         v = res.get(felt)

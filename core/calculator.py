@@ -24,7 +24,8 @@ from .data import (
 )
 from .placement import check_geonet_placement
 from .afrunding import (
-    anvend_paa_resultat, eksakt_navn, lagminimum_navn, minimum_navn,
+    afrund_phi, anvend_paa_resultat, eksakt_navn, lagminimum_navn,
+    minimum_navn,
 )
 from .afrunding import normaliser as normaliser_afrunding
 from .lagfordeling import (
@@ -51,6 +52,9 @@ _EKSAKT_FELTER: tuple[str, ...] = (
     "phi_uarmeret",
     "phi_indtastet",
     "phi_regel",
+    "phi_eksakt",
+    "phi_uarmeret_eksakt",
+    "phi_afrunding",
 )
 
 
@@ -314,10 +318,20 @@ def _beregn_opslag(
     """Ét opslag i designdiagrammet, jf. beregn().
 
     phi anvendes på den armerede opbygning og phi_uarmeret på den
-    ustabiliserede; uden phi_uarmeret anvendes phi på begge.
+    ustabiliserede; uden phi_uarmeret anvendes phi på begge. Bærer
+    afrunding feltet phi_afrunding, afrundes begge, før korrektionen
+    bestemmes, jf. core.afrunding.afrund_phi(); de uafrundede værdier
+    bevares i phi_eksakt og phi_uarmeret_eksakt.
     """
     if phi_uarmeret is None:
         phi_uarmeret = phi
+    phi_metode = (
+        normaliser_afrunding(afrunding)["phi_afrunding"]
+        if afrunding is not None else None
+    )
+    phi_eksakt, phi_uarmeret_eksakt = phi, phi_uarmeret
+    phi = afrund_phi(phi, phi_metode)
+    phi_uarmeret = afrund_phi(phi_uarmeret, phi_metode)
     # -- Validér Eo ligger i tabellens interval --
     # Belastningsklasse-tilstand sender altid en præcis kolonne (30–150).
     # Trafikklasse-tilstand sender en ækvivalent Eo, der kan ligge mellem
@@ -420,6 +434,9 @@ def _beregn_opslag(
         "eo": eo,
         "phi": phi,
         "phi_uarmeret": phi_uarmeret,
+        "phi_eksakt": phi_eksakt,
+        "phi_uarmeret_eksakt": phi_uarmeret_eksakt,
+        "phi_afrunding": phi_metode,
         "lag_mode": lag_mode,
         "net_korrektion": net_korrektion,
         # Mellemresultater — til "Sådan beregnes det"-visning

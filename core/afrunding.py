@@ -7,7 +7,7 @@ nærmeste hele trin. Der rundes aldrig ned.
 Modulet er frit for Streamlit, så oprundingen kan anvendes af både
 beregningsmotoren, rapporten og en eventuel afprøvning uden at køre appen.
 
-Indstillingen er en dict med tre felter:
+Indstillingen er en dict med fire felter:
 
     trin_mm            oprundingstrin i mm, jf. TRIN_VALG
     reduktion_eksakt   False: reduktionen i mm og % opgøres af de oprundede
@@ -15,6 +15,9 @@ Indstillingen er en dict med tre felter:
                        True: reduktionen opgøres af de beregnede tykkelser.
     vis_eksakt         True: den beregnede tykkelse anføres i parentes
                        efter den oprundede.
+    phi_afrunding      afrundingen af den vægtede friktionsvinkel φᵥ, før
+                       korrektionen k_φ bestemmes, jf. PHI_AFRUNDING_VALG og
+                       afrund_phi().
 
 Til beregningen kan dict'en desuden bære to felter, der ikke hører til de
 gemte indstillinger, men dannes pr. beregning, jf. core.lagfordeling:
@@ -41,10 +44,21 @@ import math
 TRIN_VALG: tuple[int, ...] = (1, 10, 50, 100)
 TRIN_STANDARD = 50
 
+# Afrundingen af φᵥ: ingen, nedrunding til hel grad eller afrunding til
+# nærmeste hele grad. Nedrundingen er på den sikre side, idet en lavere φᵥ
+# giver en tykkere opbygning.
+PHI_AFRUNDING_INGEN = "ingen"
+PHI_AFRUNDING_NED = "ned"
+PHI_AFRUNDING_NAERMESTE = "naermeste"
+PHI_AFRUNDING_VALG: tuple[str, ...] = (
+    PHI_AFRUNDING_INGEN, PHI_AFRUNDING_NED, PHI_AFRUNDING_NAERMESTE,
+)
+
 STANDARD_INDSTILLING: dict = {
     "trin_mm": TRIN_STANDARD,
     "reduktion_eksakt": False,
     "vis_eksakt": False,
+    "phi_afrunding": PHI_AFRUNDING_INGEN,
 }
 
 # Tykkelsesfelter i beregn()-resultatet, der oprundes. Den beregnede værdi
@@ -70,6 +84,8 @@ def normaliser(indstilling: dict | None) -> dict:
         for felt in ("reduktion_eksakt", "vis_eksakt"):
             if isinstance(indstilling.get(felt), bool):
                 ud[felt] = indstilling[felt]
+        if indstilling.get("phi_afrunding") in PHI_AFRUNDING_VALG:
+            ud["phi_afrunding"] = indstilling["phi_afrunding"]
         t_min = indstilling.get("t_min_mm")
         if (
             isinstance(t_min, (int, float)) and not isinstance(t_min, bool)
@@ -80,6 +96,22 @@ def normaliser(indstilling: dict | None) -> dict:
         if isinstance(lagopbygning, dict) and lagopbygning.get("lag"):
             ud["lagopbygning"] = lagopbygning
     return ud
+
+
+def afrund_phi(phi: float | None, metode: str | None) -> float | None:
+    """φᵥ afrundet efter metode, jf. PHI_AFRUNDING_VALG.
+
+    »ned« runder ned til hel grad, »naermeste« til nærmeste hele grad med
+    halve grader rundet op. Ved »ingen« eller en ukendt metode returneres
+    φᵥ uændret. None → None.
+    """
+    if phi is None:
+        return None
+    if metode == PHI_AFRUNDING_NED:
+        return float(math.floor(phi + _TOLERANCE))
+    if metode == PHI_AFRUNDING_NAERMESTE:
+        return float(math.floor(phi + 0.5 + _TOLERANCE))
+    return float(phi)
 
 
 def eksakt_navn(felt: str) -> str:

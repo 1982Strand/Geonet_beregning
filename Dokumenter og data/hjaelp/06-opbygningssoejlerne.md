@@ -49,6 +49,14 @@ siden af. Både stregen og målet kan fravælges under Indstillinger,
 afsnittet Visualisering. Underbunden vises som et skraveret bånd under
 opbygningen med angivelse af Eᵤ.
 
+Lagtykkelserne vises i mm eller cm efter valget under Indstillinger,
+afsnittet Visualisering. Enheden gælder resultatkortet, produkttabellen,
+mellemregningerne, figurerne og rapporten. Beregningen føres i mm, og i cm
+vises én decimal, så millimeteren bevares; en decimal, der er nul, udelades.
+Indtastningsfelter, indstillinger og datatabeller angives fortsat i mm, og
+kornstørrelser og maskestørrelser angives altid i mm. Designdiagrammerne
+er tegnet i cm og vises uændret.
+
 Har det valgte produkt et korrektionsinterval, angives den optimale ende med
 en grøn, prikket linje. Mellemregningen bag værdien vises ved markøren.
 

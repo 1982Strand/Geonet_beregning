@@ -88,6 +88,7 @@ from core.diagram import byg_designdiagram, byg_raadiagram, snit_til_kolonner
 from core import hjaelp as hjaelp_mod
 from core import afrunding as afrunding_mod
 from core import lagfordeling as lagfordeling_mod
+from core import enhed as enhed_mod
 from core.placement import (
     PLACERING_DAEKLAG,
     PLACERING_LAGGRAENSE,
@@ -136,12 +137,14 @@ MIN_LAGTYKKELSE_MM = 200
 # Visualiseringen af opbygningerne: geonet_paaskrift skriver nettets navn ud
 # for hver geonetlinje; ellers står navnet alene i signaturen. maal_streg
 # tegner målsætningsstregen ved den samlede tykkelse, og maal_tal skriver
-# målet. signatur viser signaturforklaringen under figuren.
+# målet. signatur viser signaturforklaringen under figuren. enhed er
+# enheden for viste lagtykkelser, »mm« eller »cm«, jf. core.enhed.
 _OPBYGNING_STANDARD: dict = {
     "geonet_paaskrift": True,
     "maal_streg": True,
     "maal_tal": True,
     "signatur": True,
+    "enhed": enhed_mod.STANDARD_ENHED,
 }
 
 
@@ -149,7 +152,9 @@ def _normaliser_opbygning(ind: dict | None) -> dict:
     ud = dict(_OPBYGNING_STANDARD)
     if isinstance(ind, dict):
         for felt in _OPBYGNING_STANDARD:
-            if isinstance(ind.get(felt), bool):
+            if felt == "enhed":
+                ud[felt] = enhed_mod.normaliser(ind.get(felt))
+            elif isinstance(ind.get(felt), bool):
                 ud[felt] = ind[felt]
     return ud
 
@@ -455,6 +460,7 @@ def _snit_visning() -> dict:
         "vis_maal_streg": opb["maal_streg"],
         "vis_maal_tal": opb["maal_tal"],
         "vis_signatur": opb["signatur"],
+        "enhed": opb["enhed"],
     }
 
 def _standard_materialer() -> list[dict]:
@@ -1003,13 +1009,13 @@ def _yder_reference_tekst(zone: str, yder: dict) -> str:
         verbum = "løftet" if zone == TRAFIK_OVER else "sat ned"
         return (
             f"Den ustabiliserede tykkelse er {verbum} til VejDims "
-            f"{ui.mm(yder['t_vejdim_mm'])}; geonettets reduktion er aflæst "
+            f"{ui.laengde(yder['t_vejdim_mm'])}; geonettets reduktion er aflæst "
             f"på kurven Eₒ = {ui.mpa(yder['eo_rand'])}."
         )
     if handling == YDER_LAVESTE:
         return (
             "Der regnes med diagrammets laveste kurve, "
-            f"Eₒ = {ui.mpa(yder['eo_rand'])}, på {ui.mm(yder['t_rand_mm'])}."
+            f"Eₒ = {ui.mpa(yder['eo_rand'])}, på {ui.laengde(yder['t_rand_mm'])}."
         )
     return ""
 
@@ -1438,7 +1444,7 @@ def _vis_korrelationstabel(
         if ub is not None and opslag["zone"] == "ok":
             note = (
                 f"**{valgt_t} ved Eᵤ = {ui.mpa(eu)}:** VejDim kræver "
-                f"{ui.mm(ub)} ubundet, hvilket svarer til kurven "
+                f"{ui.laengde(ub)} ubundet, hvilket svarer til kurven "
                 f"Eₒ = {ui.mpa(opslag['eo'])}."
             )
         elif ub is not None and opslag["zone"] in (TRAFIK_UNDER, TRAFIK_OVER):
@@ -1449,7 +1455,7 @@ def _vis_korrelationstabel(
             )
             note = (
                 f"**{valgt_t} ved Eᵤ = {ui.mpa(eu)}:** VejDim kræver "
-                f"{ui.mm(ub)} ubundet, {_pct(opslag['afvigelse_pct'])} "
+                f"{ui.laengde(ub)} ubundet, {_pct(opslag['afvigelse_pct'])} "
                 f"{retning}."
             )
             note += (
@@ -1460,7 +1466,7 @@ def _vis_korrelationstabel(
         elif ub is not None:
             note = (
                 f"**{valgt_t} ved Eᵤ = {ui.mpa(eu)}:** VejDim kræver "
-                f"{ui.mm(ub)} ubundet, hvilket falder uden for "
+                f"{ui.laengde(ub)} ubundet, hvilket falder uden for "
                 f"diagrammernes område."
             )
     if note is None:
@@ -1502,8 +1508,8 @@ def _yder_besked(t_klasse: str, eu: float, opslag: dict) -> None:
         else "under diagrammets laveste kurve"
     )
     tal = (
-        f"VejDim kræver {ui.mm(opslag['t_vejdim_mm'])} ubundet mod "
-        f"{ui.mm(opslag['t_rand_mm'])} for kurven "
+        f"VejDim kræver {ui.laengde(opslag['t_vejdim_mm'])} ubundet mod "
+        f"{ui.laengde(opslag['t_rand_mm'])} for kurven "
         f"Eₒ = {ui.mpa(opslag['eo_rand'])}."
     )
     hoved = (
@@ -1825,7 +1831,7 @@ _KOB_FARVE_2LAG = "#7B3F8C"
 def _kob_tal(v: float | None, decimaler: int = 0) -> str:
     """Tal med dansk tusindtalsseparator og decimalkomma, uden enhed.
 
-    ui.mm() og _dk_num() dækker hver sin halvdel — den ene sætter tusinder,
+    ui.laengde() og _dk_num() dækker hver sin halvdel — den ene sætter tusinder,
     den anden decimalkomma. Regnestykkerne har brug for begge dele på én gang.
     """
     if v is None:
@@ -1836,6 +1842,17 @@ def _kob_tal(v: float | None, decimaler: int = 0) -> str:
     if dec:
         ud = f"{ud},{dec}"
     return "−" + ud[1:] if ud.startswith("-") else ud
+
+
+def _kob_lt(v: float | None, decimaler: int = 0) -> str:
+    """Lagtykkelse i mm som tal i den valgte enhed, uden enhed, jf.
+    ui.laengde_tal(). decimaler gælder mm; i cm vises én decimal mere."""
+    return ui.laengde_tal(v, decimaler)
+
+
+def _kob_l(v: float | None, decimaler: int = 0) -> str:
+    """Lagtykkelse i mm med den valgte enhed, jf. ui.laengde()."""
+    return ui.laengde(v, decimaler)
 
 
 def _kob_esc(tekst) -> str:
@@ -2005,7 +2022,7 @@ def _kob_figur_koersler(t_klasse: str, eu: float, t1: dict) -> str:
     dele.append(
         '<g fill="#9AA39C" font-size="9" text-anchor="middle" '
         'font-family="IBM Plex Mono, monospace">' + "".join(
-            f'<text x="{sx(v):.1f}" y="{_KOB_Y1 + 14:.1f}">{_kob_tal(v)}</text>'
+            f'<text x="{sx(v):.1f}" y="{_KOB_Y1 + 14:.1f}">{_kob_lt(v)}</text>'
             for v in x_ticks
         ) + "</g>"
     )
@@ -2016,7 +2033,7 @@ def _kob_figur_koersler(t_klasse: str, eu: float, t1: dict) -> str:
         f'Underbund Eᵤ [MPa]</text>'
         f'<text x="{(_KOB_X0 + _KOB_X1) / 2:.0f}" y="{_KOB_Y1 + 34:.0f}" '
         f'fill="#4A554E" font-size="9" font-weight="600" text-anchor="middle">'
-        f'Ubunden lagtykkelse SG + BL [mm]</text>'
+        f'Ubunden lagtykkelse SG + BL [{ui.enhed()}]</text>'
     )
     # Kørslerne som en linje med punkter.
     bane = " ".join(f"{sx(t):.1f},{sy(p):.1f}" for t, p in punkter)
@@ -2041,7 +2058,7 @@ def _kob_figur_koersler(t_klasse: str, eu: float, t1: dict) -> str:
     dele.append(
         f'<text x="{px + 9:.1f}" y="{py - 7:.1f}" fill="#12401F" font-size="10" '
         f'font-weight="600" font-family="IBM Plex Mono, monospace">'
-        f'{_kob_tal(ub)} mm</text>'
+        f'{_kob_l(ub)}</text>'
     )
     return (
         f'<svg viewBox="0 0 {_KOB_SVG_B:.0f} {_KOB_SVG_H:.0f}" '
@@ -2151,7 +2168,7 @@ def _kob_figur_diagram(
     dele.append(
         '<g fill="#9AA39C" font-size="9" text-anchor="middle" '
         'font-family="IBM Plex Mono, monospace">' + "".join(
-            f'<text x="{sx(v):.1f}" y="{_KOB_Y1 + 14:.1f}">{_kob_tal(v)}</text>'
+            f'<text x="{sx(v):.1f}" y="{_KOB_Y1 + 14:.1f}">{_kob_lt(v)}</text>'
             for v in x_ticks
         ) + "</g>"
     )
@@ -2162,7 +2179,7 @@ def _kob_figur_diagram(
         f'Underbund Eᵤ [MPa]</text>'
         f'<text x="{(_KOB_X0 + _KOB_X1) / 2:.0f}" y="{_KOB_Y1 + 34:.0f}" '
         f'fill="#4A554E" font-size="9" font-weight="600" text-anchor="middle">'
-        f'Bærelagstykkelse [mm]</text>'
+        f'Bærelagstykkelse [{ui.enhed()}]</text>'
     )
     # Nabokurverne ligger tæt, og etiketterne ville falde sammen, hvis de sad
     # samme sted på hver kurve. Den lave Eo-kurve mærkes derfor højt oppe og
@@ -2291,10 +2308,10 @@ def _kob_trin2(t_klasse: str, eu: float, t1: dict) -> str:
         ]
         if sg is not None:
             linjer += [
-                _kob_esc(_kob_regnelinje("  stabilgrus SG", f"{_kob_tal(sg)} mm")),
-                _kob_esc(_kob_regnelinje("  bundsikring BL", f"{_kob_tal(bl)} mm")),
+                _kob_esc(_kob_regnelinje("  stabilgrus SG", f"{_kob_l(sg)}")),
+                _kob_esc(_kob_regnelinje("  bundsikring BL", f"{_kob_l(bl)}")),
             ]
-        linjer.append(_kob_slutlinje("= ubundet i alt", f"{_kob_tal(ub)} mm"))
+        linjer.append(_kob_slutlinje("= ubundet i alt", f"{_kob_l(ub)}"))
         krop = _kob_formel(*linjer)
         krop += (
             f'<div class="kob-note">Eᵤ = {_kob_esc(ui.mpa(eu))} er et kørt '
@@ -2310,9 +2327,9 @@ def _kob_trin2(t_klasse: str, eu: float, t1: dict) -> str:
                 '<div class="kob-kort">'
                 f'<div class="kob-kort-hoved">NÆRMESTE KØRSEL {mærkat} · '
                 f'EU {p} MPA</div>'
-                f'<div class="kob-kort-linje">SG {_kob_tal(sg)} mm + '
-                f'BL {_kob_tal(bl)} mm</div>'
-                f'<div class="kob-kort-tal">= {_kob_tal(t)} mm</div></div>'
+                f'<div class="kob-kort-linje">SG {_kob_l(sg)} + '
+                f'BL {_kob_l(bl)}</div>'
+                f'<div class="kob-kort-tal">= {_kob_l(t)}</div></div>'
                 for mærkat, p, sg, bl, t in (
                     ("UNDER", t1["lav"], *_kob_koersel_lag(t_klasse, t1["lav"]),
                      t1["t_lav"]),
@@ -2331,9 +2348,9 @@ def _kob_trin2(t_klasse: str, eu: float, t1: dict) -> str:
                 f"{_kob_tal(math.log(t1['hoej'] / t1['lav']), 4)} = "
             ) + f"<b>{_kob_esc(_kob_tal(f, 3))}</b>",
             _kob_esc(
-                f"t = {_kob_tal(t1['t_lav'])} − {_kob_tal(f, 3)} × "
-                f"({_kob_tal(t1['t_lav'])} − {_kob_tal(t1['t_hoej'])}) = "
-            ) + f"<b>{_kob_esc(_kob_tal(ub, ub_dec))} mm</b>",
+                f"t = {_kob_lt(t1['t_lav'])} − {_kob_tal(f, 3)} × "
+                f"({_kob_lt(t1['t_lav'])} − {_kob_lt(t1['t_hoej'])}) = "
+            ) + f"<b>{_kob_esc(_kob_l(ub, ub_dec))}</b>",
         )
         krop += (
             '<div class="kob-note">Interpolationen foretages i log(Eᵤ), ikke '
@@ -2365,7 +2382,7 @@ def _kob_trin2(t_klasse: str, eu: float, t1: dict) -> str:
         2, "VejDims ubundne krav",
         f"{antal} VejDim-kørsler, T1–T6 × Eᵤ 3–40 MPa",
         _kob_kol(krop, figur),
-        resultat=f"{_kob_tal(ub, ub_dec)} mm",
+        resultat=f"{_kob_l(ub, ub_dec)}",
         resultat_note="ubundet i alt, SG + BL",
         chip=chip,
     )
@@ -2396,14 +2413,14 @@ def _kob_trin3(eu: float, eo_aekv: float, t1: dict, t2: dict) -> str:
         _kob_esc(f"uarmeret kurve ved Eᵤ = {_kob_tal(eu)} MPa:"),
         _kob_esc(_kob_regnelinje(
             f"  Eₒ {t2['eo_lav']:>3} MPa  (klasse {kl_lav})",
-            f"{_kob_tal(t2['t_lav'])} mm")),
+            f"{_kob_l(t2['t_lav'])}")),
         _kob_esc(_kob_regnelinje(
             f"  Eₒ {t2['eo_hoej']:>3} MPa  (klasse {kl_hoej})",
-            f"{_kob_tal(t2['t_hoej'])} mm")),
+            f"{_kob_l(t2['t_hoej'])}")),
         "",
         _kob_esc(
-            f"f = ({_kob_tal(ub, ub_dec)} − {_kob_tal(t2['t_lav'])}) / "
-            f"({_kob_tal(t2['t_hoej'])} − {_kob_tal(t2['t_lav'])}) = "
+            f"f = ({_kob_lt(ub, ub_dec)} − {_kob_lt(t2['t_lav'])}) / "
+            f"({_kob_lt(t2['t_hoej'])} − {_kob_lt(t2['t_lav'])}) = "
         ) + f"<b>{_kob_esc(_kob_tal(t2['frac'], 3))}</b>",
         _kob_esc(
             f"Eₒ,ækv = {t2['eo_lav']} + {_kob_tal(t2['frac'], 3)} × "
@@ -2448,13 +2465,13 @@ def _kob_trin4(
         '<div class="kob-klasser">'
         f'<div class="kob-klasse"><div class="kob-klasse-hoved">'
         f'BELASTNINGSKLASSE {kl_lav}<br>Eₒ {t2["eo_lav"]} MPa</div>'
-        f'<div class="kob-klasse-tal">{_kob_tal(t2["t_lav"])} mm</div></div>'
+        f'<div class="kob-klasse-tal">{_kob_l(t2["t_lav"])}</div></div>'
         f'<div class="kob-klasse kob-din"><div class="kob-klasse-hoved">'
         f'DIN KURVE<br>Eₒ,ækv {_kob_tal(eo_aekv)} MPa</div>'
-        f'<div class="kob-klasse-tal">{_kob_tal(ub, ub_dec)} mm</div></div>'
+        f'<div class="kob-klasse-tal">{_kob_l(ub, ub_dec)}</div></div>'
         f'<div class="kob-klasse"><div class="kob-klasse-hoved">'
         f'BELASTNINGSKLASSE {kl_hoej}<br>Eₒ {t2["eo_hoej"]} MPa</div>'
-        f'<div class="kob-klasse-tal">{_kob_tal(t2["t_hoej"])} mm</div></div>'
+        f'<div class="kob-klasse-tal">{_kob_l(t2["t_hoej"])}</div></div>'
         "</div>"
     )
     # Den ustabiliserede række først — den er kalibreret mod VejDims krav —
@@ -2472,8 +2489,8 @@ def _kob_trin4(
     # Bredderne følger de faktiske tal, så opstillingen holder ved både tre-
     # og firecifrede tykkelser.
     e_bred = max(len(r[0]) for r in raekker) + 2
-    tal_bred = max(len(_kob_tal(v)) for _, a, h, *_ in raekker for v in (a, h))
-    res_bred = max(len(_kob_tal(v, dec)) for *_, v, dec in raekker)
+    tal_bred = max(len(_kob_lt(v)) for _, a, h, *_ in raekker for v in (a, h))
+    res_bred = max(len(_kob_lt(v, dec)) for *_, v, dec in raekker)
     kol = max(tal_bred, len(h_lav), len(h_hoej)) + 3
 
     linjer = [
@@ -2490,18 +2507,18 @@ def _kob_trin4(
     for navn, a, h, v, dec in raekker:
         linjer.append(
             _kob_esc(
-                f"{navn:<{e_bred}}{_kob_tal(a):>{kol}}{_kob_tal(h):>{kol}}     "
-                f"{_kob_tal(a):>{tal_bred}} + {f} × "
-                f"({_kob_tal(h):>{tal_bred}} − {_kob_tal(a):>{tal_bred}}) = "
+                f"{navn:<{e_bred}}{_kob_lt(a):>{kol}}{_kob_lt(h):>{kol}}     "
+                f"{_kob_lt(a):>{tal_bred}} + {f} × "
+                f"({_kob_lt(h):>{tal_bred}} − {_kob_lt(a):>{tal_bred}}) = "
             )
-            + f"<b>{_kob_esc(_kob_tal(v, dec).rjust(res_bred))} mm</b>"
+            + f"<b>{_kob_esc(_kob_lt(v, dec).rjust(res_bred))} {ui.enhed()}</b>"
         )
     venstre = klasser + _kob_formel(*linjer)
 
-    basis_red = " og ".join(_kob_tal(ub - r[3]) for r in raekker[1:])
+    basis_red = " og ".join(_kob_lt(ub - r[3]) for r in raekker[1:])
     red_saetning = (
         f"Forskellen mellem øverste og de armerede rækker — "
-        f"{_kob_esc(basis_red)} mm — er basisreduktionen i trin 6. "
+        f"{_kob_esc(basis_red)} {ui.enhed()} — er basisreduktionen i trin 6. "
         if basis_red else ""
     )
     venstre += (
@@ -2572,6 +2589,21 @@ def _kob_trin5(
                 ) + f"<b>{_kob_esc(_kob_tal(data['phi_weighted'], 2))}°</b>",
             ),
         ]
+        # Er φᵥ afrundet efter Indstillinger, afsnit 1, anføres afrundingen
+        # som eget led, så værdien i korrektionsfaktoren kan genfindes.
+        metode = _aktiv_afrunding()["phi_afrunding"]
+        phi_v = data["phi_weighted"]
+        if (
+            abs(phi - phi_v) >= 1e-9
+            and abs(afrunding_mod.afrund_phi(phi_v, metode) - phi) < 1e-9
+        ):
+            poster.append((
+                "Afrundet:",
+                _kob_esc(f"φᵥ = {_kob_tal(phi, 0)}°")
+                + _kob_svag(
+                    f"{_PHI_AFRUNDING_TEKST[metode].lower()}, jf. Indstillinger"
+                ),
+            ))
         navne = ", ".join(
             f"{m['navn']} {_kob_tal(m['phi'], 1)}°" for m in materialer
         )
@@ -2664,34 +2696,34 @@ def _kob_trin6(
         # Mellemregningen står nedtonet efter hvert led. Korrektionerne
         # regnes af den armerede kurve i punktet — aflæsningstrinnets
         # basisværdi — og ikke af den ustabiliserede tykkelse.
-        b_tal = _kob_tal(basis)
+        b_tal = _kob_lt(basis)
         linjer = [
             _kob_esc(_kob_regnelinje(
-                "ustabiliseret bærelagstykkelse", f"{_kob_tal(t_krav)} mm")),
+                "ustabiliseret bærelagstykkelse", f"{_kob_l(t_krav)}")),
             _kob_esc(_kob_regnelinje(
                 "− basisreduktion, referencenet",
-                f"{_kob_tal(t_krav - basis)} mm"))
-            + _kob_svag(f"{_kob_tal(t_krav)} − {b_tal}, jf. trin {aflaes_trin}"),
+                f"{_kob_l(t_krav - basis)}"))
+            + _kob_svag(f"{_kob_lt(t_krav)} − {b_tal}, jf. trin {aflaes_trin}"),
         ]
         if abs(net_kor) >= 0.005:
             linjer.append(
                 _kob_esc(_kob_regnelinje(
                     f"{'+' if net_kor > 0 else '−'} net-korrektion, "
                     f"{net_maerkat}",
-                    f"{_kob_tal(abs(basis * net_kor))} mm"))
+                    f"{_kob_l(abs(basis * net_kor))}"))
                 + _kob_svag(f"{b_tal} × {_kob_tal(abs(net_kor) * 100, 1)} %")
             )
         if abs(phi_kor) >= 1e-9:
             linjer.append(
                 _kob_esc(_kob_regnelinje(
                     f"{'+' if phi_kor > 0 else '−'} φᵥ-korrektion{phi_maerkat}",
-                    f"{_kob_tal(abs(basis * phi_kor))} mm"))
+                    f"{_kob_l(abs(basis * phi_kor))}"))
                 + _kob_svag(f"{b_tal} × {_kob_tal(abs(phi_kor) * 100, 2)} %")
             )
         linjer.append(
             _kob_esc(_kob_regnelinje(
                 "− samlet reduktion",
-                f"{_kob_tal(t_krav - t_arm)} mm"))
+                f"{_kob_l(t_krav - t_arm)}"))
             + _kob_svag(
                 "basisreduktion + net-korrektion + φᵥ-korrektion"
             )
@@ -2706,17 +2738,17 @@ def _kob_trin6(
             if round(op_mm) > 0:
                 linjer.append(
                     _kob_esc(_kob_regnelinje(
-                        f"+ oprunding til nærmeste {afrunding_mod.trin_tekst(trin_mm)}",
-                        f"{_kob_tal(op_mm)} mm"))
-                    + _kob_svag(f"beregnet {_kob_tal(t_arm)} mm, jf. Indstillinger")
+                        f"+ oprunding til nærmeste {ui.laengde(trin_mm)}",
+                        f"{_kob_l(op_mm)}"))
+                    + _kob_svag(f"beregnet {_kob_l(t_arm)}, jf. Indstillinger")
                 )
             if round(min_mm) > 0:
                 linjer.append(
                     _kob_esc(_kob_regnelinje(
                         "+ tillæg til minimumstykkelse",
-                        f"{_kob_tal(min_mm)} mm"))
+                        f"{_kob_l(min_mm)}"))
                     + _kob_svag(
-                        f"mindst {_kob_tal(t_arm_slut - lag_mm)} mm, "
+                        f"mindst {_kob_l(t_arm_slut - lag_mm)}, "
                         "jf. Indstillinger"
                     )
                 )
@@ -2724,7 +2756,7 @@ def _kob_trin6(
                 linjer.append(
                     _kob_esc(_kob_regnelinje(
                         "+ tillæg for mindste lagtykkelse",
-                        f"{_kob_tal(lag_mm)} mm"))
+                        f"{_kob_l(lag_mm)}"))
                     + _kob_svag(
                         _lagtillaeg_tekst(ref, kort=True)
                         or "underliggende lag efter VD, jf. Indstillinger"
@@ -2735,17 +2767,17 @@ def _kob_trin6(
         t_uarm_kor_vist = (ref or {}).get("t_uarmeret_phi_kor_mm") or t_uarm_kor
         hale = ""
         if red_krav is not None:
-            hale = f"−{_kob_tal(red_krav)} % af {_kob_tal(t_krav)}"
+            hale = f"−{_kob_tal(red_krav)} % af {_kob_lt(t_krav)}"
             # Den anden reference nævnes kun, når φᵥ-korrektionen eller
             # oprundingen flytter udgangspunktet — ellers er de to procenter
             # det samme tal.
             if (red_kor is not None and t_uarm_kor_vist
                     and (abs(t_uarm_kor_vist - t_krav) >= 1 or oprundet)):
-                hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_tal(t_uarm_kor_vist)}"
+                hale += f" · −{_kob_tal(red_kor * 100)} % af {_kob_lt(t_uarm_kor_vist)}"
         # Slutresultatet stilles i samme talkolonne som leddene ovenfor og
         # adskilles visuelt fra mellemregningerne.
         slut_etiket = _kob_esc(f"{'Stabiliseret bærelagstykkelse =':<33}")
-        slut_tal = _kob_esc(f"{_kob_tal(t_arm_slut)} mm".rjust(10))
+        slut_tal = _kob_esc(f"{_kob_l(t_arm_slut)}".rjust(10))
         linjer.append(
             '<div class="kob-slutlinje">'
             + slut_etiket
@@ -2757,7 +2789,7 @@ def _kob_trin6(
             f'<div><div class="kob-lag-hoved {klasse}">{navn}</div>'
             + _kob_formel(*linjer) + "</div>"
         )
-        resultater.append(_kob_tal(t_arm_slut))
+        resultater.append(_kob_lt(t_arm_slut))
         if red_krav is not None:
             pct_krav.append(f"−{_kob_tal(red_krav)} %")
 
@@ -2779,7 +2811,7 @@ def _kob_trin6(
         trin_mm = ref_vist.get("afrunding_trin_mm") or _afrundingstrin()
         oprundings_note = (
             " Lagtykkelserne oprundes til nærmeste "
-            f"{_kob_esc(afrunding_mod.trin_tekst(trin_mm))}, jf. Indstillinger; "
+            f"{_kob_esc(ui.laengde(trin_mm))}, jf. Indstillinger; "
             "regnestykket er ført med de beregnede værdier, og oprundingen "
             "står som sidste led."
         )
@@ -2787,10 +2819,10 @@ def _kob_trin6(
         '<div class="kob-note">Basisreduktionen gælder referencenettet i '
         "punktet, og net-korrektionen er det valgte nets afvigelse herfra. "
         "<b>To referencer for procenterne:</b> regnestykket her tager udgangspunkt i den ukorrigerede værdi på "
-        f"{_kob_esc(krav_kilde)} {_kob_esc(_kob_tal(t_krav))} mm, så leddene "
+        f"{_kob_esc(krav_kilde)} {_kob_esc(_kob_l(t_krav))}, så leddene "
         "summerer til resultatet, mens resultatkortet øverst måler "
-        f"reduktionen mod de φᵥ-korrigerede {_kob_esc(_kob_tal(t_uarm_kor_vist))} "
-        "mm, hvor begge sider hviler på de valgte materialer. Begge er "
+        f"reduktionen mod de φᵥ-korrigerede {_kob_esc(_kob_l(t_uarm_kor_vist))}"
+        ", hvor begge sider hviler på de valgte materialer. Begge er "
         "angivet, så de to sæt procenter ikke fremstår som en "
         f"uoverensstemmelse.{oprundings_note}</div>"
         if t_uarm_kor_vist and (abs(t_uarm_kor_vist - t_krav) >= 1 or nogen_oprundet) else
@@ -2801,8 +2833,11 @@ def _kob_trin6(
     return _kob_trin(
         nr, "Reduktion med geonet", f"geonet-databasen, {_kob_esc(net_navn)}",
         krop,
-        resultat=f' <span class="kob-skraa">/</span> '.join(resultater) + " mm",
-        resultat_note=" / ".join(pct_krav) + f" af {_kob_tal(t_krav)}",
+        resultat=(
+            f' <span class="kob-skraa">/</span> '.join(resultater)
+            + f" {ui.enhed()}"
+        ),
+        resultat_note=" / ".join(pct_krav) + f" af {_kob_lt(t_krav)}",
         groent_resultat=True,
         mono_note=True,
     )
@@ -2876,7 +2911,7 @@ def _kob_bk_trin2(
         "",
     ]
     linjer += [
-        _kob_slutlinje(navn, f"{_kob_tal(raa[noegle])} mm")
+        _kob_slutlinje(navn, f"{_kob_l(raa[noegle])}")
         for noegle, navn in navne if noegle in raa
     ]
     venstre = _kob_formel(*linjer)
@@ -2904,7 +2939,7 @@ def _kob_bk_trin2(
         2, "Aflæsning i designdiagrammet",
         f"designdiagram {klasse}, GS-GRID/Tensar-feltforsøg",
         _kob_kol(venstre, figur),
-        resultat=f"{_kob_tal(raa['uarmeret'])} mm",
+        resultat=f"{_kob_l(raa['uarmeret'])}",
         resultat_note="ustabiliseret",
     )
 
@@ -2917,18 +2952,18 @@ def _kob_punkter(
 ) -> tuple[list[tuple[float, str, str]], list[str]]:
     """Punkterne på Eu-linjen i diagramfiguren, med deres signatur."""
     punkter: list[tuple[float, str, str]] = [(t_krav, "#15211A", "ring")]
-    sign = [f'<div class="kob-prik-ring"></div>{_kob_tal(t_krav)} mm krav']
+    sign = [f'<div class="kob-prik-ring"></div>{_kob_l(t_krav)} krav']
     if t_uarm_kor and abs(t_uarm_kor - t_krav) >= 1:
         punkter.append((t_uarm_kor, "#15211A", "fyldt"))
         sign.append('<div class="kob-prik"></div>'
-                    f"{_kob_tal(t_uarm_kor)} mm φᵥ-korrigeret")
+                    f"{_kob_l(t_uarm_kor)} φᵥ-korrigeret")
     for t, farve, mærkat in (
         (t_1lag, _KOB_FARVE_1LAG, "1 lag"), (t_2lag, _KOB_FARVE_2LAG, "2 lag"),
     ):
         if t is not None:
             punkter.append((t, farve, "fyldt"))
             sign.append(f'<div class="kob-prik" style="background:{farve}">'
-                        f"</div>{_kob_tal(t)} mm · {mærkat}")
+                        f"</div>{_kob_l(t)} · {mærkat}")
     return punkter, sign
 
 
@@ -3066,7 +3101,7 @@ def _render_kobling_sektion(
     resultat = (ref_1 or ref_2 or {}).get("t_armeret_mm")
     overskrift = f"**Sådan er resultatet beregnet** · {grundlag_tekst}"
     if resultat is not None:
-        overskrift += f" til {ui.mm(resultat)} bærelag"
+        overskrift += f" til {ui.laengde(resultat)} bærelag"
     with st.expander(overskrift, expanded=False):
         st.html(f'<div class="kob">{krop}{fod}</div>')
 
@@ -3534,7 +3569,7 @@ def _optimal_beregning(
     if round(oprunding_mm) > 0:
         linjer.append((
             "+",
-            f"Oprunding til nærmeste {afrunding_mod.trin_tekst(trin)}",
+            f"Oprunding til nærmeste {ui.laengde(trin)}",
             round(oprunding_mm),
         ))
     if round(minimum_mm) > 0:
@@ -3552,11 +3587,11 @@ def _optimal_beregning(
 def _optimal_tooltip(beregning: dict) -> str:
     """Regnestykket bag den optimale tykkelse som tekst til title-attributten."""
     linjer = [
-        f"{tegn} {titel}: {ui.mm(mm)}".strip()
+        f"{tegn} {titel}: {ui.laengde(mm)}".strip()
         for tegn, titel, mm in beregning["linjer"]
     ]
     linjer.append(
-        f"= Stabiliseret bærelagstykkelse: {ui.mm(beregning['t_mm'])}"
+        f"= Stabiliseret bærelagstykkelse: {ui.laengde(beregning['t_mm'])}"
     )
     linjer.insert(
         0,
@@ -3599,19 +3634,22 @@ def _lagtillaeg_tekst(res: dict | None, *, kort: bool = False) -> str | None:
         if l["tykkelse_mm"] > foer.get(l["navn"], 0.0) + 0.5
     ]
     if kort:
-        tekst = " + ".join(_kob_tal(l["tykkelse_mm"]) for l in efter) + " mm"
+        tekst = (
+            " + ".join(_kob_lt(l["tykkelse_mm"]) for l in efter)
+            + f" {ui.enhed()}"
+        )
         if oegede:
             tekst += "; " + ", ".join(
-                f"{navn} øget fra {_kob_tal(fra)} mm" for navn, fra, _ in oegede
+                f"{navn} øget fra {_kob_l(fra)}" for navn, fra, _ in oegede
             )
         return tekst + ", jf. Indstillinger"
     tekst = (
-        " + ".join(f"{l['navn']} {ui.mm(l['tykkelse_mm'])}" for l in efter)
-        + f" = {ui.mm(samlet)}."
+        " + ".join(f"{l['navn']} {ui.laengde(l['tykkelse_mm'])}" for l in efter)
+        + f" = {ui.laengde(samlet)}."
     )
     for navn, fra, til in oegede:
         tekst += (
-            f" {navn} er øget fra {ui.mm(fra)} til {ui.mm(til)}, som er "
+            f" {navn} er øget fra {ui.laengde(fra)} til {ui.laengde(til)}, som er "
             "mindste lagtykkelse for lagtypen."
         )
     return tekst + " Jf. Indstillinger, afsnit 4."
@@ -3698,12 +3736,12 @@ def _render_valgt_net_detaljer(
             if ender else f"Net-korrektion, indeks {index}"
         )
         rows = [
-            _raekke("", "Ustabiliseret bærelagstykkelse", ui.mm(t_uarm_eks)),
-            _raekke("−", "Basisreduktion, referencenet", ui.mm(abs(basis_mm or 0))),
+            _raekke("", "Ustabiliseret bærelagstykkelse", ui.laengde(t_uarm_eks)),
+            _raekke("−", "Basisreduktion, referencenet", ui.laengde(abs(basis_mm or 0))),
             _raekke(
                 "−" if (net_mm or 0) < 0 else "+",
                 net_titel,
-                ui.mm(abs(net_mm or 0)),
+                ui.laengde(abs(net_mm or 0)),
                 forklaring=net_forklaring,
             ),
         ]
@@ -3716,18 +3754,18 @@ def _render_valgt_net_detaljer(
                         if abs(phi_arm - phi) >= 0.005
                         else f"φᵥ-korrektion, {phi_tekst}"
                     ),
-                    ui.mm(abs(phi_mm or 0)),
+                    ui.laengde(abs(phi_mm or 0)),
                 )
             )
         if oprunding_mm > 0:
             rows.append(
                 _raekke(
                     "+",
-                    f"Oprunding til nærmeste {afrunding_mod.trin_tekst(trin_arm)}",
-                    ui.mm(oprunding_mm),
+                    f"Oprunding til nærmeste {ui.laengde(trin_arm)}",
+                    ui.laengde(oprunding_mm),
                     forklaring=(
-                        f"Beregnet tykkelse {ui.mm(t_arm_eks)}. Lagtykkelsen "
-                        f"oprundes til nærmeste {afrunding_mod.trin_tekst(trin_arm)}, "
+                        f"Beregnet tykkelse {ui.laengde(t_arm_eks)}. Lagtykkelsen "
+                        f"oprundes til nærmeste {ui.laengde(trin_arm)}, "
                         "jf. Indstillinger."
                     ),
                 )
@@ -3737,10 +3775,10 @@ def _render_valgt_net_detaljer(
                 _raekke(
                     "+",
                     "Tillæg til minimumstykkelse",
-                    ui.mm(minimum_mm),
+                    ui.laengde(minimum_mm),
                     forklaring=(
                         "Den samlede bærelagstykkelse sættes mindst til "
-                        f"minimumstykkelsen {ui.mm(produkt.get('t_min_mm') or t_arm)} "
+                        f"minimumstykkelsen {ui.laengde(produkt.get('t_min_mm') or t_arm)} "
                         "for klassen, jf. Indstillinger."
                     ),
                 )
@@ -3750,7 +3788,7 @@ def _render_valgt_net_detaljer(
                 _raekke(
                     "+",
                     "Tillæg for mindste lagtykkelse",
-                    ui.mm(lag_mm),
+                    ui.laengde(lag_mm),
                     forklaring=(
                         _lagtillaeg_tekst(produkt)
                         or "Lagtykkelsen øges, så de underliggende lag mindst "
@@ -3778,7 +3816,7 @@ def _render_valgt_net_detaljer(
                 f'{html.escape(str(optimal["indeks"]))} · net-korrektion '
                 f'{html.escape(_pct_fortegn(optimal["kor"]))}</span>'
                 '<span class="rt-detaljer-optimal-tal">'
-                f'{html.escape(ui.mm(optimal["t_mm"]))}</span>'
+                f'{html.escape(ui.laengde(optimal["t_mm"]))}</span>'
                 '</div>'
                 '<div class="rt-detaljer-optimal-note">'
                 'Hovedresultatet ovenfor er opgjort ved den konservative ende, '
@@ -3802,9 +3840,9 @@ def _render_valgt_net_detaljer(
             ref_note = (
                 '<div class="rt-detaljer-optimal-note">'
                 "Regnestykket tager udgangspunkt i den ukorrigerede værdi på "
-                f"{html.escape(ui.mm(t_uarm_eks))}. Resultatkortet øverst måler "
+                f"{html.escape(ui.laengde(t_uarm_eks))}. Resultatkortet øverst måler "
                 "reduktionen mod de φᵥ-korrigerede "
-                f"{html.escape(ui.mm(t_uarm_kor))} og angiver derfor "
+                f"{html.escape(ui.laengde(t_uarm_kor))} og angiver derfor "
                 f"{html.escape(ui.procent((red_kor_pct or 0) * 100))}"
                 ".</div>"
             )
@@ -3982,11 +4020,11 @@ def _mm_res(res: dict | None, felt: str = "t_armeret_mm") -> str:
     if not res or res.get(felt) is None:
         return "—"
     v = res[felt]
-    tekst = ui.mm(v)
+    tekst = ui.laengde(v)
     if _aktiv_afrunding()["vis_eksakt"]:
         e = res.get(afrunding_mod.eksakt_navn(felt))
         if afrunding_mod.er_oprundet(v, e):
-            tekst += f" ({ui.mm(e)})"
+            tekst += f" ({ui.laengde(e)})"
     return tekst
 
 
@@ -4207,9 +4245,12 @@ def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str, str]:
         for p in produkter
     })
     if len(dk_unik) == 1:
-        dk_str = f"{ui.mm(dk_unik[0])}"
+        dk_str = f"{ui.laengde(dk_unik[0])}"
     else:
-        dk_str = f"{dk_unik[0]:.0f}–{ui.mm(dk_unik[-1])} (varierer pr. produkt)"
+        dk_str = (
+            f"{ui.laengde_tal(dk_unik[0])}–{ui.laengde(dk_unik[-1])} "
+            "(varierer pr. produkt)"
+        )
 
     korn_alle = [p["max_korn"] for p in produkter]
     korn_unik = sorted({k for k in korn_alle if k is not None})
@@ -4232,10 +4273,12 @@ def _krav_for_gruppe(gruppe: dict) -> tuple[str, str, str, str]:
     min_afst = sorted({p.get("min_spacing_mm", 200) for p in produkter})
     max_afst = sorted({p.get("max_spacing_mm", 400) for p in produkter})
     if len(min_afst) == 1 and len(max_afst) == 1:
-        afstand_str = f"{min_afst[0]:.0f}–{ui.mm(max_afst[0])}"
+        afstand_str = (
+            f"{ui.laengde_tal(min_afst[0])}–{ui.laengde(max_afst[0])}"
+        )
     else:
         afstand_str = (
-            f"{min(min_afst):.0f}–{ui.mm(max(max_afst))} "
+            f"{ui.laengde_tal(min(min_afst))}–{ui.laengde(max(max_afst))} "
             "(varierer pr. produkt)"
         )
 
@@ -4502,25 +4545,25 @@ def _status_for_krav(
     if diff_kons >= 0:
         if diff_best is not None and diff_best > diff_kons:
             return (
-                f"{ui.mm(diff_kons)} i overskud\n({ui.mm(diff_best)} optimalt)",
+                f"{ui.laengde(diff_kons)} i overskud\n({ui.laengde(diff_best)} optimalt)",
                 "success",
             )
-        return f"{ui.mm(diff_kons)} i overskud", "success"
+        return f"{ui.laengde(diff_kons)} i overskud", "success"
 
     # Hvis best-case er tilstrækkelig men konservativ ikke → orange (interval)
     if diff_best is not None and diff_best >= 0:
         return (
-            f"{ui.mm(-diff_kons)} for lidt (optimalt {ui.mm(diff_best)} i overskud)",
+            f"{ui.laengde(-diff_kons)} for lidt (optimalt {ui.laengde(diff_best)} i overskud)",
             "warning",
         )
 
     # Begge mangler → rød. Konservativ stor (størst mangler), optimal i parentes.
     if diff_best is not None:
         return (
-            f"{ui.mm(-diff_kons)} for lidt\n({ui.mm(-diff_best)} optimalt)",
+            f"{ui.laengde(-diff_kons)} for lidt\n({ui.laengde(-diff_best)} optimalt)",
             "danger",
         )
-    return f"{ui.mm(-diff_kons)} for lidt", "danger"
+    return f"{ui.laengde(-diff_kons)} for lidt", "danger"
 
 
 def _phi_kurver(res_1: dict | None, res_2: dict | None) -> dict | None:
@@ -4665,8 +4708,8 @@ def _render_opbygningsvisualisering(
                 return navn
             t1 = _produkt_t(prod_1lag, navn)
             t2 = _produkt_t(prod_2lag, navn)
-            t1_str = f"{ui.mm(t1)}" if t1 is not None else "—"
-            t2_str = f"{ui.mm(t2)}" if t2 is not None else "—"
+            t1_str = f"{ui.laengde(t1)}" if t1 is not None else "—"
+            t2_str = f"{ui.laengde(t2)}" if t2 is not None else "—"
             return f"{navn}  ·  1 lag: {t1_str}  ·  2 lag: {t2_str}"
 
         dd_kol, _ = st.columns([1, 1])
@@ -4904,7 +4947,7 @@ def _render_opbygning_afsnit(
     indtastet = _indtastet_total(materialer)
     note = "Snit i samme lodrette skala"
     if indtastet:
-        note += f" · stiplet linje = indtastet {ui.mm(indtastet)}"
+        note += f" · stiplet linje = indtastet {ui.laengde(indtastet)}"
     elif standard_opdeling and standard_opdeling.get("spec") is not None:
         note += (
             " · stabilgrus og bundsikring viser en typisk opbygning; "
@@ -5093,7 +5136,9 @@ def _render_oversigt_expanders(
             a = _advarsel_med_lagtekst(a, lm)
         if a not in seen_a:
             seen_a.add(a)
-            advarsler_unik.append(a)
+            # Advarslerne dannes i mm af core.placement og angiver alene
+            # dæklag og afstande; de omregnes til den valgte enhed.
+            advarsler_unik.append(enhed_mod.konverter_tekst(a, ui.enhed()))
 
     # --- Samlet opbygning vs. minimumtykkelse (1 lag / 2 lag) -----------
     # Én samlet advarsel der sammenligner brugerens samlede materialetykkelse
@@ -5111,17 +5156,17 @@ def _render_oversigt_expanders(
         if t_min_2 is not None and under_1 and not under_2:
             # 1 lag utilstrækkeligt, men 2 lag er nok → foreslå 2 lag
             opbyg_adv = (
-                f"Den samlede foreslåede opbygning ({ui.mm(total_opbygning)}) er "
-                f"mindre end minimumtykkelsen ved 1 lag geonet ({ui.mm(t_min_1)}), "
-                f"men tilstrækkelig ved 2 lag geonet ({ui.mm(t_min_2)}). "
+                f"Den samlede foreslåede opbygning ({ui.laengde(total_opbygning)}) er "
+                f"mindre end minimumtykkelsen ved 1 lag geonet ({ui.laengde(t_min_1)}), "
+                f"men tilstrækkelig ved 2 lag geonet ({ui.laengde(t_min_2)}). "
                 f"Anvend 2 lag geonet for denne opbygning."
             )
         elif t_min_1 is not None and t_min_2 is not None:
             # Utilstrækkelig ved både 1 og 2 lag
             opbyg_adv = (
-                f"Den samlede foreslåede opbygning ({ui.mm(total_opbygning)}) er "
+                f"Den samlede foreslåede opbygning ({ui.laengde(total_opbygning)}) er "
                 f"mindre end den beregnede minimumtykkelse ved både 1 lag "
-                f"({ui.mm(t_min_1)}) og 2 lag geonet ({ui.mm(t_min_2)}). "
+                f"({ui.laengde(t_min_1)}) og 2 lag geonet ({ui.laengde(t_min_2)}). "
                 f"Øg den samlede materialetykkelse, eller anvend materialer med "
                 f"højere friktionsvinkel."
             )
@@ -5130,9 +5175,9 @@ def _render_oversigt_expanders(
             t_kendt = t_min_1 if t_min_1 is not None else t_min_2
             lag_txt = "1 lag" if t_min_1 is not None else "2 lag"
             opbyg_adv = (
-                f"Den samlede foreslåede opbygning ({ui.mm(total_opbygning)}) er "
+                f"Den samlede foreslåede opbygning ({ui.laengde(total_opbygning)}) er "
                 f"mindre end minimumtykkelsen ved {lag_txt} geonet "
-                f"({ui.mm(t_kendt)}). Øg den samlede materialetykkelse, eller "
+                f"({ui.laengde(t_kendt)}). Øg den samlede materialetykkelse, eller "
                 f"anvend materialer med højere friktionsvinkel."
             )
         if opbyg_adv not in seen_a:
@@ -5153,7 +5198,7 @@ def _render_oversigt_expanders(
             a = _advarsel_med_lagtekst(a, lm)
         if a not in seen_placeringsanbefaling:
             seen_placeringsanbefaling.add(a)
-            anbefalinger.append(a)
+            anbefalinger.append(enhed_mod.konverter_tekst(a, ui.enhed()))
 
     # Anbefalinger bruger den afrundede (praktisk indbyggelige) tykkelse —
     # det er den værdi der konkret skal bygges, og som matcher kortenes
@@ -5165,17 +5210,17 @@ def _render_oversigt_expanders(
              if p.get("t_armeret_mm_min") is not None),
             None,
         )
-        t_1_str = f"<b>{ui.mm(bedste_1['t_armeret_mm'])}</b>"
+        t_1_str = f"<b>{ui.laengde(bedste_1['t_armeret_mm'])}</b>"
         if interval_1 is not None:
             t_1_best = round(interval_1["t_armeret_mm_min"])
             t_1_str = (
                 f"{t_1_str}, og under optimale forhold "
-                f"helt ned til <b>{t_1_best} mm</b>"
+                f"helt ned til <b>{ui.laengde(t_1_best)}</b>"
             )
         msg = (
             f"Mindst mulige bærelagstykkelse med 1 lag geonet er "
             f"{t_1_str} ({_navne_kort(bedste_1)}). "
-            f"Ved opbygninger over 500 mm kan der med fordel anvendes "
+            f"Ved opbygninger over {ui.laengde(500)} kan der med fordel anvendes "
             f"2 lag net for yderligere reduktion"
         )
         if bedste_2 is not None:
@@ -5184,12 +5229,12 @@ def _render_oversigt_expanders(
                  if p.get("t_armeret_mm_min") is not None),
                 None,
             )
-            t_2_str = f"<b>{ui.mm(bedste_2['t_armeret_mm'])}</b>"
+            t_2_str = f"<b>{ui.laengde(bedste_2['t_armeret_mm'])}</b>"
             if interval_2 is not None:
                 t_2_best = round(interval_2["t_armeret_mm_min"])
                 t_2_str = (
                     f"{t_2_str}, og under optimale forhold "
-                    f"<b>{t_2_best} mm</b>"
+                    f"<b>{ui.laengde(t_2_best)}</b>"
                 )
             msg += f" — her: {t_2_str} ({_navne_kort(bedste_2)})."
         else:
@@ -5199,11 +5244,11 @@ def _render_oversigt_expanders(
     if bedste_2 is not None and bedste_2["t_armeret_mm"] < 400:
         msg = (
             f"Mindst mulige tykkelse med 2 lag geonet er kun "
-            f"<b>{ui.mm(bedste_2['t_armeret_mm'])}</b>. "
+            f"<b>{ui.laengde(bedste_2['t_armeret_mm'])}</b>. "
             f"1 lag geonet er sandsynligvis tilstrækkeligt for denne belastning"
         )
         if bedste_1 is not None:
-            msg += f" (1 lag giver <b>{ui.mm(bedste_1['t_armeret_mm'])}</b>)."
+            msg += f" (1 lag giver <b>{ui.laengde(bedste_1['t_armeret_mm'])}</b>)."
         else:
             msg += "."
         anbefalinger.append(msg)
@@ -5288,9 +5333,9 @@ def _render_oversigt_expanders(
     # --- Udførelseskrav ---------------------------------------------------
     with st.expander("Udførelseskrav"):
         st.markdown("**Generelle krav ved udførelse med geonet:**")
-        st.markdown("""
+        st.markdown(f"""
 - Underbund jævnes og planeres — ingen skarpe fremspring eller huller
-- Komprimering i lag på maksimalt 200–300 mm
+- Komprimering i lag på maksimalt {ui.laengde_tal(200)}–{ui.laengde(300)}
 - Direkte kørsel på udlagt geonet er **ikke tilladt**
 - Overlæg ved samlinger udføres efter kravene for det valgte produkt
 - Geonettet udlægges stramt uden folder eller bølger
@@ -5303,8 +5348,8 @@ def _render_oversigt_expanders(
             min_dk_mm = krav["min_top_cover_mm"]
             overlap_mm, overlap_betingelse = overlap_krav_mm(krav, eu)
             afstand_str = (
-                f"{krav['min_spacing_mm']:.0f}–"
-                f"{ui.mm(krav['max_spacing_mm'])}"
+                f"{ui.laengde_tal(krav['min_spacing_mm'])}–"
+                f"{ui.laengde(krav['max_spacing_mm'])}"
             )
             if geonet["max_korn"] is not None:
                 korn_str = f"**{geonet['max_korn']} mm**"
@@ -5312,9 +5357,9 @@ def _render_oversigt_expanders(
                 korn_str = "**ikke specificeret** — kontakt leverandør"
             st.markdown(
                 f"**Krav for {navn_vis}:**\n"
-                f"- Minimum dæklag over geonet: **{min_dk_mm} mm**\n"
+                f"- Minimum dæklag over geonet: **{ui.laengde(min_dk_mm)}**\n"
                 f"- Afstand mellem geonetlag: **{afstand_str}**\n"
-                f"- Minimum overlæg ved samlinger: **{ui.mm(overlap_mm)}** "
+                f"- Minimum overlæg ved samlinger: **{ui.laengde(overlap_mm)}** "
                 f"({overlap_betingelse})\n"
                 f"- Max kornstørrelse i kontakt med geonet: {korn_str}"
             )
@@ -5397,14 +5442,14 @@ def _render_breakdown_tabel(
             pct_str = ui.procent(red_pct * 100)
             red_html = (
                 f'<span style="color:{GRØN};font-size:0.85em;margin-left:10px">'
-                f'Reduceres {ui.mm(red_mm)} fra ustabiliseret ({pct_str})'
+                f'Reduceres {ui.laengde(red_mm)} fra ustabiliseret ({pct_str})'
                 f'</span>'
             )
         result_html = (
             f'<div style="border-top:1px solid #C8E6C9;margin-top:6px;'
             f'padding-top:6px;display:flex;align-items:baseline;gap:6px">'
             f'<span style="font-size:1.25rem;font-weight:700;color:{GRØN}">'
-            f'= {ui.mm(t_final)}</span>'
+            f'= {ui.laengde(t_final)}</span>'
             f'{red_html}'
             f'</div>'
         )
@@ -5451,7 +5496,7 @@ def _render_breakdown_best_case(
         red_mm = round(t_uarm - t_best)
         red_pct = (t_uarm - t_best) / t_uarm
         reduktion_txt = (
-            f" (reduceres {ui.mm(red_mm)} fra ustabiliseret, "
+            f" (reduceres {ui.laengde(red_mm)} fra ustabiliseret, "
             f"{ui.procent(red_pct * 100)})"
         )
     else:
@@ -5460,9 +5505,9 @@ def _render_breakdown_best_case(
         f'<div style="font-size:0.85rem;color:#444;'
         f'padding:4px 10px 0 10px;margin-top:-6px">'
         f'Optimal ende (effektindeks i øvre ende, net-kor {kor_pct} %): '
-        f'<b>{ui.mm(t_best)}</b>{reduktion_txt} — '
-        f'konservativ: <b>{ui.mm(t_konservativ)}</b> · '
-        f'optimal: <b>{ui.mm(t_best)}</b>'
+        f'<b>{ui.laengde(t_best)}</b>{reduktion_txt} — '
+        f'konservativ: <b>{ui.laengde(t_konservativ)}</b> · '
+        f'optimal: <b>{ui.laengde(t_best)}</b>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -5549,12 +5594,12 @@ def _vis_beregnings_breakdown(
             t_b_u = ref_uarm["t_basis_uarm_mm"]
             phi_kor_mm_u = t_b_u * phi_kor
             rows_u: list[tuple[str, str, str]] = [
-                ("T_basis (opslag)", f"{ui.mm(t_b_u)}", ""),
+                ("T_basis (opslag)", f"{ui.laengde(t_b_u)}", ""),
             ]
             if abs(phi_kor_mm_u) > 0.5:
                 rows_u.append((
                     "φᵥ-korrektion",
-                    f"{_dk_num(phi_kor_mm_u, '+.0f')} mm",
+                    ui.laengde_fortegn(phi_kor_mm_u),
                     f"φᵥ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
                 ))
             else:
@@ -5574,15 +5619,15 @@ def _vis_beregnings_breakdown(
                 phi_kor_mm_1 = t_b_1 * phi_kor
                 net_kor_mm_1 = t_b_1 * net_kor_1
                 rows_1: list[tuple[str, str, str]] = [
-                    ("T_basis_stabiliseret (opslag)", f"{ui.mm(t_b_1)}", ""),
+                    ("T_basis_stabiliseret (opslag)", f"{ui.laengde(t_b_1)}", ""),
                     (
                         "φᵥ-korrektion",
-                        f"{_dk_num(phi_kor_mm_1, '+.0f')} mm",
+                        ui.laengde_fortegn(phi_kor_mm_1),
                         f"φᵥ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
                     ),
                     (
                         "Net-korrektion",
-                        f"{_dk_num(net_kor_mm_1, '+.0f')} mm",
+                        ui.laengde_fortegn(net_kor_mm_1),
                         f"({_dk_num(net_kor_1, '+.2f')})",
                     ),
                 ]
@@ -5607,15 +5652,15 @@ def _vis_beregnings_breakdown(
                 phi_kor_mm_2 = t_b_2 * phi_kor
                 net_kor_mm_2 = t_b_2 * net_kor_2
                 rows_2: list[tuple[str, str, str]] = [
-                    ("T_basis_stabiliseret (opslag)", f"{ui.mm(t_b_2)}", ""),
+                    ("T_basis_stabiliseret (opslag)", f"{ui.laengde(t_b_2)}", ""),
                     (
                         "φᵥ-korrektion",
-                        f"{_dk_num(phi_kor_mm_2, '+.0f')} mm",
+                        ui.laengde_fortegn(phi_kor_mm_2),
                         f"φᵥ = {_dk_num(phi, '.1f')}°  ({_dk_num(phi_kor, '+.4f')})",
                     ),
                     (
                         "Net-korrektion",
-                        f"{_dk_num(net_kor_mm_2, '+.0f')} mm",
+                        ui.laengde_fortegn(net_kor_mm_2),
                         f"({_dk_num(net_kor_2, '+.2f')})",
                     ),
                 ]
@@ -5937,7 +5982,7 @@ def _vis_resultatkort(
     if t_uarm is None:
         return
     if t_uarm_raa is not None and abs(t_uarm_raa - t_uarm) >= 1:
-        note_uarm += f" ({ui.mm(t_uarm_raa)} ukorrigeret)"
+        note_uarm += f" ({ui.laengde(t_uarm_raa)} ukorrigeret)"
     vis_eksakt = _aktiv_afrunding()["vis_eksakt"]
 
     def _beregnet(res: dict | None, felt: str, t: float | None) -> str | None:
@@ -5947,7 +5992,7 @@ def _vis_resultatkort(
         e = res.get(afrunding_mod.eksakt_navn(felt))
         if not afrunding_mod.er_oprundet(t, e):
             return None
-        return f"beregnet {ui.mm(e)}"
+        return f"beregnet {ui.laengde(e)}"
 
     def _kort(
         etiket: str, t: float | None, navne: str, res: dict | None,
@@ -5961,9 +6006,9 @@ def _vis_resultatkort(
             red_mm, red_pct = t_uarm - t, (t_uarm - t) / t_uarm
         kort = {
             "etiket": etiket,
-            "vaerdi": ui.mm(t).replace(" mm", ""),
+            "vaerdi": ui.laengde_tal(t),
             "beregnet": _beregnet(res, "t_armeret_mm", t),
-            "delta": f"{ui.fortegn(-red_mm)} mm",
+            "delta": ui.laengde_fortegn(-red_mm),
             "delta_note": f"{ui.procent((red_pct or 0) * 100)} tyndere",
         }
         if navne:
@@ -5985,11 +6030,11 @@ def _vis_resultatkort(
     if kort_2 and _holder(t_2):
         kort_2["anbefalet"] = True
         if indtastet_total is not None:
-            kort_2["delta_note"] += f" · holder ved {ui.mm(indtastet_total)}"
+            kort_2["delta_note"] += f" · holder ved {ui.laengde(indtastet_total)}"
     elif kort_1 and _holder(t_1):
         kort_1["anbefalet"] = True
         if indtastet_total is not None:
-            kort_1["delta_note"] += f" · holder ved {ui.mm(indtastet_total)}"
+            kort_1["delta_note"] += f" · holder ved {ui.laengde(indtastet_total)}"
 
     # Den ustabiliserede tykkelse er den φᵥ-korrigerede; dens beregnede
     # værdi ligger under det tilsvarende eksakt-felt i samme resultat.
@@ -5999,7 +6044,7 @@ def _vis_resultatkort(
         beregnet_uarm = _beregnet(res_uarm, "t_uarmeret_mm", t_uarm)
     kort = [{
         "etiket": "Uden geonet" if standard else "Nødvendig uden geonet",
-        "vaerdi": ui.mm(t_uarm).replace(" mm", ""),
+        "vaerdi": ui.laengde_tal(t_uarm),
         "beregnet": beregnet_uarm,
         "note": note_uarm,
     }]
@@ -6349,12 +6394,13 @@ def _tusind(v: float) -> str:
 
 
 def _delta_mm(v: float) -> str:
-    """Difference i mm med fortegn og typografisk minus: '−375 mm', '+49 mm'.
+    """Difference med fortegn og typografisk minus i den valgte enhed:
+    '−375 mm', '+49 mm' / '−37,5 cm'.
 
     ui.fortegn() angiver intet plus. I reduktionsopdelingen er fortegnet
     meningsbærende, idet net-korrektionen kan både spare og koste tykkelse.
     """
-    return f"{v:+,.0f} mm".replace(",", ".").replace("-", "−")
+    return ui.laengde_fortegn(v)
 
 
 def _phi_tabel_data(materialer: list[dict]) -> dict:
@@ -6766,6 +6812,11 @@ def _input_materialelag_med_korrektioner() -> tuple[list[dict], float]:
         else:
             phi = phi_weighted
 
+    # φᵥ afrundes efter Indstillinger, afsnit 1, før korrektionen bestemmes,
+    # jf. core.afrunding.afrund_phi(). Beregningen afrunder på samme måde.
+    phi_metode = _aktiv_afrunding()["phi_afrunding"]
+    phi_foer = phi
+    phi = afrunding_mod.afrund_phi(phi, phi_metode)
     phi_kor = K_PHI * (phi - PHI_BASIS)
     with korrektion_kol:
         ui.etiket("φᵥ-korrektion")
@@ -6774,7 +6825,12 @@ def _input_materialelag_med_korrektioner() -> tuple[list[dict], float]:
             st.code(
                 f"φᵥ = Σ(tᵢ × φᵢ) / Σ(tᵢ)\n"
                 f"  = {_dk_num(data['total_bidrag'], '.0f')} / {_dk_num(data['total_v'], '.0f')}"
-                f" = {_dk_num(phi_weighted, '.2f')}°",
+                f" = {_dk_num(phi_weighted, '.2f')}°"
+                + (
+                    f"\n  ≈ {_dk_num(phi, '.0f')}°"
+                    f" ({_PHI_AFRUNDING_TEKST[phi_metode].lower()})"
+                    if abs(phi - phi_foer) >= 1e-9 else ""
+                ),
                 language=None,
             )
         with st.container(border=True):
@@ -6828,7 +6884,7 @@ def render_brugerdefineret() -> None:
             total = _indtastet_total(materialer)
             phi_ord = "vægtet φᵥ"
             trin2.opsummering = (
-                f"{len(materialer)} lag · {ui.mm(total)} · "
+                f"{len(materialer)} lag · {ui.laengde(total)} · "
                 f"{phi_ord} {ui.grader(phi)} · "
                 f"k<sub>φ</sub> {_pct_fortegn(K_PHI * (phi - PHI_BASIS), 1)}"
             )
@@ -8951,7 +9007,8 @@ def render_rapport() -> None:
                 key="rap_vis_2lag",
                 help=(
                     None if to_lag_muligt
-                    else "2 lag geonet anvendes kun ved opbygninger ≥ 500 mm "
+                    else "2 lag geonet anvendes kun ved opbygninger ≥ "
+                         f"{ui.laengde(500)} "
                          "(beregnet 1-lag tykkelse) — derfor ikke relevant her."
                 ),
             )
@@ -9285,6 +9342,9 @@ def render_rapport() -> None:
             "valg": {
                 "vis_indtastet": bool(vis_indtastet_aktiv),
                 **grundlag_valg,
+                # Rapportens tykkelser angives i den valgte enhed, jf.
+                # Indstillinger, afsnit 2.
+                "enhed": ui.enhed(),
             },
         }
 
@@ -9432,6 +9492,21 @@ _AFRUNDING_REDUKTION_VALG = (
 )
 
 
+_PHI_AFRUNDING_TEKST: dict[str, str] = {
+    afrunding_mod.PHI_AFRUNDING_INGEN: "Ingen afrunding",
+    afrunding_mod.PHI_AFRUNDING_NED: "Nedrunding til hel grad",
+    afrunding_mod.PHI_AFRUNDING_NAERMESTE: "Afrunding til nærmeste hele grad",
+}
+_PHI_AFRUNDING_KORT: dict[str, str] = {
+    afrunding_mod.PHI_AFRUNDING_NED: "φᵥ nedrundet",
+    afrunding_mod.PHI_AFRUNDING_NAERMESTE: "φᵥ afrundet",
+}
+_ENHED_TEKST: dict[str, str] = {
+    enhed_mod.ENHED_MM: "mm",
+    enhed_mod.ENHED_CM: "cm",
+}
+
+
 def _afrunding_trin_tekst(trin: int) -> str:
     return "1 mm (ingen oprunding)" if trin <= 1 else f"{trin} mm"
 
@@ -9460,6 +9535,9 @@ def render_indstillinger() -> None:
             "fordeles i samme trin, så de tilsammen giver den oprundede "
             "tykkelse. Mellemregningerne føres med de beregnede værdier, og "
             "oprundingen står som sidste led, så regnestykket kan efterregnes."
+            "\n\n"
+            "Den vægtede friktionsvinkel φᵥ kan desuden afrundes til hele "
+            "grader, før korrektionen for friktionsvinklen bestemmes."
         )
         _gaelder(standard=True, brugerdefineret=True, ignorer_klassisk=True)
         kol_trin, kol_red = st.columns([1, 1.4])
@@ -9499,11 +9577,31 @@ def render_indstillinger() -> None:
                 "oprundingen ikke ændrer værdien."
             ),
         )
+        phi_afrunding = st.radio(
+            "Afrunding af friktionsvinklen φᵥ",
+            afrunding_mod.PHI_AFRUNDING_VALG,
+            index=afrunding_mod.PHI_AFRUNDING_VALG.index(afr["phi_afrunding"]),
+            format_func=lambda v: _PHI_AFRUNDING_TEKST[v],
+            key="ind_afr_phi",
+            horizontal=True,
+            help=(
+                "Ingen afrunding (standard): φᵥ anvendes som beregnet.\n\n"
+                "Nedrunding til hel grad: 38,6° anvendes som 38°. En lavere "
+                "φᵥ giver en tykkere opbygning, og afrundingen er dermed på "
+                "den sikre side.\n\n"
+                "Afrunding til nærmeste hele grad: 38,6° anvendes som 39° og "
+                "38,4° som 38°.\n\n"
+                "Afrundingen gælder både den vægtede og en manuelt indtastet "
+                "φᵥ samt φᵥ for hver opbygning, jf. afsnit 5. Standard "
+                "regnes med referencematerialet, φᵥ = 37°, og berøres ikke."
+            ),
+        )
 
         ny_afr = afrunding_mod.normaliser({
             "trin_mm": int(trin),
             "reduktion_eksakt": reduktion_valg == _AFRUNDING_REDUKTION_VALG[1],
             "vis_eksakt": bool(vis_eksakt),
+            "phi_afrunding": phi_afrunding,
         })
         if ny_afr != afr:
             ind = {**ind, "afrunding": ny_afr}
@@ -9535,11 +9633,18 @@ def render_indstillinger() -> None:
         ]
         if afr["vis_eksakt"]:
             opsum.append("beregnet værdi i parentes")
+        if afr["phi_afrunding"] != afrunding_mod.PHI_AFRUNDING_INGEN:
+            opsum.append(_PHI_AFRUNDING_KORT[afr["phi_afrunding"]])
         t1.opsummering = " · ".join(opsum)
 
     opb = _normaliser_opbygning(ind.get("opbygning"))
     with ui.trin_kort(2, "Visualisering") as t2:
         st.markdown(
+            "Lagtykkelserne vises i mm eller cm. Enheden gælder resultater, "
+            "mellemregninger, figurer og rapport; beregningen føres i mm, og "
+            "indtastningsfelter, indstillinger og datatabeller angives "
+            "fortsat i mm. Kornstørrelser og maskestørrelser angives altid "
+            "i mm.\n\n"
             "Geonettets placering markeres med røde linjer i figurerne, og "
             "den samlede tykkelse målsættes til højre for hver figur. Nettets "
             "navn kan skrives ud for hver linje og fremgår desuden af "
@@ -9547,6 +9652,19 @@ def render_indstillinger() -> None:
             "gælder både dimensioneringssiden og rapportens figur."
         )
         _gaelder(standard=True, brugerdefineret=True, ignorer_klassisk=True)
+        enhed_valg = st.radio(
+            "Enhed for lagtykkelser",
+            enhed_mod.ENHEDER,
+            index=enhed_mod.ENHEDER.index(opb["enhed"]),
+            format_func=lambda v: _ENHED_TEKST[v],
+            key="ind_opb_enhed",
+            horizontal=True,
+            help=(
+                "mm (standard): 648 mm.\n\n"
+                "cm: 64,8 cm. Der vises én decimal, så millimeteren "
+                "bevares; en decimal, der er nul, udelades, fx 65 cm."
+            ),
+        )
         paaskrift = st.checkbox(
             "Skriv geonettets navn ud for geonetlinjerne",
             value=opb["geonet_paaskrift"],
@@ -9587,6 +9705,7 @@ def render_indstillinger() -> None:
             "maal_streg": bool(maal_streg),
             "maal_tal": bool(maal_tal),
             "signatur": bool(signatur),
+            "enhed": enhed_valg,
         })
         if ny_opb != opb:
             ind = {**ind, "opbygning": ny_opb}
@@ -9609,6 +9728,7 @@ def render_indstillinger() -> None:
             opsum.append("ingen målsætning")
         if not opb["signatur"]:
             opsum.append("uden signaturforklaring")
+        opsum.insert(0, f"lagtykkelser i {_ENHED_TEKST[opb['enhed']]}")
         t2.opsummering = " · ".join(opsum)
 
     _render_indstilling_lagfordeling(ind, afr)

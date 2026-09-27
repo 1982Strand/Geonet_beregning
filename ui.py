@@ -26,6 +26,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from core import enhed as enhed_mod
+
 # ---------------------------------------------------------------- konstanter
 
 FARVE = {
@@ -60,10 +62,34 @@ ROD = Path(__file__).parent
 # ------------------------------------------------------------ talformatering
 
 def mm(vaerdi: float | None) -> str:
-    """1038 → '1.038 mm'. None → '—'."""
+    """1038 → '1.038 mm'. None → '—'. Altid i mm; anvendes ved
+    indtastning og indstillinger. Viste lagtykkelser formateres med
+    laengde(), der følger den valgte enhed."""
     if vaerdi is None:
         return "—"
     return f"{vaerdi:,.0f} mm".replace(",", ".")
+
+
+def enhed() -> str:
+    """Den valgte enhed for viste lagtykkelser, »mm« eller »cm«, jf.
+    Indstillinger, afsnit 2, og core.enhed."""
+    ind = st.session_state.get("indstillinger") or {}
+    return enhed_mod.normaliser((ind.get("opbygning") or {}).get("enhed"))
+
+
+def laengde(vaerdi: float | None, decimaler: int = 0) -> str:
+    """Lagtykkelsen i den valgte enhed: 1038 → '1.038 mm' / '103,8 cm'."""
+    return enhed_mod.laengde(vaerdi, enhed(), decimaler)
+
+
+def laengde_tal(vaerdi: float | None, decimaler: int = 0) -> str:
+    """Lagtykkelsen i den valgte enhed uden enhedsbetegnelse."""
+    return enhed_mod.tal(vaerdi, enhed(), decimaler)
+
+
+def laengde_fortegn(vaerdi: float, decimaler: int = 0) -> str:
+    """Forskel med fortegn i den valgte enhed: '−375 mm' / '+4,9 cm'."""
+    return enhed_mod.fortegn(vaerdi, enhed(), decimaler)
 
 
 def mpa(vaerdi: float | None) -> str:
@@ -371,7 +397,7 @@ def resultatkort(kort: list[dict], badge_tekst: str = "ANBEFALET") -> None:
               <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
                 <div style="font:600 40px/1 {MONO};color:{tal_farve};
                             font-variant-numeric:tabular-nums;letter-spacing:-.02em">{escape(k['vaerdi'])}</div>
-                <div style="font:500 15px/1 {SANS};color:{FARVE['ink_70']}">{escape(k.get('enhed','mm'))}</div>{beregnet}
+                <div style="font:500 15px/1 {SANS};color:{FARVE['ink_70']}">{escape(k.get('enhed') or enhed())}</div>{beregnet}
               </div>
               {delta}
             </div>
@@ -397,6 +423,7 @@ def snit(
     vis_maal_streg: bool = True,
     vis_maal_tal: bool = True,
     vis_signatur: bool = True,
+    enhed: str = enhed_mod.ENHED_MM,
 ) -> None:
     """Viser opbygningssnittene.
 
@@ -405,8 +432,8 @@ def snit(
 
     jord_px bevares i signaturen af hensyn til kaldere; jordbåndets højde
     følger nu søjlernes skala. geonet_paaskrift, geonet_maerkat,
-    vis_maal_streg, vis_maal_tal og vis_signatur føres videre til byg_snit(),
-    jf. dennes docstring.
+    vis_maal_streg, vis_maal_tal, vis_signatur og enhed føres videre til
+    byg_snit(), jf. dennes docstring.
     """
     from core.diagram import byg_snit
 
@@ -420,6 +447,7 @@ def snit(
         vis_maal_streg=vis_maal_streg,
         vis_maal_tal=vis_maal_tal,
         vis_signatur=vis_signatur,
+        enhed=enhed,
     )
     if fig is None:
         st.html(

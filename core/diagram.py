@@ -10,6 +10,8 @@ her direkte, da core ikke må afhænge af præsentationslaget.
 
 from __future__ import annotations
 
+from . import enhed as enhed_mod
+
 from .data import K_PHI, PHI_BASIS
 from .calculator import _slaa_op_interp
 
@@ -380,6 +382,7 @@ def byg_snit(
     vis_maal_streg: bool = True,
     vis_maal_tal: bool = True,
     vis_signatur: bool = True,
+    enhed: str = enhed_mod.ENHED_MM,
 ):
     """Opbygningssnittene som Plotly-figur.
 
@@ -408,6 +411,9 @@ def byg_snit(
     søjlen; geonet_maerkat er den kortere form, der da anvendes, og udelades
     den, anvendes geonet_navn. Figuren udvides til venstre, så navnet får
     plads.
+
+    enhed er enheden for lagtykkelserne og målene, »mm« eller »cm«, jf.
+    core.enhed. Koterne i kolonner angives altid i mm.
 
     vis_signatur viser signaturforklaringen under tegningen. Fravælges den,
     fjernes pladsen til den, og figuren bliver tilsvarende lavere; søjlerne
@@ -537,10 +543,13 @@ def byg_snit(
                             ),
                         ),
                         width=0.62,
-                        text=_lagtekst(navn, tykkelse, px_pr_mm),
+                        text=_lagtekst(navn, tykkelse, px_pr_mm, enhed),
                         textposition="inside", insidetextanchor="middle",
                         textfont=dict(size=10, color=FARVE_INK),
-                        hovertemplate=f"{navn} · %{{y:.0f}} mm<extra></extra>",
+                        hovertemplate=(
+                            f"{navn} · {enhed_mod.laengde(tykkelse, enhed)}"
+                            "<extra></extra>"
+                        ),
                         showlegend=False,
                     ),
                     row=1, col=i,
@@ -572,7 +581,7 @@ def byg_snit(
                     x=(_MAAL_X + _MAAL_TVAER + 0.02) if vis_maal_streg
                     else _MAAL_X - _MAAL_TVAER,
                     y=total / 2,
-                    text=f"{total:,.0f} mm".replace(",", "."),
+                    text=enhed_mod.laengde(total, enhed),
                     showarrow=False, xanchor="left",
                     font=dict(size=10.5, color=FARVE_INK),
                 )
@@ -605,7 +614,7 @@ def byg_snit(
                 # hvile på linjen. Formen selv bærer ingen hover, og der
                 # lægges derfor en gennemsigtig markørrække oven på den.
                 note = k.get("best_case_note") or (
-                    f"Optimal korrektion · {best:,.0f} mm".replace(",", ".")
+                    f"Optimal korrektion · {enhed_mod.laengde(best, enhed)}"
                 )
                 fig.add_trace(
                     go.Scatter(
@@ -799,7 +808,10 @@ def ombryd_lagnavn(navn: str, maks_tegn: int = 13) -> str:
     return ombryd_tekst(navn, maks_tegn)
 
 
-def _lagtekst(navn: str, tykkelse: float, px_pr_mm: float) -> str:
+def _lagtekst(
+    navn: str, tykkelse: float, px_pr_mm: float,
+    enhed: str = enhed_mod.ENHED_MM,
+) -> str:
     """Materialebetegnelse og tykkelse, som de kan stå i laget.
 
     Teksten sættes efter lagets højde: er der plads til det fulde navn,
@@ -813,13 +825,10 @@ def _lagtekst(navn: str, tykkelse: float, px_pr_mm: float) -> str:
             break
         linjer = betegnelse.count("<br>") + 2  # betegnelse + tykkelse
         if lag_px >= linjer * _LINJE_PX + 4:
-            return f"{betegnelse}<br>{_mm_tekst(tykkelse)}"
-    return _mm_tekst(tykkelse) if lag_px >= _LINJE_PX + 4 else ""
-
-
-def _mm_tekst(tykkelse: float) -> str:
-    """Lagtykkelsen med enhed og dansk tusindtalsseparator: 1038 → '1.038 mm'."""
-    return f"{tykkelse:,.0f} mm".replace(",", ".")
+            return f"{betegnelse}<br>{enhed_mod.laengde(tykkelse, enhed)}"
+    return (
+        enhed_mod.laengde(tykkelse, enhed) if lag_px >= _LINJE_PX + 4 else ""
+    )
 
 
 def lagtype_for_navn(navn: str, materialer: list[dict] | None) -> str:
