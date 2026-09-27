@@ -37,14 +37,17 @@ for den tykkelsesvægtede værdi.
 
 De røde linjer markerer geonettets placering. Ved to lag placeres det øverste
 net ved den reducerede materialegrænse. Nettets navn står ud for hver linje,
-lige til venstre for søjlen; under Indstillinger kan påskriften fravælges, så
-navnet alene fremgår af signaturen under figuren. Ved beregning efter
+lige til venstre for søjlen, og i signaturforklaringen under figuren. Under
+Indstillinger, afsnittet Visualisering, kan påskriften og
+signaturforklaringen fravælges hver for sig. Ved beregning efter
 trafikklasse kan søjlens grundlag være VejDims ubundne tykkelse, jf. kapitel
 2, afsnit 3.
 
 Den samlede tykkelse målsættes til højre for hver søjle med en
 målsætningsstreg fra underbundens overkant til opbygningens top og målet ved
-siden af. Både stregen og målet kan fravælges under Indstillinger.
+siden af. Både stregen og målet kan fravælges under Indstillinger,
+afsnittet Visualisering. Underbunden vises som et skraveret bånd under
+opbygningen med angivelse af Eᵤ.
 
 Har det valgte produkt et korrektionsinterval, angives den optimale ende med
 en grøn, prikket linje. Mellemregningen bag værdien vises ved markøren.

@@ -396,6 +396,7 @@ def snit(
     geonet_maerkat: str | None = None,
     vis_maal_streg: bool = True,
     vis_maal_tal: bool = True,
+    vis_signatur: bool = True,
 ) -> None:
     """Viser opbygningssnittene.
 
@@ -404,8 +405,8 @@ def snit(
 
     jord_px bevares i signaturen af hensyn til kaldere; jordbåndets højde
     følger nu søjlernes skala. geonet_paaskrift, geonet_maerkat,
-    vis_maal_streg og vis_maal_tal føres videre til byg_snit(), jf. dennes
-    docstring.
+    vis_maal_streg, vis_maal_tal og vis_signatur føres videre til byg_snit(),
+    jf. dennes docstring.
     """
     from core.diagram import byg_snit
 
@@ -418,6 +419,7 @@ def snit(
         geonet_maerkat=geonet_maerkat,
         vis_maal_streg=vis_maal_streg,
         vis_maal_tal=vis_maal_tal,
+        vis_signatur=vis_signatur,
     )
     if fig is None:
         st.html(

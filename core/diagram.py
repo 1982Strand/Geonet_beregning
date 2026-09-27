@@ -379,6 +379,7 @@ def byg_snit(
     geonet_maerkat: str | None = None,
     vis_maal_streg: bool = True,
     vis_maal_tal: bool = True,
+    vis_signatur: bool = True,
 ):
     """Opbygningssnittene som Plotly-figur.
 
@@ -407,6 +408,10 @@ def byg_snit(
     søjlen; geonet_maerkat er den kortere form, der da anvendes, og udelades
     den, anvendes geonet_navn. Figuren udvides til venstre, så navnet får
     plads.
+
+    vis_signatur viser signaturforklaringen under tegningen. Fravælges den,
+    fjernes pladsen til den, og figuren bliver tilsvarende lavere; søjlerne
+    bevarer deres højde.
 
     Figuren bruges både af skærmen (ui.snit) og af rapporten
     (rapport.render_opbygning_png), så de to visninger ikke kan divergere.
@@ -512,7 +517,7 @@ def byg_snit(
                 fig.add_annotation(
                     xref=f"x{i}" if i > 1 else "x", yref="y",
                     x=0, y=-jord / 2,
-                    text=k["underbund_tekst"], showarrow=False,
+                    text=f"<b>{k['underbund_tekst']}</b>", showarrow=False,
                     font=dict(size=8, color="#FFFFFF"),
                 )
 
@@ -641,7 +646,10 @@ def byg_snit(
     # Signaturen tegnes som en del af figuren, så den følger med til rapportens
     # PNG. Posterne føjes som tomme kurver alene for signaturens skyld; deres
     # udseende er det samme, som fladerne og linjerne har i tegningen.
-    _tilfoej_signatur(fig, go, kolonner, geonet_navn, reference_mm)
+    # Fravælges signaturen, fjernes også pladsen til den under tegningen.
+    if vis_signatur:
+        _tilfoej_signatur(fig, go, kolonner, geonet_navn, reference_mm)
+    signatur_px = _SIGNATUR_PX if vis_signatur else 0
 
     fig.update_yaxes(
         range=[-jord * 1.15, maks * 1.08],
@@ -665,16 +673,19 @@ def byg_snit(
         ann.xanchor = "center"
 
     fig.update_layout(
-        height=hoejde_px + _SIGNATUR_PX + ekstra_bund,
+        height=hoejde_px + signatur_px + ekstra_bund,
         barmode="overlay", bargap=0,
         # Bundmarginen rummer statusteksten under søjlerne og signaturen
         # nederst; overkanten rummer søjletitlerne. Højde og bundmargin
         # udvides med samme beløb, så plotfladen — og dermed søjlerne —
         # bevarer sin højde.
-        margin=dict(l=10, r=10, t=_MARGIN_TOP, b=_MARGIN_BUND + ekstra_bund),
+        margin=dict(
+            l=10, r=10, t=_MARGIN_TOP,
+            b=_MARGIN_BUND - _SIGNATUR_PX + signatur_px + ekstra_bund,
+        ),
         paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
         font=dict(family=SKRIFT, size=11, color=FARVE_INK),
-        showlegend=True,
+        showlegend=vis_signatur,
         legend=dict(
             orientation="h",
             x=0, xanchor="left",
@@ -879,5 +890,5 @@ def snit_til_kolonner(
         })
 
     if kolonner:
-        kolonner[0]["underbund_tekst"] = f"UNDERBUND\n{eu:.0f} MPa"
+        kolonner[0]["underbund_tekst"] = f"Underbund Eᵤ = {eu:.0f} MPa"
     return kolonner

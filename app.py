@@ -133,13 +133,15 @@ MIN_LAGTYKKELSE_MM = 200
 # og normaliseres i indlaes_indstillinger(), så en ældre fil ikke kan
 # efterlade manglende felter.
 
-# Opbygningssøjlerne: geonet_paaskrift skriver nettets navn ud for hver
-# geonetlinje; ellers står navnet alene i signaturen. maal_streg tegner
-# målsætningsstregen ved den samlede tykkelse, og maal_tal skriver målet.
+# Visualiseringen af opbygningerne: geonet_paaskrift skriver nettets navn ud
+# for hver geonetlinje; ellers står navnet alene i signaturen. maal_streg
+# tegner målsætningsstregen ved den samlede tykkelse, og maal_tal skriver
+# målet. signatur viser signaturforklaringen under figuren.
 _OPBYGNING_STANDARD: dict = {
     "geonet_paaskrift": True,
     "maal_streg": True,
     "maal_tal": True,
+    "signatur": True,
 }
 
 
@@ -452,6 +454,7 @@ def _snit_visning() -> dict:
         "geonet_paaskrift": opb["geonet_paaskrift"],
         "vis_maal_streg": opb["maal_streg"],
         "vis_maal_tal": opb["maal_tal"],
+        "vis_signatur": opb["signatur"],
     }
 
 def _standard_materialer() -> list[dict]:
@@ -948,6 +951,16 @@ def _pct(v: float) -> str:
     return f"{_dk_num(v, '.1f')} %"
 
 
+def _afvigelse_tekst(celle: dict) -> str:
+    """Afvigelsen fra randkurven med fortegn: + over den øverste kurve og −
+    under den laveste, fx '+15,9 %'. Tom streng inden for kurverne."""
+    afv = celle.get("afvigelse_pct")
+    if celle.get("zone") not in (TRAFIK_UNDER, TRAFIK_OVER) or afv is None:
+        return ""
+    fortegn = -1 if celle["zone"] == TRAFIK_UNDER else 1
+    return f"{_dk_num(fortegn * afv, '+.1f')} %"
+
+
 def _yder_regel_linje(regler: dict) -> str:
     """Reglerne for zonerne under og over som én konstaterende linje til
     trin 1, med henvisning til Indstillinger."""
@@ -1389,7 +1402,8 @@ def _vis_korrelationstabel(
         # fortsat træder tydeligst frem.
         for t_navn in data.index:
             for kol in data.columns:
-                if str(data.loc[t_navn, kol]).endswith(("*", "†")):
+                celletekst = str(data.loc[t_navn, kol])
+                if "*" in celletekst or "†" in celletekst:
                     stil.loc[t_navn, kol] = "font-style: italic; opacity: 0.75;"
         if valgt_t in data.index:
             stil.loc[valgt_t, :] = "background-color: #F5FAF1;"
@@ -1469,8 +1483,9 @@ _KORR_ZONETEKST = (
     "opbygning end diagrammets kurver, og beregningen afvises · "
     "\\* = uden for kurverne, men inden for tolerancen; der regnes på "
     "randkurven · † = uden for tolerancen; der regnes efter valget i "
-    "Indstillinger, afsnit 8. Randkurven er Eₒ = 30 (belastningsklasse 1) "
-    "eller Eₒ = 150 (belastningsklasse 6)."
+    "Indstillinger, afsnit 8 · tallet i parentes er afvigelsen fra "
+    "randkurven i procent af dennes tykkelse, + over og − under. Randkurven "
+    "er Eₒ = 30 (belastningsklasse 1) eller Eₒ = 150 (belastningsklasse 6)."
 )
 
 
@@ -8056,23 +8071,26 @@ def _korrelation_pivot_rows(korr: dict, opslag: dict | None = None) -> list[dict
 
     opslag er hele opslaget pr. celle, jf. core.data.korrelation_opslag().
     Ligger en celle uden for diagrammets kurver, men regnes der med den, mærkes
-    tallet med * inden for tolerancen og med † uden for den.
+    tallet med * inden for tolerancen og med † uden for den. Uden for kurverne
+    anføres afvigelsen fra randkurven i parentes, jf. _afvigelse_tekst().
     """
     rows = []
     for t in TRAFIKKLASSER:
         row = {"Trafikklasse": t}
         for eu in TRAFIK_EU_PUNKTER:
             v = korr.get(t, {}).get(eu)
+            celle = (opslag or {}).get(t, {}).get(eu) or {}
+            afv = _afvigelse_tekst(celle)
+            parentes = f" ({afv})" if afv else ""
             if isinstance(v, str):
-                row[f"Eᵤ {eu}"] = v
+                row[f"Eᵤ {eu}"] = v + parentes
             elif v is None:
                 row[f"Eᵤ {eu}"] = "—"
             else:
-                celle = (opslag or {}).get(t, {}).get(eu) or {}
                 maerke = ""
                 if celle.get("zone") in (TRAFIK_UNDER, TRAFIK_OVER):
                     maerke = "*" if celle.get("inden_tolerance") else "†"
-                row[f"Eᵤ {eu}"] = f"{v:.0f}{maerke}"
+                row[f"Eᵤ {eu}"] = f"{v:.0f}{maerke}{parentes}"
         rows.append(row)
     return rows
 
@@ -8455,8 +8473,10 @@ def render_trafikklasse_korrelation() -> None:
             'end diagrammets kurver, og beregningen afvises · <b>*</b> — '
             'uden for kurverne, men inden for tolerancen; der regnes på '
             'randkurven · <b>†</b> — uden for tolerancen; der regnes efter '
-            'valget i Indstillinger, afsnit 8 · <b>—</b> — diagrammet har '
-            'ingen ustabiliseret kurve ved dette Eᵤ</div>'
+            'valget i Indstillinger, afsnit 8 · <b>(±x %)</b> — afvigelsen '
+            'fra randkurven i procent af dennes tykkelse, + over og − under · '
+            '<b>—</b> — diagrammet har ingen ustabiliseret kurve ved dette '
+            'Eᵤ</div>'
         )
         st.caption("Se Hjælp afsnit 2 for yderligere detaljer om trafikklasse korrelationen.")
 
@@ -8633,6 +8653,77 @@ def render_materialer() -> None:
 
 
 
+def _rapport_grundlag_valg(sd: dict) -> dict:
+    """Valgene for rapportens tabel »Grundlag for beregning«: hvilke linjer
+    der medtages, og ved Standard materialenavnene i linjen
+    »Materialeopbygning«, jf. rapport.formatér_dimensioneringsgrundlag().
+
+    Valgene gemmes i sessionen, så de bevares, når der skiftes side.
+    """
+    from core import rapport as rapport_mod
+
+    gemt = st.session_state.setdefault("rapport_grundlag_valg", {
+        "linjer": {},
+        "materialer": list(rapport_mod.STANDARD_MATERIALER_RAPPORT),
+    })
+    er_standard = sd.get("tilstand") == "Standard"
+    with st.expander("Grundlag for beregning", expanded=False):
+        st.caption(
+            "Linjerne i rapportens tabel Grundlag for beregning. Fravalgte "
+            "linjer udelades af rapporten; beregningen berøres ikke. Er alle "
+            "linjer fravalgt, udelades tabellen og dens overskrift."
+        )
+        # Materialenavnene læses før afkrydsningsfelterne, så linjens værdi
+        # i hjælpeteksten svarer til de aktuelle navne.
+        navne = [
+            st.session_state.get(f"rap_std_materiale_{i}", gemt["materialer"][i])
+            for i in range(2)
+        ]
+        linjer = rapport_mod.grundlag_linjer(
+            sd, {"standard_materialer": navne}
+        )
+        kolonner = st.columns(2)
+        vis: dict[str, bool] = {}
+        for i, (lid, etiket, vaerdi) in enumerate(linjer):
+            with kolonner[i % 2]:
+                vis[lid] = st.checkbox(
+                    etiket,
+                    value=gemt["linjer"].get(lid, True),
+                    key=f"rap_grundlag_{lid}",
+                    help=f"I rapporten: {vaerdi}",
+                )
+        gemt["linjer"].update(vis)
+
+        if er_standard:
+            st.caption(
+                "Standard-beregningen regnes med designdiagrammernes "
+                "referencemateriale. Linjen Materialeopbygning angiver de "
+                "materialer, opbygningen udføres i; navnene har ingen "
+                "betydning for beregningen."
+            )
+            kol_a, kol_b = st.columns(2)
+            for i, (kol, etiket) in enumerate((
+                (kol_a, "Øverste lag"), (kol_b, "Nederste lag"),
+            )):
+                with kol:
+                    navne[i] = st.text_input(
+                        etiket,
+                        value=gemt["materialer"][i],
+                        key=f"rap_std_materiale_{i}",
+                        disabled=not vis.get("materialer", True),
+                        help=(
+                            "Standard: "
+                            f"{rapport_mod.STANDARD_MATERIALER_RAPPORT[i]}."
+                        ),
+                    )
+            gemt["materialer"] = list(navne)
+
+    valg: dict = {"grundlag_linjer": dict(vis)}
+    if er_standard:
+        valg["standard_materialer"] = list(navne)
+    return valg
+
+
 def render_rapport() -> None:
     """Rapport-side — generér Word/PDF ud fra den seneste dimensionering."""
     from datetime import date as _date
@@ -8794,6 +8885,11 @@ def render_rapport() -> None:
                     key=widget_key, label_visibility="collapsed",
                 )
                 tekster_state[nøgle] = ny_tekst
+            # Tabellen Grundlag for beregning står i rapporten efter de
+            # oplyste forudsætninger, og valget af dens linjer står derfor
+            # samme sted.
+            if nøgle == "oplyste_forudsaetninger":
+                grundlag_valg = _rapport_grundlag_valg(sd)
 
         st.divider()
         t2.opsummering = f"{len(rapport_mod.SECTION_KEYS)} afsnit"
@@ -8859,28 +8955,6 @@ def render_rapport() -> None:
                          "(beregnet 1-lag tykkelse) — derfor ikke relevant her."
                 ),
             )
-
-        # Ligger trafikklassens krav uden for diagrammets kurver, kan
-        # håndteringen anføres i rapportens grundlagstabel, jf.
-        # rapport._yderomraade_tekst().
-        paa_rand_rap = (
-            sd.get("grundlag_type") == "trafikklasse"
-            and sd.get("zone") in (TRAFIK_UNDER, TRAFIK_OVER)
-        )
-        vis_yderomraade = st.checkbox(
-            "Anfør håndteringen uden for diagrammets kurver",
-            value=paa_rand_rap,
-            disabled=not paa_rand_rap,
-            key="rap_vis_yderomraade",
-            help=(
-                "Linjen »Uden for diagrammets område« i Grundlag for "
-                "beregning angiver afvigelsen fra randkurven, om den er "
-                "inden for tolerancen, og hvilken reference der er regnet "
-                "med."
-                if paa_rand_rap
-                else "Dimensioneringen ligger inden for diagrammets kurver."
-            ),
-        )
 
         geonet = sd.get("geonet") or {}
         geonet_label = geonet.get("navn", "Geonet")
@@ -9210,7 +9284,7 @@ def render_rapport() -> None:
             # rapport.formatér_dimensioneringsresultat.
             "valg": {
                 "vis_indtastet": bool(vis_indtastet_aktiv),
-                "vis_yderomraade": bool(vis_yderomraade),
+                **grundlag_valg,
             },
         }
 
@@ -9343,8 +9417,8 @@ def render_rapport() -> None:
 # Værktøjets faste indstillinger. Hvert afsnit står i sit trin-kort, og
 # ændringer gemmes straks til indstillinger_brugerdefineret.json, jf.
 # gem_indstillinger(), så de huskes mellem sessioner. Afsnittene er:
-# 1 oprundingen til indbygningstrin, jf. core.afrunding; 2 opbygningssøjlernes
-# påskrift; 3 fordelingen på materialelag og minimumstykkelsen; 4 tynde
+# 1 oprundingen til indbygningstrin, jf. core.afrunding; 2 visualiseringen
+# af opbygningerne; 3 fordelingen på materialelag og minimumstykkelsen; 4 tynde
 # underliggende lag; 5 friktionsvinklen i opbygningerne; 6 Standard-
 # beregningen; 7 placeringen af det øverste geonet ved 2 lag; 8 trafikklasser
 # uden for diagrammets kurver, jf. core.lagfordeling, core.placement og
@@ -9363,7 +9437,7 @@ def _afrunding_trin_tekst(trin: int) -> str:
 
 
 def render_indstillinger() -> None:
-    """Siden Indstillinger: afrunding af lagtykkelser, opbygningssøjler og
+    """Siden Indstillinger: afrunding af lagtykkelser, visualisering og
     fordelingen på materialelag."""
     ui.sidehoved(
         "Indstillinger",
@@ -9464,12 +9538,12 @@ def render_indstillinger() -> None:
         t1.opsummering = " · ".join(opsum)
 
     opb = _normaliser_opbygning(ind.get("opbygning"))
-    with ui.trin_kort(2, "Opbygningssøjler") as t2:
+    with ui.trin_kort(2, "Visualisering") as t2:
         st.markdown(
-            "Geonettets placering markeres med røde linjer i "
-            "opbygningssøjlerne, og den samlede tykkelse målsættes til højre "
-            "for hver søjle. Nettets navn kan skrives ud for hver linje; "
-            "ellers fremgår det alene af signaturen under figuren. Valgene "
+            "Geonettets placering markeres med røde linjer i figurerne, og "
+            "den samlede tykkelse målsættes til højre for hver figur. Nettets "
+            "navn kan skrives ud for hver linje og fremgår desuden af "
+            "signaturforklaringen under figuren, når den vises. Valgene "
             "gælder både dimensioneringssiden og rapportens figur."
         )
         _gaelder(standard=True, brugerdefineret=True, ignorer_klassisk=True)
@@ -9497,20 +9571,34 @@ def render_indstillinger() -> None:
             key="ind_opb_maal_tal",
             help="Målet i mm ud for målsætningsstregen.",
         )
+        signatur = st.checkbox(
+            "Vis signaturforklaring under figuren",
+            value=opb["signatur"],
+            key="ind_opb_signatur",
+            help=(
+                "Forklaringen af materialelagenes flader og geonettets "
+                "linje under figuren. Fravælges den, og er geonettets navn "
+                "heller ikke skrevet ud for linjerne, fremgår navnet ikke af "
+                "figuren."
+            ),
+        )
         ny_opb = _normaliser_opbygning({
             "geonet_paaskrift": bool(paaskrift),
             "maal_streg": bool(maal_streg),
             "maal_tal": bool(maal_tal),
+            "signatur": bool(signatur),
         })
         if ny_opb != opb:
             ind = {**ind, "opbygning": ny_opb}
             st.session_state["indstillinger"] = ind
             gem_indstillinger(ind)
             opb = ny_opb
-        opsum = [
-            "navn ud for geonetlinjerne" if opb["geonet_paaskrift"]
-            else "navn alene i signaturen",
-        ]
+        if opb["geonet_paaskrift"]:
+            opsum = ["navn ud for geonetlinjerne"]
+        elif opb["signatur"]:
+            opsum = ["navn alene i signaturen"]
+        else:
+            opsum = ["uden geonettets navn"]
         if opb["maal_streg"] and opb["maal_tal"]:
             opsum.append("målsætning med streg og mål")
         elif opb["maal_streg"]:
@@ -9519,6 +9607,8 @@ def render_indstillinger() -> None:
             opsum.append("mål uden målsætningsstreg")
         else:
             opsum.append("ingen målsætning")
+        if not opb["signatur"]:
+            opsum.append("uden signaturforklaring")
         t2.opsummering = " · ".join(opsum)
 
     _render_indstilling_lagfordeling(ind, afr)
@@ -10216,7 +10306,8 @@ _UNDER_UDEN_TEKST: dict[str, str] = {
 
 def _yder_afvigelsestabel(regler: dict):
     """De målte afvigelser uden for kurverne som tabel (T × Eᵤ), med den
-    håndtering, reglerne giver hver celle."""
+    håndtering, reglerne giver hver celle. Afvigelsen angives med fortegn,
+    jf. _afvigelse_tekst(), og håndteringen mærkes som i Eₒ-matricen."""
     import pandas as pd
 
     opslag = _aktiv_korrelation_opslag(regler)
@@ -10225,21 +10316,43 @@ def _yder_afvigelsestabel(regler: dict):
         raekke = {"Trafikklasse": t}
         for eu in TRAFIK_EU_PUNKTER:
             c = (opslag.get(t) or {}).get(eu) or {}
-            if c.get("zone") not in (TRAFIK_UNDER, TRAFIK_OVER):
+            afv = _afvigelse_tekst(c)
+            if not afv:
                 raekke[f"Eᵤ {eu}"] = ""
                 continue
-            bogstav = "o" if c["zone"] == TRAFIK_OVER else "u"
             if c.get("eo") is None:
                 handling = "afvist"
-            elif c.get("handling") == YDER_LAVESTE:
-                handling = "laveste kurve"
             else:
-                handling = "VejDim"
-            raekke[f"Eᵤ {eu}"] = (
-                f"{bogstav} {_dk_num(c['afvigelse_pct'], '.1f')} · {handling}"
-            )
+                handling = (
+                    "laveste kurve" if c.get("handling") == YDER_LAVESTE
+                    else "VejDim"
+                ) + ("*" if c.get("inden_tolerance") else "†")
+            raekke[f"Eᵤ {eu}"] = f"{afv} · {handling}"
         raekker.append(raekke)
     return pd.DataFrame(raekker).set_index("Trafikklasse")
+
+
+def _yder_omfang(regler: dict, zone: str, inden: bool) -> str:
+    """De kørte punkter, en af reglerne i afsnit 8 omfatter, med spændet i
+    afvigelserne, fx 'Uden for tolerancen: 11 kørte punkter, 6,1–38,2 %.'"""
+    opslag = _aktiv_korrelation_opslag(regler)
+    afv = sorted(
+        c["afvigelse_pct"]
+        for t in TRAFIKKLASSER
+        for c in ((opslag.get(t) or {}).get(eu) or {} for eu in TRAFIK_EU_PUNKTER)
+        if c.get("zone") == zone and c.get("afvigelse_pct") is not None
+        and bool(c.get("inden_tolerance")) == inden
+    )
+    hvor = "Inden for tolerancen" if inden else "Uden for tolerancen"
+    if not afv:
+        return f"{hvor}: ingen af de kørte punkter."
+    if len(afv) == 1:
+        return f"{hvor}: 1 kørt punkt, {_pct(afv[0])}."
+    spaend = (
+        _pct(afv[0]) if afv[0] == afv[-1]
+        else f"{_dk_num(afv[0], '.1f')}–{_pct(afv[-1])}"
+    )
+    return f"{hvor}: {len(afv)} kørte punkter, {spaend}."
 
 
 def _render_indstilling_yderomraade() -> None:
@@ -10276,6 +10389,7 @@ def _render_indstilling_yderomraade() -> None:
                     "godtages med VejDims tykkelse. Standard 5 %."
                 ),
             )
+            omfang_over_inden = st.empty()
             over_uden = st.radio(
                 "Over, uden for tolerancen",
                 OVER_UDEN_VALG,
@@ -10289,6 +10403,7 @@ def _render_indstilling_yderomraade() -> None:
                     "advarsel om, at reduktionen er ekstrapoleret."
                 ),
             )
+            omfang_over_uden = st.empty()
         with kol_under:
             tol_under = st.number_input(
                 "Tolerance, under [%]",
@@ -10316,6 +10431,7 @@ def _render_indstilling_yderomraade() -> None:
                     "kurve."
                 ),
             )
+            omfang_under_inden = st.empty()
             under_uden = st.radio(
                 "Under, uden for tolerancen",
                 UNDER_UDEN_VALG,
@@ -10332,6 +10448,7 @@ def _render_indstilling_yderomraade() -> None:
                     "ekstrapoleret; der vises en advarsel."
                 ),
             )
+            omfang_under_uden = st.empty()
         st.caption(
             "Sættes begge tolerancer til 0 %, og afvises der uden for "
             "tolerancen, regnes der alene inden for diagrammets kurver. "
@@ -10352,14 +10469,40 @@ def _render_indstilling_yderomraade() -> None:
             gem_indstillinger(ind)
             regler = ny
 
+        # Under hvert valg anføres de kørte punkter, det omfatter, så
+        # afvigelsernes størrelse kan aflæses, før reglen fastlægges.
+        for plads, zone, inden in (
+            (omfang_over_inden, TRAFIK_OVER, True),
+            (omfang_over_uden, TRAFIK_OVER, False),
+            (omfang_under_inden, TRAFIK_UNDER, True),
+            (omfang_under_uden, TRAFIK_UNDER, False),
+        ):
+            plads.caption(_yder_omfang(regler, zone, inden))
+
         with st.expander("Målte afvigelser i korrelationen"):
             st.caption(
-                "Afvigelsen fra randkurven i procent for de kørte punkter "
-                "uden for diagrammets kurver (o = over, u = under) og den "
-                "håndtering, de gældende regler giver. Tomme celler ligger "
-                "inden for kurverne."
+                "Afvigelsen fra randkurven i procent af randkurvens tykkelse "
+                "for de kørte punkter uden for diagrammets kurver, + over den "
+                "øverste kurve og − under den laveste, og den håndtering, de "
+                "gældende regler giver: \\* = inden for tolerancen, † = uden "
+                "for tolerancen, med advarsel. Tomme celler ligger inden for "
+                "kurverne."
             )
-            st.dataframe(_yder_afvigelsestabel(regler), width="stretch")
+            df_afv = _yder_afvigelsestabel(regler)
+            # Kolonnerne gives en bredde efter det længste indhold, så
+            # håndteringen ikke afkortes.
+            st.dataframe(
+                df_afv, width="stretch",
+                column_config={
+                    kol: st.column_config.TextColumn(
+                        kol,
+                        width=int(6.5 * max(
+                            len(str(x)) for x in (kol, *df_afv[kol])
+                        )) + 24,
+                    )
+                    for kol in df_afv.columns
+                },
+            )
 
         t8.opsummering = (
             f"over {_pct(regler['tolerance_over_pct'])} · under "

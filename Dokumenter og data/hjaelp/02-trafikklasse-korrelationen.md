@@ -135,7 +135,9 @@ Afvigelserne under er enten små (T2) eller store (T1), mens afvigelserne over
 vokser jævnt med Eᵤ. Med standardtolerancen regnes T6 ved Eᵤ = 4 og 10 MPa og
 T5 ved Eᵤ = 15 MPa med VejDims tykkelse, og T2 ved Eᵤ = 3 og 4 MPa med
 diagrammets laveste kurve. De øvrige 13 kørsler afvises. Under Indstillinger
-vises de aktuelle afvigelser og den håndtering, de gældende regler giver.
+vises de aktuelle afvigelser og den håndtering, de gældende regler giver, og
+under hvert valg anføres antallet af kørte punkter, valget omfatter, med
+spændet i afvigelserne.
 
 Opmærksomheden henledes på, at geonettets reduktion ved VejDims tykkelse
 bygger på antagelsen om, at geonettet giver samme procentvise reduktion som
@@ -169,8 +171,9 @@ k_net     er korrektionen for det valgte geonet
 
 I matricen mærkes celler, der ligger uden for kurverne, men regnes inden for
 tolerancen, med `*`, og celler, der regnes uden for tolerancen, med `†`.
-Afviste celler bærer zonebetegnelsen. Inden for kurverne har reglerne ingen
-betydning.
+Afviste celler bærer zonebetegnelsen. Uden for kurverne anføres afvigelsen fra
+randkurven i parentes, med + over og − under, fx `150† (+15,9 %)` for T6 ved
+Eᵤ = 20 MPa. Inden for kurverne har reglerne ingen betydning.
 
 Forbeholdet ved fremgangsmåden er beskrevet i kapitel 7, afsnit 2.
 

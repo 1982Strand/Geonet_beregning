@@ -316,6 +316,7 @@ def render_opbygning_png(
     geonet_maerkat: str | None = None,
     vis_maal_streg: bool = True,
     vis_maal_tal: bool = True,
+    vis_signatur: bool = True,
 ) -> bytes:
     """Opbygningssnittene som PNG til rapporten.
 
@@ -325,8 +326,8 @@ def render_opbygning_png(
 
     reference_mm er den indtastede tykkelse, der tegnes som fælles stiplet
     linje. Udelades den, aflæses den af snittenes t_indtastet_mm.
-    geonet_paaskrift, geonet_maerkat, vis_maal_streg og vis_maal_tal føres
-    videre til byg_snit().
+    geonet_paaskrift, geonet_maerkat, vis_maal_streg, vis_maal_tal og
+    vis_signatur føres videre til byg_snit().
     """
     from .diagram import byg_snit, snit_til_kolonner
 
@@ -346,6 +347,7 @@ def render_opbygning_png(
         geonet_maerkat=geonet_maerkat,
         vis_maal_streg=vis_maal_streg,
         vis_maal_tal=vis_maal_tal,
+        vis_signatur=vis_signatur,
     )
     if fig is None:
         return b""
@@ -475,49 +477,99 @@ def _materiale_resume(materialer: list[dict]) -> str:
     return "\n".join(linjer)
 
 
-def formatér_dimensioneringsgrundlag(
-    dim: dict, valg: dict | None = None
-) -> list[tuple[str, str]]:
-    """Returnér nøgle/værdi-rækker til Dimensioneringsgrundlag-tabellen.
+# Materialenavnene i linjen »Materialeopbygning« ved Standard-beregning.
+# Standard regnes med designdiagrammernes referencemateriale og har ingen
+# indtastede lag; navnene kan rettes på rapportsiden.
+STANDARD_MATERIALER_RAPPORT = ("Stabilgrus SG II", "Bundsikring BL II")
 
-    valg: dict med brugerens rapport-valg fra UI'en (pt. ingen).
+
+def grundlag_linjer(
+    dim: dict, valg: dict | None = None
+) -> list[tuple[str, str, str]]:
+    """Alle linjer, tabellen »Grundlag for beregning« kan rumme for
+    dimensioneringen, som (id, etiket, værdi).
+
+    Rapportsiden lader brugeren vælge blandt linjerne, jf.
+    formatér_dimensioneringsgrundlag(). valg["standard_materialer"] er
+    materialenavnene i linjen »Materialeopbygning« ved Standard-beregning;
+    udelades de, anvendes STANDARD_MATERIALER_RAPPORT.
     """
     valg = valg or {}
     from .data import PHI_BASIS
     materialer = dim.get("materialer") or []
     er_trafikklasse = dim.get("grundlag_type") == "trafikklasse"
 
-    rows: list[tuple[str, str]] = [
-        ("Underbundens E-modul (Eᵤ)", f"{dim.get('eu', 0):.0f} MPa"),
+    rows: list[tuple[str, str, str]] = [
+        ("eu", "Underbundens E-modul (Eᵤ)", f"{dim.get('eu', 0):.0f} MPa"),
     ]
     if er_trafikklasse:
         # Trafikklasse-grundlag: vis T-klasse + den ækvivalente Eo (Eo_ækv),
         # ikke en belastningsklasse (der er ikke valgt nogen).
         t_klasse = dim.get("t_klasse", "—")
         eo_aekv = dim.get("eo_aekv")
-        rows.append(("Dimensioneringsgrundlag", f"Trafikklasse {t_klasse} (VejDim)"))
+        rows.append((
+            "grundlag", "Dimensioneringsgrundlag",
+            f"Trafikklasse {t_klasse} (VejDim)",
+        ))
         if isinstance(eo_aekv, (int, float)):
-            rows.append(("Ækvivalent Eₒ (Eₒ,ækv)", f"{eo_aekv:.0f} MPa"))
+            rows.append((
+                "eo_aekv", "Ækvivalent Eₒ (Eₒ,ækv)", f"{eo_aekv:.0f} MPa",
+            ))
         # Ligger opslaget uden for designdiagrammernes tykkelsesområde, hviler
         # den ubundne tykkelse på VejDims krav, mens reduktionen er aflæst på
         # randkurven. Forudsætningen anføres, da den ikke kan udledes af de
         # øvrige rækker.
         yder_tekst = _yderomraade_tekst(dim)
-        if yder_tekst and valg.get("vis_yderomraade", True):
-            rows.append(("Uden for diagrammets område", yder_tekst))
+        if yder_tekst:
+            rows.append((
+                "yderomraade", "Uden for diagrammets område", yder_tekst,
+            ))
     else:
-        rows.append(("Belastningsklasse", str(dim.get("valgt_klasse", "—"))))
+        rows.append((
+            "grundlag", "Belastningsklasse", str(dim.get("valgt_klasse", "—")),
+        ))
     if dim.get("tilstand") == "Standard":
         # Standard har ingen indtastede materialelag og regnes med
         # designdiagrammernes referencemateriale, jf. app._standard_til_rapport.
-        opdeling = dim.get("standard_opdeling") or {}
-        tekst = "Standard-beregning med designdiagrammernes referencemateriale."
-        if opdeling.get("spec") is not None:
-            tekst += " Opbygningen er vist som stabilgrus og bundsikring."
-        rows.append(("Materialeopbygning", tekst))
+        # Linjen angiver de materialer, opbygningen udføres i.
+        navne = valg.get("standard_materialer")
+        if navne is None:
+            navne = STANDARD_MATERIALER_RAPPORT
+        navne = [str(n).strip() for n in navne if str(n or "").strip()]
+        tekst = (
+            " og ".join(navne) if navne
+            else "Designdiagrammernes referencemateriale"
+        )
+        rows.append(("materialer", "Materialeopbygning", tekst))
     else:
-        rows.append(("Materialeopbygning", _materiale_resume(materialer)))
-    rows.append(("Vægtet friktionsvinkel (φᵥ)", f"{dim.get('phi', PHI_BASIS):.1f}°"))
+        rows.append((
+            "materialer", "Materialeopbygning", _materiale_resume(materialer),
+        ))
+    rows.append((
+        "phi", "Vægtet friktionsvinkel (φᵥ)",
+        f"{dim.get('phi', PHI_BASIS):.1f}°",
+    ))
+    return rows
+
+
+def formatér_dimensioneringsgrundlag(
+    dim: dict, valg: dict | None = None
+) -> list[tuple[str, str]]:
+    """Returnér nøgle/værdi-rækker til Dimensioneringsgrundlag-tabellen.
+
+    valg: dict med brugerens rapport-valg fra UI'en. valg["grundlag_linjer"]
+    angiver pr. linje-id, jf. grundlag_linjer(), om linjen medtages; linjer
+    uden angivelse medtages. Ældre valg med vis_yderomraade respekteres.
+    """
+    valg = valg or {}
+    vis = valg.get("grundlag_linjer") or {}
+    rows: list[tuple[str, str]] = []
+    for lid, etiket, vaerdi in grundlag_linjer(dim, valg):
+        if not vis.get(lid, True):
+            continue
+        if lid == "yderomraade" and not valg.get("vis_yderomraade", True):
+            continue
+        rows.append((etiket, vaerdi))
     return rows
 
 
@@ -909,10 +961,36 @@ def byg_rapport_docx(data: dict) -> bytes:
     }
 
     doc.render(context)
+    # Er alle linjer i Grundlag for beregning fravalgt, udelades overskriften
+    # og den tomme tabel, jf. _fjern_tomt_grundlag().
+    if not context["dim_grundlag"]:
+        _fjern_tomt_grundlag(doc.docx)
 
     buf = io.BytesIO()
     doc.save(buf)
     return buf.getvalue()
+
+
+def _fjern_tomt_grundlag(document) -> None:
+    """Fjern overskriften »Grundlag for beregning« og tabellen under den, når
+    tabellen ingen rækker har. En tabel uden rækker er ikke gyldig i Word."""
+    w_tr = f"{{{_NS_W}}}tr"
+    w_tbl = f"{{{_NS_W}}}tbl"
+    for p in list(document.paragraphs):
+        if not p.text.strip().startswith("Grundlag for beregning"):
+            continue
+        naeste = p._p.getnext()
+        # Tomme afsnit mellem overskrift og tabel springes over.
+        while naeste is not None and naeste.tag != w_tbl and not "".join(
+            naeste.itertext()
+        ).strip():
+            naeste = naeste.getnext()
+        if naeste is not None and naeste.tag == w_tbl:
+            if any(True for _ in naeste.iter(w_tr)):
+                return
+            naeste.getparent().remove(naeste)
+        p._p.getparent().remove(p._p)
+        return
 
 
 # ---------------------------------------------------------------------------
