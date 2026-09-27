@@ -117,7 +117,7 @@ def fortegn(vaerdi: float) -> str:
 
 # ------------------------------------------------------------------ opsætning
 
-def opsaet_side(titel: str = "Geonet-dimensionering · BG Byggros") -> None:
+def opsaet_side(titel: str = "MSL-dimensionering · BG Byggros") -> None:
     """Sætter sidekonfiguration og indlæser stylesheetet. Kaldes først i app.py."""
     st.set_page_config(
         page_title=titel,
@@ -152,14 +152,14 @@ def _logo_data_uri() -> str:
     return f"data:image/png;base64,{data}"
 
 
-def topbjaelke(version: str = "v0.4") -> None:
-    """Mørk bjælke med logo, værktøjsnavn og handlinger.
+def topbjaelke(version: str = "v0.6") -> None:
+    """Mørk bjælke med logo, værktøjsnavn og knappen Nulstil yderst til højre.
 
     Logoet ligger på en hvid brik: firmamærket er mørkt og ville forsvinde
     direkte på bjælken.
     """
     with st.container(key="bg_topbar"):
-        navn_kol, handling_kol = st.columns([3, 1.5], vertical_alignment="center")
+        navn_kol, handling_kol = st.columns([4, 1], vertical_alignment="center")
         with navn_kol:
             st.html(
                 f"""
@@ -171,43 +171,32 @@ def topbjaelke(version: str = "v0.4") -> None:
                   </div>
                   <div style="width:1px;height:20px;background:rgba(255,255,255,.22)"></div>
                   <div style="font:600 13px/1 {SANS};color:#fff;letter-spacing:-.01em">
-                    Geonet-dimensionering</div>
+                    MSL-dimensionering</div>
                   <div style="font:500 10px/1 {MONO};color:rgba(255,255,255,.5);
                               padding:3px 6px;border:1px solid rgba(255,255,255,.2);
                               border-radius:3px">{escape(version)}</div>
                 </div>
                 """
             )
-        with handling_kol:
-            nulstil_kol, rapport_kol = st.columns([1, 1.4], vertical_alignment="center")
-            # Knapperne aflæses af app.py gennem deres nøgler, når den aktive
-            # side er bestemt. Nulstil gælder dimensioneringens felter; på de
+        with handling_kol, st.container(horizontal_alignment="right"):
+            # Knappen aflæses af app.py gennem sin nøgle, når den aktive side
+            # er bestemt. Nulstil gælder dimensioneringens felter; på de
             # øvrige sider er der intet at rydde, og knappen er slået fra.
             paa_dimensionering = (
                 st.session_state.get("aktiv_side", "dimensionering")
                 == "dimensionering"
             )
-            with nulstil_kol:
-                st.button(
-                    "Nulstil",
-                    key="bg_nulstil",
-                    width="stretch",
-                    disabled=not paa_dimensionering,
-                    help=(
-                        "Nulstil dimensioneringens felter til standardværdierne."
-                        if paa_dimensionering
-                        else "Gælder dimensioneringens felter."
-                    ),
-                )
-            with rapport_kol:
-                st.button(
-                    "Generér rapport",
-                    key="bg_gaa_til_rapport",
-                    type="primary",
-                    width="stretch",
-                    disabled=not paa_dimensionering,
-                    help="Gå til rapportsiden med den aktuelle dimensionering.",
-                )
+            st.button(
+                "Nulstil",
+                key="bg_nulstil",
+                width="content",
+                disabled=not paa_dimensionering,
+                help=(
+                    "Nulstil dimensioneringens felter til standardværdierne."
+                    if paa_dimensionering
+                    else "Gælder dimensioneringens felter."
+                ),
+            )
 
 
 def etiket(tekst: str) -> None:

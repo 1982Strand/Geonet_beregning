@@ -319,7 +319,7 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 }
 .stButton button[kind="primary"]:hover{ background:var(--bg-green-900); border-color:var(--bg-green-900); }
 .stButton button[kind="secondary"]:hover{ border-color:var(--bg-green-700); color:var(--bg-green-700); }
-/* Fuldbreddeknapper er ikke primære handlinger — kun Generér rapport er. */
+/* Fuldbreddeknapper er ikke primære handlinger. */
 .stButton button{ width:auto; }
 
 /* ---- 5. Segmented control / trafikklasse-vælger -------------------------
@@ -511,6 +511,18 @@ code, .stMetricValue, [data-testid="stMetricValue"],
 }
 .st-key-bg_topbar [data-testid="stTooltipHoverTarget"] svg{
   fill:rgba(255,255,255,.5);
+}
+
+/* Nulstil er slået fra uden for Dimensionering. Knappen står da dæmpet, men
+   læselig, på den mørke bund; Streamlits egen grå tekst forsvinder her. */
+.st-key-bg_topbar .stButton button:disabled{
+  background:transparent;
+  border-color:rgba(255,255,255,.22);
+  color:rgba(255,255,255,.45);
+  cursor:not-allowed;
+}
+.st-key-bg_topbar .stButton button:disabled p{
+  color:rgba(255,255,255,.45) !important;
 }
 
 /* ---- 16. Trinnenes kolonner ---------------------------------------------

@@ -12,8 +12,11 @@ import streamlit as st
 
 import ui
 
+# Versionsnummeret står i topbjælken og i sidepanelets fod.
+APP_VERSION = "v0.6"
+
 ui.opsaet_side()
-ui.topbjaelke(version="v0.4")
+ui.topbjaelke(version=APP_VERSION)
 
 # ---------------------------------------------------------------------------
 # Imports — efter sideopsætningen
@@ -7289,7 +7292,7 @@ def render_sidebar() -> str:
         st.markdown(
             '<hr class="sb-divider" style="margin-top:1.5rem">'
             '<div class="sb-footer">'
-            "<span>BG Byggros A/S<br>Beregningsværktøj v0.4</span>"
+            f"<span>BG Byggros A/S<br>Beregningsværktøj {APP_VERSION}</span>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -10689,10 +10692,7 @@ _bevar_dimensionering_state()
 
 aktiv_side = render_sidebar()
 
-# Topbjælkens to knapper aflæses her, hvor den aktive side er kendt.
-if st.session_state.get("bg_gaa_til_rapport"):
-    st.session_state.aktiv_side = "rapport"
-    st.rerun()
+# Topbjælkens knap aflæses her, hvor den aktive side er kendt.
 if st.session_state.get("bg_nulstil"):
     _nulstil_aktiv_side(aktiv_side)
     st.rerun()
