@@ -1594,10 +1594,6 @@ def input_trafikklasse(
     eo_aekv, zone, skala = opslag["eo"], opslag["zone"], opslag["skala"]
     naermeste = eo_til_naermeste_klasse(eo_aekv)
 
-    # Reglerne uden for diagrammets kurver fastlægges under Indstillinger og
-    # nævnes her, så forudsætningen kan aflæses ved valget af trafikklasse.
-    st.caption(_yder_regel_linje(regler))
-
     if kompakt:
         with st.popover("Se korrelationstabel", width="stretch"):
             _vis_korrelationstabel(
